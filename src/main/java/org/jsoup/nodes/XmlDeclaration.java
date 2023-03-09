@@ -1,23 +1,38 @@
 package org.jsoup.nodes;
 
-/**
- An XML Declaration.
+import org.jsoup.SerializationException;
+import org.jsoup.helper.Validate;
 
- @author Jonathan Hedley, jonathan@hedley.net */
-public class XmlDeclaration extends Node {
-    private static final String DECL_KEY = "declaration";
+import java.io.IOException;
+
+/**
+ * An XML Declaration.
+ */
+public class XmlDeclaration extends LeafNode {
+    // todo this impl isn't really right, the data shouldn't be attributes, just a run of text after the name
     private final boolean isProcessingInstruction; // <! if true, <? if false, declaration (and last data char should be ?)
 
     /**
-     Create a new XML declaration
-     @param data data
-     @param baseUri base uri
-     @param isProcessingInstruction is processing instruction
+     * Create a new XML declaration
+     * @param name of declaration
+     * @param isProcessingInstruction is processing instruction
      */
-    public XmlDeclaration(String data, String baseUri, boolean isProcessingInstruction) {
-        super(baseUri);
-        attributes.put(DECL_KEY, data);
+    public XmlDeclaration(String name, boolean isProcessingInstruction) {
+        Validate.notNull(name);
+        value = name;
         this.isProcessingInstruction = isProcessingInstruction;
+    }
+
+    /**
+     * Create a new XML declaration
+     * @param name of declaration
+     * @param baseUri Leaf Nodes don't have base URIs; they inherit from their Element
+     * @param isProcessingInstruction is processing instruction
+     * @see XmlDeclaration#XmlDeclaration(String, boolean)
+     * @deprecated
+     */
+    public XmlDeclaration(String name, String baseUri, boolean isProcessingInstruction) {
+        this(name, isProcessingInstruction);
     }
 
     public String nodeName() {
@@ -25,23 +40,51 @@ public class XmlDeclaration extends Node {
     }
 
     /**
-     Get the unencoded XML declaration.
-     @return XML declaration
+     * Get the name of this declaration.
+     * @return name of this declaration.
+     */
+    public String name() {
+        return coreValue();
+    }
+
+    /**
+     * Get the unencoded XML declaration.
+     * @return XML declaration
      */
     public String getWholeDeclaration() {
-        return attributes.get(DECL_KEY);
+        StringBuilder sb = new StringBuilder();
+        try {
+            getWholeDeclaration(sb, new Document.OutputSettings());
+        } catch (IOException e) {
+            throw new SerializationException(e);
+        }
+        return sb.toString().trim();
     }
 
-    void outerHtmlHead(StringBuilder accum, int depth, Document.OutputSettings out) {
+    private void getWholeDeclaration(Appendable accum, Document.OutputSettings out) throws IOException {
+        for (Attribute attribute : attributes()) {
+            if (!attribute.getKey().equals(nodeName())) { // skips coreValue (name)
+                accum.append(' ');
+                attribute.html(accum, out);
+            }
+        }
+    }
+
+    void outerHtmlHead(Appendable accum, int depth, Document.OutputSettings out) throws IOException {
         accum
-                .append("<")
-                .append(isProcessingInstruction ? "!" : "?")
-                .append(getWholeDeclaration())
-                .append(">");
+            .append("<")
+            .append(isProcessingInstruction ? "!" : "?")
+            .append(coreValue());
+        getWholeDeclaration(accum, out);
+        accum
+            .append(isProcessingInstruction ? "!" : "?")
+            .append(">");
     }
 
-    void outerHtmlTail(StringBuilder accum, int depth, Document.OutputSettings out) {}
+    void outerHtmlTail(Appendable accum, int depth, Document.OutputSettings out) {
+    }
 
+    @Override
     public String toString() {
         return outerHtml();
     }
