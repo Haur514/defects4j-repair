@@ -355,6 +355,9 @@ public class PhoneticEngine {
                 i = rulesApplication.getI();
             }
 
+            // the phonemes map orders the phonemes only based on their text, but ignores the language set
+            // when adding new phonemes, check for equal phonemes and merge their language set, otherwise
+            // phonemes with the same text but different language set get lost
             phonemes.addAll(subBuilder.getPhonemes());
         }
 
