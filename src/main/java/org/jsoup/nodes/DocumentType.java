@@ -32,7 +32,9 @@ public class DocumentType extends Node {
 
     @Override
     void outerHtmlHead(StringBuilder accum, int depth, Document.OutputSettings out) {
-        accum.append("<!DOCTYPE ").append(attr("name"));
+        accum.append("<!DOCTYPE");
+        if (!StringUtil.isBlank(attr("name")))
+            accum.append(" ").append(attr("name"));
         if (!StringUtil.isBlank(attr("publicId")))
             accum.append(" PUBLIC \"").append(attr("publicId")).append('"');
         if (!StringUtil.isBlank(attr("systemId")))
