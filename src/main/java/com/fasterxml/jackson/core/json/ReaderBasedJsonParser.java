@@ -9,6 +9,8 @@ import com.fasterxml.jackson.core.io.IOContext;
 import com.fasterxml.jackson.core.sym.CharsToNameCanonicalizer;
 import com.fasterxml.jackson.core.util.*;
 
+import static com.fasterxml.jackson.core.JsonTokenId.*;
+
 /**
  * This is a concrete implementation of {@link JsonParser}, which is
  * based on a {@link java.io.Reader} to handle low-level character
@@ -182,6 +184,8 @@ public final class ReaderBasedJsonParser
         throws IOException
     {
         super._releaseBuffers();
+        // merge new symbols, if any
+        _symbols.release();
         char[] buf = _inputBuffer;
         if (buf != null) {
             _inputBuffer = null;
@@ -245,21 +249,20 @@ public final class ReaderBasedJsonParser
         }
         return super.getValueAsString(defValue);
     }
-    
-    
+
     protected String _getText2(JsonToken t)
     {
         if (t == null) {
             return null;
         }
-        switch (t) {
-        case FIELD_NAME:
+        switch (t.id()) {
+        case ID_FIELD_NAME:
             return _parsingContext.getCurrentName();
 
-        case VALUE_STRING:
+        case ID_STRING:
             // fall through
-        case VALUE_NUMBER_INT:
-        case VALUE_NUMBER_FLOAT:
+        case ID_NUMBER_INT:
+        case ID_NUMBER_FLOAT:
             return _textBuffer.contentsAsString();
         default:
             return t.asString();
@@ -271,9 +274,8 @@ public final class ReaderBasedJsonParser
         throws IOException, JsonParseException
     {
         if (_currToken != null) { // null only before/after document
-            switch (_currToken) {
-                
-            case FIELD_NAME:
+            switch (_currToken.id()) {
+            case ID_FIELD_NAME:
                 if (!_nameCopied) {
                     String name = _parsingContext.getCurrentName();
                     int nameLen = name.length();
@@ -287,14 +289,14 @@ public final class ReaderBasedJsonParser
                 }
                 return _nameCopyBuffer;
     
-            case VALUE_STRING:
+            case ID_STRING:
                 if (_tokenIncomplete) {
                     _tokenIncomplete = false;
                     _finishString(); // only strings can be incomplete
                 }
                 // fall through
-            case VALUE_NUMBER_INT:
-            case VALUE_NUMBER_FLOAT:
+            case ID_NUMBER_INT:
+            case ID_NUMBER_FLOAT:
                 return _textBuffer.getTextBuffer();
                 
             default:
@@ -309,18 +311,18 @@ public final class ReaderBasedJsonParser
         throws IOException, JsonParseException
     {
         if (_currToken != null) { // null only before/after document
-            switch (_currToken) {
+            switch (_currToken.id()) {
                 
-            case FIELD_NAME:
+            case ID_FIELD_NAME:
                 return _parsingContext.getCurrentName().length();
-            case VALUE_STRING:
+            case ID_STRING:
                 if (_tokenIncomplete) {
                     _tokenIncomplete = false;
                     _finishString(); // only strings can be incomplete
                 }
                 // fall through
-            case VALUE_NUMBER_INT:
-            case VALUE_NUMBER_FLOAT:
+            case ID_NUMBER_INT:
+            case ID_NUMBER_FLOAT:
                 return _textBuffer.size();
                 
             default:
@@ -335,17 +337,17 @@ public final class ReaderBasedJsonParser
     {
         // Most have offset of 0, only some may have other values:
         if (_currToken != null) {
-            switch (_currToken) {
-            case FIELD_NAME:
+            switch (_currToken.id()) {
+            case ID_FIELD_NAME:
                 return 0;
-            case VALUE_STRING:
+            case ID_STRING:
                 if (_tokenIncomplete) {
                     _tokenIncomplete = false;
                     _finishString(); // only strings can be incomplete
                 }
                 // fall through
-            case VALUE_NUMBER_INT:
-            case VALUE_NUMBER_FLOAT:
+            case ID_NUMBER_INT:
+            case ID_NUMBER_FLOAT:
                 return _textBuffer.getTextOffset();
             default:
             }
@@ -782,7 +784,7 @@ public final class ReaderBasedJsonParser
         return (nextToken() == JsonToken.VALUE_NUMBER_INT) ? getLongValue() : defaultValue;
     }
 
-    // note: identical to one in Utf8StreamParser
+    // note: identical to one in UTF8StreamJsonParser
     @Override
     public Boolean nextBooleanValue()
         throws IOException, JsonParseException
@@ -805,21 +807,13 @@ public final class ReaderBasedJsonParser
             }
             return null;
         }
-        switch (nextToken()) {
-        case VALUE_TRUE:
-            return Boolean.TRUE;
-        case VALUE_FALSE:
-            return Boolean.FALSE;
-        default:
-        	return null;
+        JsonToken t = nextToken();
+        if (t != null) {
+            int id = t.id();
+            if (id == ID_TRUE) return Boolean.TRUE;
+            if (id == ID_FALSE) return Boolean.FALSE;
         }
-    }
-    
-    @Override
-    public void close() throws IOException
-    {
-        super.close();
-        _symbols.release();
+        return null;
     }
 
     /*
@@ -949,6 +943,9 @@ public final class ReaderBasedJsonParser
             --ptr; // need to push back following separator
             _inputPtr = ptr;
             // As per #105, need separating space between root values; check here
+            if (_parsingContext.inRoot()) {
+                _verifyRootSpace(ch);
+            }
             int len = ptr-startPtr;
             _textBuffer.resetWithShared(_inputBuffer, startPtr, len);
             return reset(negative, intLen, fractLen, expLen);
@@ -1078,6 +1075,9 @@ public final class ReaderBasedJsonParser
         // Ok; unless we hit end-of-input, need to push last char read back
         if (!eof) {
             --_inputPtr;
+            if (_parsingContext.inRoot()) {
+                _verifyRootSpace(c);
+            }
         }
         _textBuffer.setCurrentLength(outPtr);
         // And there we have it!
@@ -1159,7 +1159,24 @@ public final class ReaderBasedJsonParser
      * NOTE: caller MUST ensure there is at least one character available;
      * and that input pointer is AT given char (not past)
      */
+    private final void _verifyRootSpace(int ch) throws IOException
+    {
         // caller had pushed it back, before calling; reset
+        ++_inputPtr;
+        switch (ch) {
+        case ' ':
+        case '\t':
+            return;
+        case '\r':
+            _skipCR();
+            return;
+        case '\n':
+            ++_currInputRow;
+            _currInputRowStart = _inputPtr;
+            return;
+        }
+        _reportMissingRootWS(ch);
+    }
     
     /*
     /**********************************************************
@@ -1281,8 +1298,8 @@ public final class ReaderBasedJsonParser
         // Also: first char must be a valid name char, but NOT be number
         boolean firstOk;
 
-        if (i < maxCode) { // identifier, and not a number
-            firstOk = (codes[i] == 0) && (i < INT_0 || i > INT_9);
+        if (i < maxCode) { // identifier, or a number ([Issue#102])
+            firstOk = (codes[i] == 0);
         } else {
             firstOk = Character.isJavaIdentifierPart((char) i);
         }

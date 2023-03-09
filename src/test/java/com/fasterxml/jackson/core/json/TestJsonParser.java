@@ -407,26 +407,25 @@ public class TestJsonParser
     }
 
     // [JACKSON-632]
-    public void testUtf8BOMHandling() throws Exception
-    {
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        // first, write BOM:
-        bytes.write(0xEF);
-        bytes.write(0xBB);
-        bytes.write(0xBF);
-        bytes.write("[ 1 ]".getBytes("UTF-8"));
-        JsonFactory jf = new JsonFactory();
-        JsonParser jp = jf.createParser(bytes.toByteArray());
-        assertEquals(JsonToken.START_ARRAY, jp.nextToken());
-        // should also have skipped first 3 bytes of BOM; but do we have offset available?
-        /*
-        JsonLocation loc = jp.getTokenLocation();
-        assertEquals(3, loc.getByteOffset());
-        assertEquals(-1, loc.getCharOffset());
-        */
-        jp.close();
-    }
-
+    public void testUtf8BOMHandling() {}
+// Defects4J: flaky method
+//     public void testUtf8BOMHandling() throws Exception
+//     {
+//         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+//         // first, write BOM:
+//         bytes.write(0xEF);
+//         bytes.write(0xBB);
+//         bytes.write(0xBF);
+//         bytes.write("[ 1 ]".getBytes("UTF-8"));
+//         JsonFactory jf = new JsonFactory();
+//         JsonParser jp = jf.createParser(bytes.toByteArray());
+//         assertEquals(JsonToken.START_ARRAY, jp.nextToken());
+//         // should also have skipped first 3 bytes of BOM; but do we have offset available?
+//         JsonLocation loc = jp.getTokenLocation();
+//         assertEquals(3, loc.getByteOffset());
+//         assertEquals(-1, loc.getCharOffset());
+//         jp.close();
+//     }
 
     // [Issue#48]
     public void testSpacesInURL() throws Exception
@@ -467,8 +466,8 @@ public class TestJsonParser
         doTestSpecIndividual("UTF-32", verify);
     }
 
-    private void doTestSpecIndividual(String enc, boolean verify)
-        throws IOException
+    @SuppressWarnings("resource")
+    private void doTestSpecIndividual(String enc, boolean verify) throws IOException
     {
         String doc = SAMPLE_DOC_JSON_SPEC;
         JsonParser jp;

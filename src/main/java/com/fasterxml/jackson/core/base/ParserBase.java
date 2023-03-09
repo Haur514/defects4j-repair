@@ -7,6 +7,7 @@ import java.math.BigInteger;
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.core.io.IOContext;
 import com.fasterxml.jackson.core.io.NumberInput;
+import com.fasterxml.jackson.core.json.DupDetector;
 import com.fasterxml.jackson.core.json.JsonReadContext;
 import com.fasterxml.jackson.core.json.PackageVersion;
 import com.fasterxml.jackson.core.util.ByteArrayBuilder;
@@ -15,9 +16,7 @@ import com.fasterxml.jackson.core.util.TextBuffer;
 /**
  * Intermediate base class used by all Jackson {@link JsonParser}
  * implementations. Contains most common things that are independent
- * of actual underlying input source
- *
- * @author Tatu Saloranta
+ * of actual underlying input source.
  */
 public abstract class ParserBase
     extends ParserMinimalBase
@@ -288,7 +287,10 @@ public abstract class ParserBase
         _features = features;
         _ioContext = ctxt;
         _textBuffer = ctxt.constructTextBuffer();
-        _parsingContext = JsonReadContext.createRootContext();
+        DupDetector dups = Feature.STRICT_DUPLICATE_DETECTION.enabledIn(features)
+                ? DupDetector.rootDetector(this) : null;
+        JsonReadContext readCtxt = JsonReadContext.createRootContext(dups);
+        _parsingContext = readCtxt;
     }
 
     @Override
@@ -326,7 +328,14 @@ public abstract class ParserBase
         if (_currToken == JsonToken.START_OBJECT || _currToken == JsonToken.START_ARRAY) {
             ctxt = ctxt.getParent();
         }
-        ctxt.setCurrentName(name);
+        /* 24-Sep-2013, tatu: Unfortunate, but since we did not expose exceptions,
+         *   need to wrap this here
+         */
+        try {
+            ctxt.setCurrentName(name);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
     
     @Override
@@ -362,7 +371,7 @@ public abstract class ParserBase
     public JsonLocation getTokenLocation()
     {
         return new JsonLocation(_ioContext.getSourceReference(),
-                getTokenCharacterOffset(),
+                -1L, getTokenCharacterOffset(), // bytes, chars
                 getTokenLineNr(),
                 getTokenColumnNr());
     }
@@ -376,7 +385,7 @@ public abstract class ParserBase
     {
         int col = _inputPtr - _currInputRowStart + 1; // 1-based
         return new JsonLocation(_ioContext.getSourceReference(),
-                _currInputProcessed + _inputPtr - 1,
+                -1L, _currInputProcessed + _inputPtr, // bytes, chars
                 _currInputRow, col);
     }
 

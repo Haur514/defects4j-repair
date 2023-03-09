@@ -8,6 +8,8 @@ import com.fasterxml.jackson.core.io.NumberInput;
 import com.fasterxml.jackson.core.util.ByteArrayBuilder;
 import com.fasterxml.jackson.core.util.VersionUtil;
 
+import static com.fasterxml.jackson.core.JsonTokenId.*;
+
 /**
  * Intermediate base class used by all Jackson {@link JsonParser}
  * implementations, but does not add any additional fields that depend
@@ -47,7 +49,6 @@ public abstract class ParserMinimalBase
      * Last token retrieved via {@link #nextToken}, if any.
      * Null before the first call to <code>nextToken()</code>,
      * as well as if token has been explicitly cleared
-     * (by call to {@link #clearCurrentToken})
      */
     protected JsonToken _currToken;
 
@@ -101,6 +102,12 @@ public abstract class ParserMinimalBase
     }
 
     @Override
+    public final int getCurrentTokenId() {
+        final JsonToken t = _currToken;
+        return (t == null) ? JsonTokenId.ID_NO_TOKEN : t.id();
+    }
+    
+    @Override
     public boolean hasCurrentToken() {
         return _currToken != null;
     }
@@ -120,7 +127,6 @@ public abstract class ParserMinimalBase
         return t;
     }
 
-    @SuppressWarnings("incomplete-switch")
     @Override
     public JsonParser skipChildren() throws IOException, JsonParseException
     {
@@ -143,17 +149,12 @@ public abstract class ParserMinimalBase
                  */
                 return this;
             }
-            switch (t) {
-            case START_OBJECT:
-            case START_ARRAY:
+            if (t.isStructStart()) {
                 ++open;
-                break;
-            case END_OBJECT:
-            case END_ARRAY:
+            } else if (t.isStructEnd()) {
                 if (--open == 0) {
                     return this;
                 }
-                break;
             }
         }
     }
@@ -242,66 +243,68 @@ public abstract class ParserMinimalBase
     /**********************************************************
      */
 
-    @SuppressWarnings("incomplete-switch")
     @Override
     public boolean getValueAsBoolean(boolean defaultValue) throws IOException, JsonParseException
     {
-        if (_currToken != null) {
-            switch (_currToken) {
-            case VALUE_NUMBER_INT:
-                return getIntValue() != 0;
-            case VALUE_TRUE:
-                return true;
-            case VALUE_FALSE:
-            case VALUE_NULL:
-                return false;
-            case VALUE_EMBEDDED_OBJECT:
-                {
-                    Object value = this.getEmbeddedObject();
-                    if (value instanceof Boolean) {
-                        return (Boolean) value;
-                    }
-                }
-            case VALUE_STRING:
+        JsonToken t = _currToken;
+        if (t != null) {
+            switch (t.id()) {
+            case ID_STRING:
                 String str = getText().trim();
                 if ("true".equals(str)) {
                     return true;
+                }
+                if ("false".equals(str)) {
+                    return false;
                 }
                 if (_hasTextualNull(str)) {
                     return false;
                 }
                 break;
+            case ID_NUMBER_INT:
+                return getIntValue() != 0;
+            case ID_TRUE:
+                return true;
+            case ID_FALSE:
+            case ID_NULL:
+                return false;
+            case ID_EMBEDDED_OBJECT:
+                Object value = this.getEmbeddedObject();
+                if (value instanceof Boolean) {
+                    return (Boolean) value;
+                }
+                break;
+            default:
             }
         }
         return defaultValue;
     }
-    
-    @SuppressWarnings("incomplete-switch")
+
     @Override
     public int getValueAsInt(int defaultValue) throws IOException, JsonParseException
     {
-        if (_currToken != null) {
-            switch (_currToken) {
-            case VALUE_NUMBER_INT:
-            case VALUE_NUMBER_FLOAT:
-                return getIntValue();
-            case VALUE_TRUE:
-                return 1;
-            case VALUE_FALSE:
-            case VALUE_NULL:
-                return 0;
-            case VALUE_STRING:
+        JsonToken t = _currToken;
+        if (t != null) {
+            switch (t.id()) {
+            case ID_STRING:
                 String str = getText();
                 if (_hasTextualNull(str)) {
                     return 0;
                 }
                 return NumberInput.parseAsInt(str, defaultValue);
-            case VALUE_EMBEDDED_OBJECT:
-                {
-                    Object value = this.getEmbeddedObject();
-                    if (value instanceof Number) {
-                        return ((Number) value).intValue();
-                    }
+            case ID_NUMBER_INT:
+            case ID_NUMBER_FLOAT:
+                return getIntValue();
+            case ID_TRUE:
+                return 1;
+            case ID_FALSE:
+                return 0;
+            case ID_NULL:
+                return 0;
+            case ID_EMBEDDED_OBJECT:
+                Object value = this.getEmbeddedObject();
+                if (value instanceof Number) {
+                    return ((Number) value).intValue();
                 }
             }
         }
@@ -311,61 +314,57 @@ public abstract class ParserMinimalBase
     @Override
     public long getValueAsLong(long defaultValue) throws IOException, JsonParseException
     {
-        if (_currToken != null) {
-            switch (_currToken) {
-            case VALUE_NUMBER_INT:
-            case VALUE_NUMBER_FLOAT:
-                return getLongValue();
-            case VALUE_TRUE:
-                return 1;
-            case VALUE_FALSE:
-            case VALUE_NULL:
-                return 0;
-            case VALUE_STRING:
+        JsonToken t = _currToken;
+        if (t != null) {
+            switch (t.id()) {
+            case ID_STRING:
                 String str = getText();
                 if (_hasTextualNull(str)) {
                     return 0L;
                 }
                 return NumberInput.parseAsLong(str, defaultValue);
-            case VALUE_EMBEDDED_OBJECT:
-                {
-                    Object value = this.getEmbeddedObject();
-                    if (value instanceof Number) {
-                        return ((Number) value).longValue();
-                    }
+            case ID_NUMBER_INT:
+            case ID_NUMBER_FLOAT:
+                return getLongValue();
+            case ID_TRUE:
+                return 1L;
+            case ID_FALSE:
+            case ID_NULL:
+                return 0L;
+            case ID_EMBEDDED_OBJECT:
+                Object value = this.getEmbeddedObject();
+                if (value instanceof Number) {
+                    return ((Number) value).longValue();
                 }
-            default:
             }
         }
         return defaultValue;
     }
 
-    @SuppressWarnings("incomplete-switch")
     @Override
     public double getValueAsDouble(double defaultValue) throws IOException, JsonParseException
     {
-        if (_currToken != null) {
-            switch (_currToken) {
-            case VALUE_NUMBER_INT:
-            case VALUE_NUMBER_FLOAT:
-                return getDoubleValue();
-            case VALUE_TRUE:
-                return 1;
-            case VALUE_FALSE:
-            case VALUE_NULL:
-                return 0;
-            case VALUE_STRING:
+        JsonToken t = _currToken;
+        if (t != null) {
+            switch (t.id()) {
+            case ID_STRING:
                 String str = getText();
                 if (_hasTextualNull(str)) {
-                    return 0;
+                    return 0L;
                 }
                 return NumberInput.parseAsDouble(str, defaultValue);
-            case VALUE_EMBEDDED_OBJECT:
-                {
-                    Object value = this.getEmbeddedObject();
-                    if (value instanceof Number) {
-                        return ((Number) value).doubleValue();
-                    }
+            case ID_NUMBER_INT:
+            case ID_NUMBER_FLOAT:
+                return getDoubleValue();
+            case ID_TRUE:
+                return 1.0;
+            case ID_FALSE:
+            case ID_NULL:
+                return 0.0;
+            case ID_EMBEDDED_OBJECT:
+                Object value = this.getEmbeddedObject();
+                if (value instanceof Number) {
+                    return ((Number) value).doubleValue();
                 }
             }
         }

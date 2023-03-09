@@ -13,15 +13,22 @@ public final class JsonReadContext
 {
     // // // Configuration
 
+    /**
+     * Parent context for this context; null for root context.
+     */
     protected final JsonReadContext _parent;
+    
+    // // // Optional duplicate detection
 
+    protected final DupDetector _dups;
+    
     // // // Location information (minus source reference)
 
     protected int _lineNr;
     protected int _columnNr;
 
     protected String _currentName;
-
+    
     /*
     /**********************************************************
     /* Simple instance reuse slots; speeds up things
@@ -39,11 +46,13 @@ public final class JsonReadContext
     /**********************************************************
      */
 
-    public JsonReadContext(JsonReadContext parent, int type, int lineNr, int colNr)
+    public JsonReadContext(JsonReadContext parent, DupDetector dups,
+            int type, int lineNr, int colNr)
     {
         super();
-        _type = type;
         _parent = parent;
+        _dups = dups;
+        _type = type;
         _lineNr = lineNr;
         _columnNr = colNr;
         _index = -1;
@@ -56,28 +65,49 @@ public final class JsonReadContext
         _lineNr = lineNr;
         _columnNr = colNr;
         _currentName = null;
+        if (_dups != null) {
+            _dups.reset();
+        }
     }
+
+    /*
+    public void trackDups(JsonParser jp) {
+        _dups = DupDetector.rootDetector(jp);
+    }
+    */
 
     // // // Factory methods
 
-    public static JsonReadContext createRootContext(int lineNr, int colNr)
+    @Deprecated // since 2.3, use variant that takes dup detector
+    public static JsonReadContext createRootContext(int lineNr, int colNr) {
+        return createRootContext(lineNr, colNr, null);
+    }
+    
+    public static JsonReadContext createRootContext(int lineNr, int colNr,
+            DupDetector dups)
     {
-        return new JsonReadContext(null, TYPE_ROOT, lineNr, colNr);
+        return new JsonReadContext(null, dups, TYPE_ROOT, lineNr, colNr);
     }
 
-    public static JsonReadContext createRootContext()
-    {
-        return new JsonReadContext(null, TYPE_ROOT, 1, 0);
+    @Deprecated // since 2.3, use variant that takes dup detector
+    public static JsonReadContext createRootContext() {
+        return createRootContext(null);
+    }
+
+    public static JsonReadContext createRootContext(DupDetector dups) {
+        return new JsonReadContext(null, dups, TYPE_ROOT, 1, 0);
     }
     
     public JsonReadContext createChildArrayContext(int lineNr, int colNr)
     {
         JsonReadContext ctxt = _child;
         if (ctxt == null) {
-            _child = ctxt = new JsonReadContext(this, TYPE_ARRAY, lineNr, colNr);
-            return ctxt;
+            _child = ctxt = new JsonReadContext(this,
+                    (_dups == null) ? null : _dups.child(),
+                            TYPE_ARRAY, lineNr, colNr);
+        } else {
+            ctxt.reset(TYPE_ARRAY, lineNr, colNr);
         }
-        ctxt.reset(TYPE_ARRAY, lineNr, colNr);
         return ctxt;
     }
 
@@ -85,7 +115,9 @@ public final class JsonReadContext
     {
         JsonReadContext ctxt = _child;
         if (ctxt == null) {
-            _child = ctxt = new JsonReadContext(this, TYPE_OBJECT, lineNr, colNr);
+            _child = ctxt = new JsonReadContext(this,
+                    (_dups == null) ? null : _dups.child(),
+                    TYPE_OBJECT, lineNr, colNr);
             return ctxt;
         }
         ctxt.reset(TYPE_OBJECT, lineNr, colNr);
@@ -140,11 +172,21 @@ public final class JsonReadContext
         return (_type != TYPE_ROOT && ix > 0);
     }
 
-    public void setCurrentName(String name)
+    public void setCurrentName(String name) throws JsonProcessingException
     {
         _currentName = name;
+        if (_dups != null) {
+            _checkDup(_dups, name);
+        }
     }
 
+    private void _checkDup(DupDetector dd, String name) throws JsonProcessingException
+    {
+        if (dd.isDup(name)) {
+            throw new JsonParseException("Duplicate field '"+name+"'", dd.findLocation());
+        }
+    }
+    
     /*
     /**********************************************************
     /* Overridden standard methods

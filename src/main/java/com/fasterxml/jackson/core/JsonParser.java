@@ -167,13 +167,32 @@ public abstract class JsonParser
          * this is a non-standard feature, and as such disabled by default.
          */
          ALLOW_NON_NUMERIC_NUMBERS(false),
-        
+
+         /**
+          * Feature that determines whether {@link JsonParser} will explicitly
+          * check that no duplicate JSON Object field names are encountered.
+          * If enabled, parser will check all names within context and report
+          * duplicates by throwing a {@link JsonParseException}; if disabled,
+          * parser will not do such checking. Assumption in latter case is
+          * that caller takes care of handling duplicates at a higher level:
+          * data-binding, for example, has features to specify detection to
+          * be done there.
+          *<p>
+          * Note that enabling this feature will incur performance overhead
+          * due to having to store and check additional information: this typically
+          * adds 20-30% to execution time for basic parsing.
+          * 
+          * @since 2.3
+          */
+         STRICT_DUPLICATE_DETECTION(false),
             ;
 
         /**
          * Whether feature is enabled or disabled by default.
          */
         private final boolean _defaultState;
+
+        private final int _mask;
         
         /**
          * Method that calculates bit set (flags) of all features that
@@ -191,11 +210,17 @@ public abstract class JsonParser
         }
         
         private Feature(boolean defaultState) {
+            _mask = (1 << ordinal());
             _defaultState = defaultState;
         }
         
         public boolean enabledByDefault() { return _defaultState; }
-//        public boolean enabledIn(int flags) { return (flags & getMask()) != 0; }
+        
+        /**
+         * @since 2.3
+         */
+        public boolean enabledIn(int flags) { return (flags & _mask) != 0; }
+
         public int getMask() { return (1 << ordinal()); }
     }
 
@@ -604,14 +629,14 @@ public abstract class JsonParser
     public Boolean nextBooleanValue()
         throws IOException, JsonParseException
     {
-        switch (nextToken()) {
-        case VALUE_TRUE:
+        JsonToken t = nextToken();
+        if (t == JsonToken.VALUE_TRUE) {
             return Boolean.TRUE;
-        case VALUE_FALSE:
-            return Boolean.FALSE;
-        default:
-            return null;
         }
+        if (t == JsonToken.VALUE_FALSE) {
+            return Boolean.FALSE;
+        }
+        return null;
     }
     
     /**
@@ -660,6 +685,21 @@ public abstract class JsonParser
      */
     public abstract JsonToken getCurrentToken();
 
+    /**
+     * Method similar to {@link #getCurrentToken()} but that returns an
+     * <code>int</code> instead of {@link JsonToken} (enum value).
+     *<p>
+     * Use of int directly is typically more efficient on switch statements,
+     * so this method may be useful when building low-overhead codecs.
+     * Note, however, that effect may not be big enough to matter: make sure
+     * to profile performance before deciding to use this method.
+     * 
+     * @since 2.3
+     * 
+     * @return <code>int</code> matching one of constants from {@link JsonTokenId}.
+     */
+    public abstract int getCurrentTokenId();
+    
     /**
      * Method for checking whether parser currently points to
      * a token (and data for that token is available).

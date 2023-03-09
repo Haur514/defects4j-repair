@@ -5,6 +5,8 @@ New minor version.
 
 #8: Add methods in `JsonParser`/`JsonGenerator` for reading/writing Object Ids
 #47: Support YAML-style comments with `JsonParser.Feature.ALLOW_YAML_COMMENTS`
+#60: Add a feature (`JsonParser.Feature.STRICT_DUPLICATE_DETECTION`) to verify
+  that input does not contain duplicate filed names
 #77: Improve error reporting for unrecognized tokens
  (requested by cowwoc@github)
 #85: Add `JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN`
@@ -17,15 +19,21 @@ New minor version.
   current field name
  (reported by Sam R)
 #98: Improve handling of failures for `BigDecimal`, for "NaN" (and infinity)
+#102: Unquoted field names can not start with a digit
 #103: Add `JsonFactory.canHandleBinaryNatively`, `JsonGenerator.canWriteBinaryNatively`
  to let databind module detect level of support for binary data.
 #105: Parser parsers numbers eagerly; does not report error with missing space
+#106: Add `JsonGenerator.Feature.STRICT_DUPLICATE_DETECTION` for preventing dup names
+#111: _currInputRowStart isn't initialized in UTF8StreamJsonParser() constructor
+ (reported by dreamershl@github)
 - Improve `DefaultPrettyPrinter`, `Lf2SpacesIndenter` (from databind #276)
 - Add `JsonGenerator.canOmitFields()` method to support discovery of
   positional formats, needed for handling of filtering for CSV
 - Rewrite `InternCache` to use `ConcurrentHashMap`, to work more efficiently both
   for common case of few misses (no block on access), and slowest cases (lots of
   misses).
+- Add `JsonPointer` implementation, to be used by tree model, streaming
+- Make `UTF8StreamJsonParser` non-final, for potential sub-classing
 
 ------------------------------------------------------------------------
 === History: ===
