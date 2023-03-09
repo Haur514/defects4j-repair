@@ -140,6 +140,10 @@ public class Rule {
         }
 
         /**
+         * Deprecated since 1.9.
+         *
+         * @param right the Phoneme to join
+         * @return a new Phoneme
          * @deprecated since 1.9
          */
         @Deprecated
@@ -155,6 +159,9 @@ public class Rule {
          * @param lang the language set to merge
          * @return a new Phoneme
          */
+        public Phoneme mergeWithLanguage(final LanguageSet lang) {
+          return new Phoneme(this.phonemeText.toString(), this.languages.merge(lang));
+        }
 
         @Override
         public String toString() {

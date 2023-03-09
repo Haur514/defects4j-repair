@@ -42,12 +42,26 @@ The <action> type attribute can be add,update,fix,remove.
     <author>Gary Gregory</author>
   </properties>
   <body>
-    <release version="1.10" date="DD Mmmm 2014" description="Feature and fix release."> 
+    <release version="1.11" date="DD MM 2014" description="Feature and fix release.">        
+      <action dev="ggregory" type="add" issue="CODEC-199" due-to="Yossi Tamari">Bug in HW rule in Soundex</action>         
+      <action dev="ggregory" type="add" issue="CODEC-183">BaseNCodecOutputStream only supports writing EOF on close()</action>         
+      <action dev="ggregory" type="add" issue="CODEC-195">Support SHA-224 in DigestUtils on Java 8</action>         
+      <action dev="ggregory" type="add" issue="CODEC-194">Support java.nio.ByteBuffer in org.apache.commons.codec.binary.Hex</action>         
+      <action dev="ggregory" type="add" issue="CODEC-193">Support java.nio.ByteBuffer in DigestUtils</action>         
+    </release>   
+    <release version="1.10" date="5 November 2014" description="Feature and fix release.">
+      <action dev="ggregory" type="add" issue="CODEC-192" due-to="Thomas Neidhart">Add Daitch-Mokotoff Soundex</action>   
+      <action dev="ggregory" type="add" issue="CODEC-121" due-to="Thomas Neidhart, Java John">QuotedPrintableCodec does not support soft line break per the 'quoted-printable' example on Wikipedia</action>   
+      <action dev="tn" type="fix" issue="CODEC-185" due-to="Sean Busbey">Added clarification to Javadoc of Base64 concerning the use of the urlSafe parameter</action>   
+      <action dev="tn" type="fix" issue="CODEC-191" due-to="Igor Savin">Added clarification to the Javadoc of Base[32|64]OutputStream that it is mandatory to call close()</action>   
+      <action dev="ggregory" type="fix" issue="CODEC-188" due-to="Hendrik Saly">Add support for HMAC Message Authentication Code (MAC) digests</action>   
       <action dev="ggregory" type="fix" issue="CODEC-187" due-to="Michael Tobias, Thomas Neidhart">Beider Morse Phonetic Matching producing incorrect tokens</action>   
       <action dev="ggregory" type="fix" issue="CODEC-184" due-to="Cyrille Artho">NullPointerException in DoubleMetaPhone.isDoubleMetaphoneEqual when using empty strings</action>   
       <action dev="ggregory" type="add" issue="CODEC-181" due-to="Ivan Martinez-Ortiz">Make possible to provide padding byte to BaseNCodec in constructor</action>   
       <action dev="ggregory" type="fix" issue="CODEC-180" due-to="Ville Skyttä">Fix Javadoc 1.8.0 errors</action>   
       <action dev="ggregory" type="update" issue="CODEC-178">Deprecate Charsets Charset constants in favor of Java 7's java.nio.charset.StandardCharsets</action>   
+      <action dev="ggregory" type="fix" issue="CODEC-189">Fix Java 8 build Javadoc errors</action>   
+      <action dev="ggregory" type="update" issue="CODEC-190">Update from commons-parent 34 to 35</action>   
     </release>
     <release version="1.9" date="20 December 2013" description="Feature and fix release."> 
       <action dev="ggregory" type="update" issue="CODEC-174" due-to="Thomas Champagne">Improve performance of Beider Morse encoder</action>   
@@ -119,7 +133,7 @@ The <action> type attribute can be add,update,fix,remove.
         BeiderMorseEncoder OOM issues.
       </action>
       <action issue="CODEC-131" dev="tn" type="fix" due-to="smolav">
-        DoubleMetaphone javadoc contains dead links.
+        DoubleMetaphone Javadoc contains dead links.
       </action>
       <action issue="CODEC-130" dev="ggregory" type="add" due-to="tn">
         Base64InputStream.skip skips underlying stream, not output.

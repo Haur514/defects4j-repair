@@ -227,6 +227,9 @@ public class SoundexTest extends StringEncoderAbstractTest<Soundex> {
         // Ashcraft is coded A-261 (A, 2 for the S, C ignored, 6 for the R, 1
         // for the F). It is not coded A-226.
         Assert.assertEquals("A261", this.getStringEncoder().encode("Ashcraft"));
+        Assert.assertEquals("A261", this.getStringEncoder().encode("Ashcroft"));
+        Assert.assertEquals("Y330", this.getStringEncoder().encode("yehudit"));
+        Assert.assertEquals("Y330", this.getStringEncoder().encode("yhwdyt"));
     }
 
     /**
@@ -386,5 +389,18 @@ public class SoundexTest extends StringEncoderAbstractTest<Soundex> {
         } else {
             Assert.assertEquals("", this.getStringEncoder().encode("\u00f6"));
         }
+    }
+    
+    /**
+     * Tests example from http://en.wikipedia.org/wiki/Soundex#American_Soundex as of 2015-03-22.
+     */
+    @Test
+    public void testWikipediaAmericanSoundex() {
+        Assert.assertEquals("R163", this.getStringEncoder().encode("Robert"));        
+        Assert.assertEquals("R163", this.getStringEncoder().encode("Rupert"));        
+        Assert.assertEquals("A261", this.getStringEncoder().encode("Ashcraft"));        
+        Assert.assertEquals("A261", this.getStringEncoder().encode("Ashcroft"));        
+        Assert.assertEquals("T522", this.getStringEncoder().encode("Tymczak"));        
+        Assert.assertEquals("P236", this.getStringEncoder().encode("Pfister"));        
     }
 }
