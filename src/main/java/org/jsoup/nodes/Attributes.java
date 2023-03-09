@@ -119,7 +119,8 @@ public class Attributes implements Iterable<Attribute>, Cloneable {
         Validate.notEmpty(key);
         if (attributes == null)
             return;
-        for (String attrKey : attributes.keySet()) {
+        for (Iterator<String> it = attributes.keySet().iterator(); it.hasNext(); ) {
+            String attrKey = it.next();
             if (attrKey.equalsIgnoreCase(key))
                 attributes.remove(attrKey);
         }
