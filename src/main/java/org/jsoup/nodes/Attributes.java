@@ -1,29 +1,42 @@
 package org.jsoup.nodes;
 
+import org.jsoup.SerializationException;
 import org.jsoup.helper.Validate;
 
-import java.util.*;
+import java.io.IOException;
+import java.util.AbstractMap;
+import java.util.AbstractSet;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * The attributes of an Element.
- * <p/>
- * Attributes are treated as a map: there can be only one value associated with an attribute key.
- * <p/>
- * Attribute key and value comparisons are done case insensitively, and keys are normalised to
- * lower-case.
- * 
+ * <p>
+ * Attributes are treated as a map: there can be only one value associated with an attribute key/name.
+ * </p>
+ * <p>
+ * Attribute name and value comparisons are  <b>case sensitive</b>. By default for HTML, attribute names are
+ * normalized to lower-case on parsing. That means you should use lower-case strings when referring to attributes by
+ * name.
+ * </p>
+ *
  * @author Jonathan Hedley, jonathan@hedley.net
  */
 public class Attributes implements Iterable<Attribute>, Cloneable {
     protected static final String dataPrefix = "data-";
-    
+
     private LinkedHashMap<String, Attribute> attributes = null;
     // linked hash map to preserve insertion order.
     // null be default as so many elements have no attributes -- saves a good chunk of memory
 
     /**
      Get an attribute value by key.
-     @param key the attribute key
+     @param key the (case-sensitive) attribute key
      @return the attribute value if set; or empty string if not set.
      @see #hasKey(String)
      */
@@ -33,8 +46,34 @@ public class Attributes implements Iterable<Attribute>, Cloneable {
         if (attributes == null)
             return "";
 
-        Attribute attr = attributes.get(key.toLowerCase());
+        Attribute attr = attributes.get(key);
         return attr != null ? attr.getValue() : "";
+    }
+
+    /**
+     * Get an attribute's value by case-insensitive key
+     * @param key the attribute name
+     * @return the first matching attribute value if set; or empty string if not set.
+     */
+    public String getIgnoreCase(String key) {
+        Attribute attr = getAttributeIgnoreCase(key);
+        return attr != null ? attr.getValue() : "";
+    }
+
+    private Attribute getAttributeIgnoreCase(String key) {
+        Validate.notEmpty(key);
+        if (attributes == null)
+            return null;
+
+        Attribute attr = attributes.get(key);
+        if (attr != null)
+            return attr;
+
+        for (String attrKey : attributes.keySet()) {
+            if (attrKey.equalsIgnoreCase(key))
+                return attributes.get(attrKey);
+        }
+        return null;
     }
 
     /**
@@ -47,6 +86,27 @@ public class Attributes implements Iterable<Attribute>, Cloneable {
         put(attr);
     }
 
+    void putIgnoreCase(String key, String value) {
+        Attribute oldAttr = getAttributeIgnoreCase(key);
+        if (oldAttr != null && !oldAttr.getKey().equals(key)) {
+            attributes.remove(oldAttr.getKey());
+        }
+
+        put(key, value);
+    }
+
+    /**
+    Set a new boolean attribute, remove attribute if value is false.
+    @param key attribute key
+    @param value attribute value
+    */
+    public void put(String key, boolean value) {
+        if (value)
+            put(new BooleanAttribute(key));
+        else
+            remove(key);
+    }
+
     /**
      Set a new attribute, or replace an existing one by key.
      @param attribute attribute
@@ -54,19 +114,43 @@ public class Attributes implements Iterable<Attribute>, Cloneable {
     public void put(Attribute attribute) {
         Validate.notNull(attribute);
         if (attributes == null)
-             attributes = new LinkedHashMap<String, Attribute>(2);
+             attributes = new LinkedHashMap<>(2);
         attributes.put(attribute.getKey(), attribute);
     }
 
     /**
-     Remove an attribute by key.
+     Remove an attribute by key. <b>Case sensitive.</b>
      @param key attribute key to remove
      */
     public void remove(String key) {
         Validate.notEmpty(key);
         if (attributes == null)
             return;
-        attributes.remove(key.toLowerCase());
+        attributes.remove(key);
+    }
+
+    /**
+     Remove an attribute by key. <b>Case insensitive.</b>
+     @param key attribute key to remove
+     */
+    public void removeIgnoreCase(String key) {
+        Validate.notEmpty(key);
+        if (attributes == null)
+            return;
+        for (Iterator<String> it = attributes.keySet().iterator(); it.hasNext(); ) {
+            String attrKey = it.next();
+            if (attrKey.equalsIgnoreCase(key))
+                it.remove();
+        }
+    }
+
+    /**
+     Tests if these attributes contain an attribute with this key.
+     @param key case-sensitive key to check for
+     @return true if key exists, false otherwise
+     */
+    public boolean hasKey(String key) {
+        return attributes != null && attributes.containsKey(key);
     }
 
     /**
@@ -74,8 +158,14 @@ public class Attributes implements Iterable<Attribute>, Cloneable {
      @param key key to check for
      @return true if key exists, false otherwise
      */
-    public boolean hasKey(String key) {
-        return attributes != null && attributes.containsKey(key.toLowerCase());
+    public boolean hasKeyIgnoreCase(String key) {
+        if (attributes == null)
+            return false;
+        for (String attrKey : attributes.keySet()) {
+            if (attrKey.equalsIgnoreCase(key))
+                return true;
+        }
+        return false;
     }
 
     /**
@@ -96,12 +186,16 @@ public class Attributes implements Iterable<Attribute>, Cloneable {
         if (incoming.size() == 0)
             return;
         if (attributes == null)
-            attributes = new LinkedHashMap<String, Attribute>(incoming.size());
+            attributes = new LinkedHashMap<>(incoming.size());
         attributes.putAll(incoming.attributes);
     }
-    
+
     public Iterator<Attribute> iterator() {
-        return asList().iterator();
+        if (attributes == null || attributes.isEmpty()) {
+            return Collections.<Attribute>emptyList().iterator();
+        }
+
+        return attributes.values().iterator();
     }
 
     /**
@@ -113,7 +207,7 @@ public class Attributes implements Iterable<Attribute>, Cloneable {
         if (attributes == null)
             return Collections.emptyList();
 
-        List<Attribute> list = new ArrayList<Attribute>(attributes.size());
+        List<Attribute> list = new ArrayList<>(attributes.size());
         for (Map.Entry<String, Attribute> entry : attributes.entrySet()) {
             list.add(entry.getValue());
         }
@@ -132,40 +226,53 @@ public class Attributes implements Iterable<Attribute>, Cloneable {
     /**
      Get the HTML representation of these attributes.
      @return HTML
+     @throws SerializationException if the HTML representation of the attributes cannot be constructed.
      */
     public String html() {
         StringBuilder accum = new StringBuilder();
-        html(accum, (new Document("")).outputSettings()); // output settings a bit funky, but this html() seldom used
+        try {
+            html(accum, (new Document("")).outputSettings()); // output settings a bit funky, but this html() seldom used
+        } catch (IOException e) { // ought never happen
+            throw new SerializationException(e);
+        }
         return accum.toString();
     }
-    
-    void html(StringBuilder accum, Document.OutputSettings out) {
+
+    void html(Appendable accum, Document.OutputSettings out) throws IOException {
         if (attributes == null)
             return;
-        
+
         for (Map.Entry<String, Attribute> entry : attributes.entrySet()) {
             Attribute attribute = entry.getValue();
             accum.append(" ");
             attribute.html(accum, out);
         }
     }
-    
+
+    @Override
     public String toString() {
         return html();
     }
-    
+
+    /**
+     * Checks if these attributes are equal to another set of attributes, by comparing the two sets
+     * @param o attributes to compare with
+     * @return if both sets of attributes have the same content
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof Attributes)) return false;
-        
+
         Attributes that = (Attributes) o;
-        
-        if (attributes != null ? !attributes.equals(that.attributes) : that.attributes != null) return false;
-        
-        return true;
+
+        return !(attributes != null ? !attributes.equals(that.attributes) : that.attributes != null);
     }
-    
+
+    /**
+     * Calculates the hashcode of these attributes, by iterating all attributes and summing their hashcodes.
+     * @return calculated hashcode
+     */
     @Override
     public int hashCode() {
         return attributes != null ? attributes.hashCode() : 0;
@@ -182,7 +289,7 @@ public class Attributes implements Iterable<Attribute>, Cloneable {
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
         }
-        clone.attributes = new LinkedHashMap<String, Attribute>(attributes.size());
+        clone.attributes = new LinkedHashMap<>(attributes.size());
         for (Attribute attribute: this)
             clone.attributes.put(attribute.getKey(), attribute.clone());
         return clone;
@@ -192,9 +299,10 @@ public class Attributes implements Iterable<Attribute>, Cloneable {
 
         private Dataset() {
             if (attributes == null)
-                attributes = new LinkedHashMap<String, Attribute>(2);
+                attributes = new LinkedHashMap<>(2);
         }
 
+        @Override
         public Set<Entry<String, String>> entrySet() {
             return new EntrySet();
         }
@@ -209,10 +317,13 @@ public class Attributes implements Iterable<Attribute>, Cloneable {
         }
 
         private class EntrySet extends AbstractSet<Map.Entry<String, String>> {
+
+            @Override
             public Iterator<Map.Entry<String, String>> iterator() {
                 return new DatasetIterator();
             }
 
+           @Override
             public int size() {
                 int count = 0;
                 Iterator iter = new DatasetIterator();
