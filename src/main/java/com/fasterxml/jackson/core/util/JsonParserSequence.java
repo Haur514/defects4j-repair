@@ -25,13 +25,6 @@ public class JsonParserSequence extends JsonParserDelegate
      * Index of the next parser in {@link #_parsers}.
      */
     protected int _nextParser;
-
-    /**
-     * Flag used to indicate that `JsonParser.nextToken()` should not be called,
-     * due to parser already pointing to a token.
-     *
-     * @since 2.8
-     */
     
     /*
      *******************************************************

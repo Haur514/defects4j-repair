@@ -1,7 +1,5 @@
 package com.fasterxml.jackson.core.main;
 
-import java.io.*;
-
 import com.fasterxml.jackson.core.*;
 
 /**
@@ -11,7 +9,7 @@ import com.fasterxml.jackson.core.*;
 public class TestParserFeatures
     extends com.fasterxml.jackson.core.BaseTest
 {
-    public void testDefaultSettings() throws Exception
+    public void testDefaultSettings()
     {
         JsonFactory f = new JsonFactory();
         assertTrue(f.isEnabled(JsonParser.Feature.AUTO_CLOSE_SOURCE));
@@ -19,13 +17,6 @@ public class TestParserFeatures
         assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES));
         assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_SINGLE_QUOTES));
         assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS));
-
-        JsonParser p = f.createParser(new StringReader("{}"));
-        _testDefaultSettings(p);
-        p.close();
-        p = f.createParser(new ByteArrayInputStream("{}".getBytes("UTF-8")));
-        _testDefaultSettings(p);
-        p.close();
     }
 
     public void testQuotesRequired() throws Exception
@@ -33,6 +24,7 @@ public class TestParserFeatures
         _testQuotesRequired(false);
         _testQuotesRequired(true);
     }
+
 
     // // Tests for [JACKSON-208], unquoted tabs:
 
@@ -54,28 +46,23 @@ public class TestParserFeatures
     /****************************************************************
      */
 
-    private void _testDefaultSettings(JsonParser p) {
-        assertFalse(p.canReadObjectId());
-        assertFalse(p.canReadTypeId());
-    }
-    
     private void _testQuotesRequired(boolean useStream) throws Exception
     {
         final String JSON = "{ test : 3 }";
         final String EXP_ERROR_FRAGMENT = "was expecting double-quote to start";
         JsonFactory f = new JsonFactory();
-        JsonParser p = useStream ?
+        JsonParser jp = useStream ?
             createParserUsingStream(f, JSON, "UTF-8")
             : createParserUsingReader(f, JSON)
             ;
 
-        assertToken(JsonToken.START_OBJECT, p.nextToken());
+        assertToken(JsonToken.START_OBJECT, jp.nextToken());
         try {
-            p.nextToken();
+            jp.nextToken();
         } catch (JsonParseException je) {
             verifyException(je, EXP_ERROR_FRAGMENT);
         } finally {
-            p.close();
+            jp.close();
         }
     }
 
@@ -86,16 +73,16 @@ public class TestParserFeatures
         JsonFactory f = new JsonFactory();
         // First, let's see that by default unquoted tabs are illegal
         String JSON = "[\"tab:\t\"]";
-        JsonParser p = useStream ? createParserUsingStream(f, JSON, "UTF-8") : createParserUsingReader(f, JSON);
-        assertToken(JsonToken.START_ARRAY, p.nextToken());
+        JsonParser jp = useStream ? createParserUsingStream(f, JSON, "UTF-8") : createParserUsingReader(f, JSON);
+        assertToken(JsonToken.START_ARRAY, jp.nextToken());
         try {
-            p.nextToken();
-            p.getText();
+            jp.nextToken();
+            jp.getText();
             fail("Expected exception");
         } catch (JsonParseException e) {
             verifyException(e, "Illegal unquoted character");
         } finally {
-            p.close();
+            jp.close();
         }
     }
 
@@ -107,14 +94,14 @@ public class TestParserFeatures
         String FIELD = "a\tb";
         String VALUE = "\t";
         String JSON = "{ "+quote(FIELD)+" : "+quote(VALUE)+"}";
-        JsonParser p = useStream ? createParserUsingStream(f, JSON, "UTF-8") : createParserUsingReader(f, JSON);
+        JsonParser jp = useStream ? createParserUsingStream(f, JSON, "UTF-8") : createParserUsingReader(f, JSON);
 
-        assertToken(JsonToken.START_OBJECT, p.nextToken());
-        assertToken(JsonToken.FIELD_NAME, p.nextToken());
-        assertEquals(FIELD, p.getText());
-        assertToken(JsonToken.VALUE_STRING, p.nextToken());
-        assertEquals(VALUE, p.getText());
-        assertToken(JsonToken.END_OBJECT, p.nextToken());
-        p.close();
+        assertToken(JsonToken.START_OBJECT, jp.nextToken());
+        assertToken(JsonToken.FIELD_NAME, jp.nextToken());
+        assertEquals(FIELD, jp.getText());
+        assertToken(JsonToken.VALUE_STRING, jp.nextToken());
+        assertEquals(VALUE, jp.getText());
+        assertToken(JsonToken.END_OBJECT, jp.nextToken());
+        jp.close();
     }
 }

@@ -172,34 +172,6 @@ public final class ByteSourceJsonBootstrapper
         return enc;
     }
 
-    /**
-     * Helper method that may be called to see if given {@link DataInput}
-     * has BOM marker, and if so, to skip it.
-     * @throws IOException 
-     *
-     * @since 2.8
-     */
-    public static int skipUTF8BOM(DataInput input) throws IOException
-    {
-        int b = input.readUnsignedByte();
-        if (b != 0xEF) {
-            return b;
-        }
-        // since this is not legal byte in JSON otherwise, except
-        // that we do get BOM; if not, report error
-        b = input.readUnsignedByte();
-        if (b != 0xBB) {
-            throw new IOException("Unexpected byte 0x"+Integer.toHexString(b)
-                +" following 0xEF; should get 0xBB as part of UTF-8 BOM");
-        }
-        b = input.readUnsignedByte();
-        if (b != 0xBF) {
-            throw new IOException("Unexpected byte 0x"+Integer.toHexString(b)
-                +" following 0xEF 0xBB; should get 0xBF as part of UTF-8 BOM");
-        }
-        return input.readUnsignedByte();
-    }
-
     /*
     /**********************************************************
     /* Constructing a Reader
@@ -370,7 +342,7 @@ public final class ByteSourceJsonBootstrapper
         }
         return fullMatchStrength;
     }
-    
+
     private static int skipSpace(InputAccessor acc) throws IOException
     {
         if (!acc.hasMoreBytes()) {
@@ -378,7 +350,7 @@ public final class ByteSourceJsonBootstrapper
         }
         return skipSpace(acc, acc.nextByte());
     }
-    
+
     private static int skipSpace(InputAccessor acc, byte b) throws IOException
     {
         while (true) {
@@ -390,10 +362,9 @@ public final class ByteSourceJsonBootstrapper
                 return -1;
             }
             b = acc.nextByte();
-            ch = (int) b & 0xFF;
         }
     }
-    
+
     /*
     /**********************************************************
     /* Internal methods, parsing

@@ -200,43 +200,16 @@ public class JsonGeneratorDelegate extends JsonGenerator
 
     @Override
     public void writeStartObject() throws IOException { delegate.writeStartObject(); }
-
-    @Override
-    public void writeStartObject(Object forValue) throws IOException { delegate.writeStartObject(forValue); }
-
+    
     @Override
     public void writeEndObject() throws IOException { delegate.writeEndObject(); }
 
     @Override
-    public void writeFieldName(String name) throws IOException {
-        delegate.writeFieldName(name);
-    }
+    public void writeFieldName(String name) throws IOException { delegate.writeFieldName(name); }
 
     @Override
-    public void writeFieldName(SerializableString name) throws IOException {
-        delegate.writeFieldName(name);
-    }
-
-    @Override
-    public void writeFieldId(long id) throws IOException {
-        delegate.writeFieldId(id);
-    }
-
-    @Override
-    public void writeArray(int[] array, int offset, int length) throws IOException {
-        delegate.writeArray(array, offset, length);
-    }
-
-    @Override
-    public void writeArray(long[] array, int offset, int length) throws IOException {
-        delegate.writeArray(array, offset, length);
-    }
-
-    @Override
-    public void writeArray(double[] array, int offset, int length) throws IOException {
-        delegate.writeArray(array, offset, length);
-    }
-
+    public void writeFieldName(SerializableString name) throws IOException { delegate.writeFieldName(name); }
+    
     /*
     /**********************************************************
     /* Public API, write methods, text/String values
@@ -353,9 +326,6 @@ public class JsonGeneratorDelegate extends JsonGenerator
     
     @Override
     public void writeTypeId(Object id) throws IOException { delegate.writeTypeId(id); }
-
-    @Override
-    public void writeEmbeddedObject(Object object) throws IOException { delegate.writeEmbeddedObject(object); }
     
     /*
     /**********************************************************

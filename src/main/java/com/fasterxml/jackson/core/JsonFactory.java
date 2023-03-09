@@ -442,9 +442,6 @@ public class JsonFactory
      * @since 2.1
      */
     public boolean canUseSchema(FormatSchema schema) {
-        if (schema == null){
-            return false;
-        }
         String ourFormat = getFormatName();
         return (ourFormat != null) && ourFormat.equals(schema.getSchemaType());
     }
@@ -878,7 +875,7 @@ public class JsonFactory
     public JsonParser createParser(String content) throws IOException, JsonParseException {
         final int strLen = content.length();
         // Actually, let's use this for medium-sized content, up to 64kB chunk (32kb char)
-        if ((_inputDecorator != null) || (strLen > 0x8000) || !canUseCharArrays()) {
+        if (_inputDecorator != null || strLen > 0x8000 || !canUseCharArrays()) {
             // easier to just wrap in a Reader than extend InputDecorator; or, if content
             // is too long for us to copy it over
             return createParser(new StringReader(content));
@@ -911,14 +908,6 @@ public class JsonFactory
         return _createParser(content, offset, len, _createContext(content, true),
                 // important: buffer is NOT recyclable, as it's from caller
                 false);
-    }
-
-    /**
-     * @since 2.8
-     */
-    public JsonParser createParser(DataInput in) throws IOException {
-        IOContext ctxt = _createContext(in, false);
-        return _createParser(_decorate(in, ctxt), ctxt);
     }
 
     /*
@@ -1159,28 +1148,6 @@ public class JsonFactory
         return _createGenerator(_decorate(w, ctxt), ctxt);
     }    
 
-    /**
-     * Method for constructing generator for writing content using specified
-     * {@link DataOutput} instance.
-     * 
-     * @since 2.8
-     */
-    public JsonGenerator createGenerator(DataOutput out, JsonEncoding enc) throws IOException {
-        return createGenerator(_createDataOutputWrapper(out), enc);
-    }
-
-    /**
-     * Convenience method for constructing generator that uses default
-     * encoding of the format (UTF-8 for JSON and most other data formats).
-     *<p>
-     * Note: there are formats that use fixed encoding (like most binary data formats).
-     * 
-     * @since 2.8
-     */
-    public JsonGenerator createGenerator(DataOutput out) throws IOException {
-        return createGenerator(_createDataOutputWrapper(out), JsonEncoding.UTF8);
-    }
-
     /*
     /**********************************************************
     /* Generator factories, old (pre-2.2)
@@ -1319,26 +1286,6 @@ public class JsonFactory
                 _objectCodec, _byteSymbolCanonicalizer, _rootCharSymbols, _factoryFeatures);
     }
 
-    /**
-     * @since 2.8
-     */
-    protected JsonParser _createParser(DataInput input, IOContext ctxt) throws IOException
-    {
-        // 13-May-2016, tatu: Need to take care not to accidentally create JSON parser for
-        //   non-JSON input. So, bit unclean but...
-        String format = getFormatName();
-        if (format != FORMAT_NAME_JSON) {
-            throw new UnsupportedOperationException(String.format(
-                    "InputData source not (yet?) support for this format (%s)", format));
-        }
-        // Also: while we can't do full bootstrapping (due to read-ahead limitations), should
-        // at least handle possible UTF-8 BOM
-        int firstByte = ByteSourceJsonBootstrapper.skipUTF8BOM(input);
-        ByteQuadsCanonicalizer can = _byteSymbolCanonicalizer.makeChild(_factoryFeatures);
-        return new UTF8DataInputJsonParser(ctxt, _parserFeatures, input,
-                _objectCodec, can, firstByte);
-    }
-
     /*
     /**********************************************************
     /* Factory methods used by factory for creating generator instances,
@@ -1421,7 +1368,7 @@ public class JsonFactory
         }
         return in;
     }
-
+    
     /**
      * @since 2.4
      */
@@ -1435,19 +1382,6 @@ public class JsonFactory
         return in;
     }
 
-    /**
-     * @since 2.8
-     */
-    protected final DataInput _decorate(DataInput in, IOContext ctxt) throws IOException {
-        if (_inputDecorator != null) {
-            DataInput in2 = _inputDecorator.decorate(ctxt, in);
-            if (in2 != null) {
-                return in2;
-            }
-        }
-        return in;
-    }
-    
     /**
      * @since 2.4
      */
@@ -1517,13 +1451,6 @@ public class JsonFactory
     }
 
     /**
-     * @since 2.8
-     */
-    protected OutputStream _createDataOutputWrapper(DataOutput out) {
-        return new DataOutputAsStream(out);
-    }
-
-    /**
      * Helper methods used for constructing an optimal stream for
      * parsers to use, when input is to be read from an URL.
      * This helps when reading file content via URL.
@@ -1538,7 +1465,7 @@ public class JsonFactory
              */
             String host = url.getHost();
             if (host == null || host.length() == 0) {
-                // [core#48]: Let's try to avoid probs with URL encoded stuff
+                // [Issue#48]: Let's try to avoid probs with URL encoded stuff
                 String path = url.getPath();
                 if (path.indexOf('%') < 0) {
                     return new FileInputStream(url.getPath());

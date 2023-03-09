@@ -14,36 +14,15 @@ JSON library.
 === Releases ===
 ------------------------------------------------------------------------
 
-2.8.0 (not yet released)
+2.7.7 (not yet released)
 
-#86: Allow inclusion of request body for JsonParseException
- (contributed by LokeshN)
-#136: Add `JsonpCharacterEscapes` for easier handling of potential problems
- with JSONP and rare but technically allowed \u2028 and \u2029 linefeed characters
-#117: Add `JsonParser.Feature.ALLOW_MISSING_VALUES` to support for missing values
- (contributed by LokeshN)
-#253: Add `JsonGenerator. writeEmbeddedObject()` to allow writes of opaque native types
- (suggested by Gregoire C)
-#255: Relax ownership checks for buffers not to require increase in size
-#257: Add `writeStartObject(Object pojo)` to streamline assignment of current value
-#265: `JsonStringEncoder` should allow passing `CharSequence`
- (contributed by Mikael S)
-#276: Add support for serializing using `java.io.DataOutput`
-#277: Add new scalar-array write methods for `int`/`long`/`double` cases
-#279: Support `DataInput` for parsing
-#280: Add `JsonParser.finishToken()` to force full, non-lazy reading of current token
-#281: Add `JsonEOFException` as sub-class of `JsonParseException`
-#282: Fail to report error for trying to write field name outside Object (root level)
-#285: Add `JsonParser.getText(Writer)`
- (contributed by LokesN)
-#290: Add `JsonGenerator.canWriteFormattedNumbers()` for introspection
-#294: Add `JsonGenerator.writeFieldId(long)` method to support binary formats
- with non-String keys
-#296: JsonParserSequence skips a token on a switched Parser
- (reported by Kevin G)
-- Add `JsonParser.currentToken()` and `JsonParser.currentTokenId()` as replacements
-  for `getCurrentToken()` and `getCurrentTokenId()`, respectively. Existing methods
-  will likely be deprecated in 2.9.
+#307: JsonGenerationException: Split surrogate on writeRaw() input thrown for
+  input of a certain size
+ (reported by Mike N)
+
+2.7.6 (23-Jul-2016)
+
+- Clean up of FindBugs reported possible issues.
 
 2.7.5 (11-Jun-2016)
  

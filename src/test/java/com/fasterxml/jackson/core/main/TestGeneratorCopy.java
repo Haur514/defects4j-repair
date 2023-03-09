@@ -26,7 +26,7 @@ public class TestGeneratorCopy
         while ((t = jp.nextToken()) != null) {
             gen.copyCurrentEvent(jp);
             // should not change parser state:
-            assertToken(t, jp.currentToken());
+            assertToken(t, jp.getCurrentToken());
         }
         jp.close();
         gen.close();
@@ -46,14 +46,14 @@ public class TestGeneratorCopy
         assertToken(JsonToken.VALUE_NUMBER_INT, jp.nextToken());
         gen.copyCurrentEvent(jp);
         // should not change parser state:
-        assertToken(JsonToken.VALUE_NUMBER_INT, jp.currentToken());
+        assertToken(JsonToken.VALUE_NUMBER_INT, jp.getCurrentToken());
         assertEquals(123, jp.getIntValue());
 
         // And then let's copy the array
         assertToken(JsonToken.START_ARRAY, jp.nextToken());
         gen.copyCurrentStructure(jp);
         // which will advance parser to matching close Array
-        assertToken(JsonToken.END_ARRAY, jp.currentToken());
+        assertToken(JsonToken.END_ARRAY, jp.getCurrentToken());
         jp.close();
         gen.close();
 
@@ -72,7 +72,7 @@ public class TestGeneratorCopy
         assertToken(JsonToken.START_OBJECT, jp.nextToken());
         gen.copyCurrentStructure(jp);
         // which will advance parser to matching end Object
-        assertToken(JsonToken.END_OBJECT, jp.currentToken());
+        assertToken(JsonToken.END_OBJECT, jp.getCurrentToken());
         jp.close();
         gen.close();
 

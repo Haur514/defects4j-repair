@@ -65,7 +65,7 @@ public class TestGeneratorObject
             gen.writeEndArray();
             fail("Expected an exception for mismatched array/object write");
         } catch (JsonGenerationException e) {
-            verifyException(e, "Current context not Array");
+            verifyException(e, "Current context not an array");
         }
         gen.close();
     }

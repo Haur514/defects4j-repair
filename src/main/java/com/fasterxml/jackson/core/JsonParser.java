@@ -11,7 +11,6 @@ import java.math.BigInteger;
 import java.util.Iterator;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.core.util.RequestPayload;
 
 /**
  * Base class that defines public API for reading JSON content.
@@ -209,25 +208,7 @@ public abstract class JsonParser
           *
           * @since 2.6
           */
-         IGNORE_UNDEFINED(false),
-
-         /**
-          * Feature allows the support for "missing" values in a JSON array: missing
-          * value meaning sequence of two commas, without value in-between but only
-          * optional white space.
-          * Enabling this feature will expose "missing" values as {@link JsonToken#VALUE_NULL}
-          * tokens, which typically become Java nulls in arrays and {@link java.util.Collection}
-          * in data-binding.
-          * <p>
-          * For example, enabling this feature will represent a JSON array <code>["value1",,"value3",]</code>
-          * as <code>["value1", null, "value3", null]</code> 
-          * <p>
-          * Since the JSON specification does not allow missing values this is a non-compliant JSON
-          * feature and is disabled by default.
-          * 
-          * @since 2.8
-          */
-         ALLOW_MISSING_VALUES(false)
+         IGNORE_UNDEFINED(false)
          ;
 
         /**
@@ -279,13 +260,6 @@ public abstract class JsonParser
      * are enabled.
      */
     protected int _features;
-    
-    /**
-     * Optional container that holds the request payload which will be displayed on JSON parsing error.
-     *
-     * @since 2.8
-     */
-    protected transient RequestPayload _requestPayload;
 
     /*
     /**********************************************************
@@ -360,39 +334,12 @@ public abstract class JsonParser
         }
     }
 
-    /**
-     * Sets the payload to be passed if {@link JsonParseException} is thrown.
-     *
-     * @since 2.8
-     */
-    public void setRequestPayloadOnError(RequestPayload payload) {
-        _requestPayload = payload;
-    }
-    
-    /**
-     * Sets the byte[] request payload and the charset
-     *
-     * @since 2.8
-     */
-     public void setRequestPayloadOnError(byte[] payload, String charset) {
-         _requestPayload = (payload == null) ? null : new RequestPayload(payload, charset);
-     }
-
-     /**
-     * Sets the String request payload
-     *
-     * @since 2.8
-     */
-    public void setRequestPayloadOnError(String payload) {
-        _requestPayload = (payload == null) ? null : new RequestPayload(payload);
-    }
-
     /*
     /**********************************************************
     /* Format support
     /**********************************************************
      */
-
+    
     /**
      * Method to call to make this parser use specified schema. Method must
      * be called before trying to parse any content, right after parser instance
@@ -658,7 +605,7 @@ public abstract class JsonParser
      * @return Next token from the stream, if any found, or null
      *   to indicate end-of-input
      */
-    public abstract JsonToken nextToken() throws IOException;
+    public abstract JsonToken nextToken() throws IOException, JsonParseException;
 
     /**
      * Iteration method that will advance stream enough
@@ -677,7 +624,7 @@ public abstract class JsonParser
      *   parsers, {@link JsonToken#NOT_AVAILABLE} if no tokens were
      *   available yet)
      */
-    public abstract JsonToken nextValue() throws IOException;
+    public abstract JsonToken nextValue() throws IOException, JsonParseException;
 
     /**
      * Method that fetches next token (as if calling {@link #nextToken}) and
@@ -693,7 +640,7 @@ public abstract class JsonParser
      * @param str Property name to compare next token to (if next token is
      *   <code>JsonToken.FIELD_NAME</code>)
      */
-    public boolean nextFieldName(SerializableString str) throws IOException {
+    public boolean nextFieldName(SerializableString str) throws IOException, JsonParseException {
         return (nextToken() == JsonToken.FIELD_NAME) && str.getValue().equals(getCurrentName());
     }
 
@@ -704,7 +651,7 @@ public abstract class JsonParser
      * 
      * @since 2.5
      */
-    public String nextFieldName() throws IOException {
+    public String nextFieldName() throws IOException, JsonParseException {
         return (nextToken() == JsonToken.FIELD_NAME) ? getCurrentName() : null;
     }
 
@@ -719,7 +666,7 @@ public abstract class JsonParser
      * but may be faster for parser to process, and can therefore be used if caller
      * expects to get a String value next from input.
      */
-    public String nextTextValue() throws IOException {
+    public String nextTextValue() throws IOException, JsonParseException {
         return (nextToken() == JsonToken.VALUE_STRING) ? getText() : null;
     }
 
@@ -734,7 +681,7 @@ public abstract class JsonParser
      * but may be faster for parser to process, and can therefore be used if caller
      * expects to get a String value next from input.
      */
-    public int nextIntValue(int defaultValue) throws IOException {
+    public int nextIntValue(int defaultValue) throws IOException, JsonParseException {
         return (nextToken() == JsonToken.VALUE_NUMBER_INT) ? getIntValue() : defaultValue;
     }
 
@@ -749,7 +696,7 @@ public abstract class JsonParser
      * but may be faster for parser to process, and can therefore be used if caller
      * expects to get a String value next from input.
      */
-    public long nextLongValue(long defaultValue) throws IOException {
+    public long nextLongValue(long defaultValue) throws IOException, JsonParseException {
         return (nextToken() == JsonToken.VALUE_NUMBER_INT) ? getLongValue() : defaultValue;
     }
 
@@ -767,7 +714,7 @@ public abstract class JsonParser
      * but may be faster for parser to process, and can therefore be used if caller
      * expects to get a String value next from input.
      */
-    public Boolean nextBooleanValue() throws IOException {
+    public Boolean nextBooleanValue() throws IOException, JsonParseException {
         JsonToken t = nextToken();
         if (t == JsonToken.VALUE_TRUE) { return Boolean.TRUE; }
         if (t == JsonToken.VALUE_FALSE) { return Boolean.FALSE; }
@@ -788,26 +735,8 @@ public abstract class JsonParser
      * will call {@link #nextToken} to point to the next
      * available token, if any.
      */
-    public abstract JsonParser skipChildren() throws IOException;
-
-    /**
-     * Method that may be used to force full handling of the current token
-     * so that even if lazy processing is enabled, the whole contents are
-     * read for possible retrieval. This is usually used to ensure that
-     * the token end location is available, as well as token contents
-     * (similar to what calling, say {@link #getTextCharacters()}, would
-     * achieve).
-     *<p>
-     * Note that for many dataformat implementations this method
-     * will not do anything; this is the default implementation unless
-     * overridden by sub-classes.
-     *
-     * @since 2.8
-     */
-    public void finishToken() throws IOException {
-        ; // nothing
-    }
-
+    public abstract JsonParser skipChildren() throws IOException, JsonParseException;
+    
     /**
      * Method that can be called to determine whether this parser
      * is closed or not. If it is closed, no new tokens can be
@@ -834,12 +763,8 @@ public abstract class JsonParser
      *   if any: null before any tokens have been read, and
      *   after end-of-input has been encountered, as well as
      *   if the current token has been explicitly cleared.
-     *
-     * @since 2.8
      */
-    public JsonToken currentToken() {
-        return getCurrentToken();
-    }
+    public abstract JsonToken getCurrentToken();
 
     /**
      * Method similar to {@link #getCurrentToken()} but that returns an
@@ -850,21 +775,9 @@ public abstract class JsonParser
      * Note, however, that effect may not be big enough to matter: make sure
      * to profile performance before deciding to use this method.
      * 
-     * @since 2.8
+     * @since 2.3
      * 
      * @return <code>int</code> matching one of constants from {@link JsonTokenId}.
-     */
-    public int currentTokenId() {
-        return getCurrentTokenId();
-    }
-
-    /**
-     * Alias for {@link #currentToken()}, will be deprecated in Jackson 2.9
-     */
-    public abstract JsonToken getCurrentToken();
-
-    /**
-     * Alias for {@link #currentTokenId()}, will be deprecated in Jackson 2.9
      */
     public abstract int getCurrentTokenId();
     
@@ -884,7 +797,7 @@ public abstract class JsonParser
     /**
      * Method that is functionally equivalent to:
      *<code>
-     *  return currentTokenId() == id
+     *  return getCurrentTokenId() == id
      *</code>
      * but may be more efficiently implemented.
      *<p>
@@ -899,7 +812,7 @@ public abstract class JsonParser
     /**
      * Method that is functionally equivalent to:
      *<code>
-     *  return currentToken() == t
+     *  return getCurrentTokenId() == id
      *</code>
      * but may be more efficiently implemented.
      *<p>
@@ -956,7 +869,7 @@ public abstract class JsonParser
      *<p>
      * Default implementation is equivalent to:
      *<pre>
-     *   currentToken() == JsonToken.START_ARRAY
+     *   getCurrentToken() == JsonToken.START_ARRAY
      *</pre>
      * but may be overridden by custom parser implementations.
      *
@@ -964,15 +877,15 @@ public abstract class JsonParser
      *   start-array marker (such {@link JsonToken#START_ARRAY});
      *   false if not.
      */
-    public boolean isExpectedStartArrayToken() { return currentToken() == JsonToken.START_ARRAY; }
+    public boolean isExpectedStartArrayToken() { return getCurrentToken() == JsonToken.START_ARRAY; }
 
     /**
      * Similar to {@link #isExpectedStartArrayToken()}, but checks whether stream
      * currently points to {@link JsonToken#START_OBJECT}.
-     *
+     * 
      * @since 2.5
      */
-    public boolean isExpectedStartObjectToken() { return currentToken() == JsonToken.START_OBJECT; }
+    public boolean isExpectedStartObjectToken() { return getCurrentToken() == JsonToken.START_OBJECT; }
     
     /*
     /**********************************************************
@@ -1029,31 +942,6 @@ public abstract class JsonParser
      * Method can be called for any token type.
      */
     public abstract String getText() throws IOException;
-
-    /**
-     * Method to read the textual representation of the current token in chunks and 
-     * pass it to the given Writer.
-     * Conceptually same as calling:
-     *<pre>
-     *  writer.write(parser.getText());
-     *</pre>
-     * but should typically be more efficient as longer content does need to
-     * be combined into a single <code>String</code> to return, and write
-     * can occur directly from intermediate buffers Jackson uses.
-     * 
-     * @return The number of characters written to the Writer
-     *  
-     * @since 2.8
-     */
-    public int getText(Writer writer) throws IOException, UnsupportedOperationException
-    {
-        String str = getText();
-        if (str == null) {
-            return 0;
-        }
-        writer.write(str);
-        return str.length();
-    }
 
     /**
      * Method similar to {@link #getText}, but that will return
@@ -1285,12 +1173,11 @@ public abstract class JsonParser
      * may be thrown to indicate numeric overflow/underflow.
      */
     public boolean getBooleanValue() throws IOException {
-        JsonToken t = currentToken();
+        JsonToken t = getCurrentToken();
         if (t == JsonToken.VALUE_TRUE) return true;
         if (t == JsonToken.VALUE_FALSE) return false;
         throw new JsonParseException(this,
-            String.format("Current token (%s) not of boolean type", t))
-                .withRequestPayload(_requestPayload);
+                String.format("Current token (%s) not of boolean type", t));
     }
 
     /**
@@ -1300,12 +1187,9 @@ public abstract class JsonParser
      *<p>
      * Note: only some specialized parser implementations support
      * embedding of objects (usually ones that are facades on top
-     * of non-streaming sources, such as object trees). One exception
-     * is access to binary content (whether via base64 encoding or not)
-     * which typically is accessible using this method, as well as
-     * {@link #getBinaryValue()}.
+     * of non-streaming sources, such as object trees).
      */
-    public Object getEmbeddedObject() throws IOException { return null; }
+    public abstract Object getEmbeddedObject() throws IOException;
 
     /*
     /**********************************************************
@@ -1699,8 +1583,7 @@ public abstract class JsonParser
      * based on current state of the parser
      */
     protected JsonParseException _constructError(String msg) {
-        return new JsonParseException(this, msg)
-            .withRequestPayload(_requestPayload);
+        return new JsonParseException(this, msg);
     }
 
     /**
