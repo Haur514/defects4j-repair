@@ -4,8 +4,9 @@ import org.jsoup.nodes.Node;
 
 /**
  * Depth-first node traversor. Use to iterate through all nodes under and including the specified root node.
- * <p/>
+ * <p>
  * This implementation does not use recursion, so a deep DOM does not risk blowing the stack.
+ * </p>
  */
 public class NodeTraversor {
     private NodeVisitor visitor;
@@ -28,13 +29,13 @@ public class NodeTraversor {
         
         while (node != null) {
             visitor.head(node, depth);
-            if (node.childNodes().size() > 0) {
+            if (node.childNodeSize() > 0) {
                 node = node.childNode(0);
                 depth++;
             } else {
                 while (node.nextSibling() == null && depth > 0) {
                     visitor.tail(node, depth);
-                    node = node.parent();
+                    node = node.parentNode();
                     depth--;
                 }
                 visitor.tail(node, depth);
