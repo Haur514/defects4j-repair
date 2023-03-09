@@ -1,6 +1,8 @@
 package com.fasterxml.jackson.core.base;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.core.JsonParser.Feature;
@@ -40,11 +42,93 @@ public abstract class ParserMinimalBase extends JsonParser
     protected final static int INT_COMMA = ',';
     protected final static int INT_HASH = '#';
 
-    // fp numbers
+    // Number chars
+    protected final static int INT_0 = '0';
+    protected final static int INT_9 = '9';
+    protected final static int INT_MINUS = '-';
+    protected final static int INT_PLUS = '+';
+
     protected final static int INT_PERIOD = '.';
     protected final static int INT_e = 'e';
     protected final static int INT_E = 'E';
 
+    protected final static char CHAR_NULL = '\0';
+
+    /**
+     * @since 2.9
+     */
+    protected final static byte[] NO_BYTES = new byte[0];
+
+    /**
+     * @since 2.9
+     */
+    protected final static int[] NO_INTS = new int[0];
+    
+    /*
+    /**********************************************************
+    /* Constants and fields of former 'JsonNumericParserBase'
+    /**********************************************************
+     */
+
+    protected final static int NR_UNKNOWN = 0;
+
+    // First, integer types
+
+    protected final static int NR_INT = 0x0001;
+    protected final static int NR_LONG = 0x0002;
+    protected final static int NR_BIGINT = 0x0004;
+
+    // And then floating point types
+
+    protected final static int NR_DOUBLE = 0x008;
+    protected final static int NR_BIGDECIMAL = 0x0010;
+
+    /**
+     * NOTE! Not used by JSON implementation but used by many of binary codecs
+     *
+     * @since 2.9
+     */
+    protected final static int NR_FLOAT = 0x020;
+
+    // Also, we need some numeric constants
+
+    protected final static BigInteger BI_MIN_INT = BigInteger.valueOf(Integer.MIN_VALUE);
+    protected final static BigInteger BI_MAX_INT = BigInteger.valueOf(Integer.MAX_VALUE);
+
+    protected final static BigInteger BI_MIN_LONG = BigInteger.valueOf(Long.MIN_VALUE);
+    protected final static BigInteger BI_MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE);
+
+    protected final static BigDecimal BD_MIN_LONG = new BigDecimal(BI_MIN_LONG);
+    protected final static BigDecimal BD_MAX_LONG = new BigDecimal(BI_MAX_LONG);
+
+    protected final static BigDecimal BD_MIN_INT = new BigDecimal(BI_MIN_INT);
+    protected final static BigDecimal BD_MAX_INT = new BigDecimal(BI_MAX_INT);
+
+    protected final static long MIN_INT_L = (long) Integer.MIN_VALUE;
+    protected final static long MAX_INT_L = (long) Integer.MAX_VALUE;
+
+    // These are not very accurate, but have to do... (for bounds checks)
+
+    protected final static double MIN_LONG_D = (double) Long.MIN_VALUE;
+    protected final static double MAX_LONG_D = (double) Long.MAX_VALUE;
+
+    protected final static double MIN_INT_D = (double) Integer.MIN_VALUE;
+    protected final static double MAX_INT_D = (double) Integer.MAX_VALUE;
+
+    /*
+    /**********************************************************
+    /* Misc other constants
+    /**********************************************************
+     */
+
+    /**
+     * Maximum number of characters to include in token reported
+     * as part of error messages.
+     *
+     * @since 2.9
+     */
+    protected final static int MAX_ERROR_TOKEN_LENGTH = 256;
+    
     /*
     /**********************************************************
     /* Minimal generally useful state
@@ -127,10 +211,8 @@ public abstract class ParserMinimalBase extends JsonParser
     
     @Override
     public JsonToken nextValue() throws IOException {
-        /* Implementation should be as trivial as follows; only
-         * needs to change if we are to skip other tokens (for
-         * example, if comments were exposed as tokens)
-         */
+        // Implementation should be as trivial as follows; only needs to change if
+        // we are to skip other tokens (for example, if comments were exposed as tokens)
         JsonToken t = nextToken();
         if (t == JsonToken.FIELD_NAME) {
             t = nextToken();
@@ -147,9 +229,8 @@ public abstract class ParserMinimalBase extends JsonParser
         }
         int open = 1;
 
-        /* Since proper matching of start/end markers is handled
-         * by nextToken(), we'll just count nesting levels here
-         */
+        // Since proper matching of start/end markers is handled
+        // by nextToken(), we'll just count nesting levels here
         while (true) {
             JsonToken t = nextToken();
             if (t == null) {
@@ -428,7 +509,7 @@ public abstract class ParserMinimalBase extends JsonParser
     /* Coercion helper methods (overridable)
     /**********************************************************
      */
-    
+
     /**
      * Helper method used to determine whether we are currently pointing to
      * a String value of "null" (NOT a null token); and, if so, that parser
@@ -437,19 +518,41 @@ public abstract class ParserMinimalBase extends JsonParser
      * @since 2.3
      */
     protected boolean _hasTextualNull(String value) { return "null".equals(value); }
-    
+
     /*
     /**********************************************************
     /* Error reporting
     /**********************************************************
      */
+
+    protected void reportUnexpectedNumberChar(int ch, String comment) throws JsonParseException {
+        String msg = String.format("Unexpected character (%s) in numeric value", _getCharDesc(ch));
+        if (comment != null) {
+            msg += ": "+comment;
+        }
+        _reportError(msg);
+    }
+
+    protected void reportInvalidNumber(String msg) throws JsonParseException {
+        _reportError("Invalid numeric value: "+msg);
+    }
+
+    protected void reportOverflowInt() throws IOException {
+        _reportError(String.format("Numeric value (%s) out of range of int (%d - %s)",
+                getText(), Integer.MIN_VALUE, Integer.MAX_VALUE));
+    }
     
+    protected void reportOverflowLong() throws IOException {
+        _reportError(String.format("Numeric value (%s) out of range of long (%d - %s)",
+                getText(), Long.MIN_VALUE, Long.MAX_VALUE));
+    }
+
     protected void _reportUnexpectedChar(int ch, String comment) throws JsonParseException
     {
         if (ch < 0) { // sanity check
             _reportInvalidEOF();
         }
-        String msg = "Unexpected character ("+_getCharDesc(ch)+")";
+        String msg = String.format("Unexpected character (%s)", _getCharDesc(ch));
         if (comment != null) {
             msg += ": "+comment;
         }
@@ -535,7 +638,7 @@ public abstract class ParserMinimalBase extends JsonParser
         _reportError("Unrecognized character escape "+_getCharDesc(ch));
         return ch;
     }
-    
+
     /*
     /**********************************************************
     /* Error reporting, generic
@@ -556,6 +659,16 @@ public abstract class ParserMinimalBase extends JsonParser
 
     protected final void _reportError(String msg) throws JsonParseException {
         throw _constructError(msg);
+    }
+
+    // @since 2.9
+    protected final void _reportError(String msg, Object arg) throws JsonParseException {
+        throw _constructError(String.format(msg, arg));
+    }
+
+    // @since 2.9
+    protected final void _reportError(String msg, Object arg1, Object arg2) throws JsonParseException {
+        throw _constructError(String.format(msg, arg1, arg2));
     }
 
     protected final void _wrapError(String msg, Throwable t) throws JsonParseException {

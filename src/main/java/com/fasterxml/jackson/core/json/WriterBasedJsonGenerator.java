@@ -5,13 +5,16 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import com.fasterxml.jackson.core.*;
-import com.fasterxml.jackson.core.io.*;
+import com.fasterxml.jackson.core.io.CharTypes;
+import com.fasterxml.jackson.core.io.CharacterEscapes;
+import com.fasterxml.jackson.core.io.IOContext;
+import com.fasterxml.jackson.core.io.NumberOutput;
 
 /**
  * {@link JsonGenerator} that outputs JSON content using a {@link java.io.Writer}
  * which handles character encoding.
  */
-public final class WriterBasedJsonGenerator
+public class WriterBasedJsonGenerator
     extends JsonGeneratorImpl
 {
     final protected static int SHORT_WRITE = 32;
@@ -75,6 +78,14 @@ public final class WriterBasedJsonGenerator
      */
     protected SerializableString _currentEscape;
 
+    /**
+     * Intermediate buffer in which characters of a String are copied
+     * before being encoded.
+     *
+     * @since 2.9
+     */
+    protected char[] _charBuffer;
+
     /*
     /**********************************************************
     /* Life-cycle
@@ -89,13 +100,13 @@ public final class WriterBasedJsonGenerator
         _outputBuffer = ctxt.allocConcatBuffer();
         _outputEnd = _outputBuffer.length;
     }
-    
+
     /*
     /**********************************************************
     /* Overridden configuration, introspection methods
     /**********************************************************
      */
-    
+
     @Override
     public Object getOutputTarget() {
         return _writer;
@@ -139,7 +150,7 @@ public final class WriterBasedJsonGenerator
         _writeFieldName(name, (status == JsonWriteContext.STATUS_OK_AFTER_COMMA));
     }
 
-    protected void _writeFieldName(String name, boolean commaBefore) throws IOException
+    protected final void _writeFieldName(String name, boolean commaBefore) throws IOException
     {
         if (_cfgPrettyPrinter != null) {
             _writePPFieldName(name, commaBefore);
@@ -168,7 +179,7 @@ public final class WriterBasedJsonGenerator
         _outputBuffer[_outputTail++] = _quoteChar;
     }
 
-    protected void _writeFieldName(SerializableString name, boolean commaBefore) throws IOException
+    protected final void _writeFieldName(SerializableString name, boolean commaBefore) throws IOException
     {
         if (_cfgPrettyPrinter != null) {
             _writePPFieldName(name, commaBefore);
@@ -298,7 +309,7 @@ public final class WriterBasedJsonGenerator
      * Specialized version of <code>_writeFieldName</code>, off-lined
      * to keep the "fast path" as simple (and hopefully fast) as possible.
      */
-    protected void _writePPFieldName(String name, boolean commaBefore) throws IOException
+    protected final void _writePPFieldName(String name, boolean commaBefore) throws IOException
     {
         if (commaBefore) {
             _cfgPrettyPrinter.writeObjectEntrySeparator(this);
@@ -321,7 +332,7 @@ public final class WriterBasedJsonGenerator
         }
     }
 
-    protected void _writePPFieldName(SerializableString name, boolean commaBefore) throws IOException
+    protected final void _writePPFieldName(SerializableString name, boolean commaBefore) throws IOException
     {
         if (commaBefore) {
             _cfgPrettyPrinter.writeObjectEntrySeparator(this);
@@ -369,6 +380,46 @@ public final class WriterBasedJsonGenerator
             _flushBuffer();
         }
         _outputBuffer[_outputTail++] = _quoteChar;
+    }
+
+    @Override
+    public void writeString(Reader reader, int len) throws IOException {
+        _verifyValueWrite(WRITE_STRING);
+        if (reader == null) {
+            _reportError("null reader");
+        }
+        int toRead = (len >= 0) ? len : Integer.MAX_VALUE;
+        final char[] buf = _allocateCopyBuffer();
+        //Add leading quote
+        if ((_outputTail + len) >= _outputEnd) {
+            _flushBuffer();
+        }
+        _outputBuffer[_outputTail++] = _quoteChar;
+
+        //read
+        while (toRead > 0) {
+            int toReadNow = Math.min(toRead, buf.length);
+            int numRead = reader.read(buf, 0, toReadNow);
+            if (numRead <= 0) {
+                break;
+            }
+            if ((_outputTail + len) >= _outputEnd) {
+                _flushBuffer();
+            }
+            _writeString(buf, 0, numRead);
+
+            //decrease tracker
+            toRead -= numRead;
+        }
+        //Add trailing quote
+        if ((_outputTail + len) >= _outputEnd) {
+            _flushBuffer();
+        }
+        _outputBuffer[_outputTail++] = _quoteChar;
+
+        if (toRead > 0 && len >= 0) {
+            _reportError("Didn't read enough from reader");
+        }
     }
 
     @Override
@@ -787,7 +838,7 @@ public final class WriterBasedJsonGenerator
      */
 
     @Override
-    protected void _verifyValueWrite(String typeMsg) throws IOException
+    protected final void _verifyValueWrite(String typeMsg) throws IOException
     {
         final int status = _writeContext.writeValue();
         if (_cfgPrettyPrinter != null) {
@@ -889,6 +940,11 @@ public final class WriterBasedJsonGenerator
         if (buf != null) {
             _outputBuffer = null;
             _ioContext.releaseConcatBuffer(buf);
+        }
+        buf = _charBuffer;
+        if (buf != null) {
+            _charBuffer = null;
+            _ioContext.releaseNameCopyBuffer(buf);
         }
     }
 
@@ -1414,7 +1470,7 @@ public final class WriterBasedJsonGenerator
     /**********************************************************
      */
     
-    protected void _writeBinary(Base64Variant b64variant, byte[] input, int inputPtr, final int inputEnd)
+    protected final void _writeBinary(Base64Variant b64variant, byte[] input, int inputPtr, final int inputEnd)
         throws IOException, JsonGenerationException
     {
         // Encoding is by chunks of 3 input, 4 output chars, so:
@@ -1456,7 +1512,7 @@ public final class WriterBasedJsonGenerator
     }
 
     // write-method called when length is definitely known
-    protected int _writeBinary(Base64Variant b64variant,
+    protected final int _writeBinary(Base64Variant b64variant,
             InputStream data, byte[] readBuffer, int bytesLeft)
         throws IOException, JsonGenerationException
     {
@@ -1516,7 +1572,7 @@ public final class WriterBasedJsonGenerator
     }
     
     // write method when length is unknown
-    protected int _writeBinary(Base64Variant b64variant,
+    protected final int _writeBinary(Base64Variant b64variant,
             InputStream data, byte[] readBuffer)
         throws IOException, JsonGenerationException
     {
@@ -1870,7 +1926,17 @@ public final class WriterBasedJsonGenerator
         _entityBuffer = buf;
         return buf;
     }
-    
+
+    /**
+     * @since 2.9
+     */
+    private char[] _allocateCopyBuffer() {
+        if (_charBuffer == null) {
+            _charBuffer = _ioContext.allocNameCopyBuffer(2000);
+        }
+        return _charBuffer;
+    }
+
     protected void _flushBuffer() throws IOException
     {
         int len = _outputTail - _outputHead;

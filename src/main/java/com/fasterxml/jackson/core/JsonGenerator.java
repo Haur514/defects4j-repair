@@ -4,8 +4,6 @@
  */
 package com.fasterxml.jackson.core;
 
-import static com.fasterxml.jackson.core.JsonTokenId.*;
-
 import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -16,6 +14,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.fasterxml.jackson.core.JsonParser.NumberType;
 import com.fasterxml.jackson.core.io.CharacterEscapes;
 import com.fasterxml.jackson.core.util.VersionUtil;
+
+import static com.fasterxml.jackson.core.JsonTokenId.*;
 
 /**
  * Base class that defines public API for writing JSON content.
@@ -938,6 +938,23 @@ public abstract class JsonGenerator
      * a stand alone String; but in all cases, String will be
      * surrounded in double quotes, and contents will be properly
      * escaped as required by JSON specification.
+     * If the reader is null, then write a null.
+     * If len is &lt; 0, then write all contents of the reader.
+     * Otherwise, write only len characters.
+     *
+     * @since 2.9
+     */
+    public void writeString(Reader reader, int len) throws IOException {
+        // Let's implement this as "unsupported" to make it easier to add new parser impls
+        _reportUnsupportedOperation();
+    }
+
+    /**
+     * Method for outputting a String value. Depending on context
+     * this means either array element, (object) field value or
+     * a stand alone String; but in all cases, String will be
+     * surrounded in double quotes, and contents will be properly
+     * escaped as required by JSON specification.
      */
     public abstract void writeString(char[] text, int offset, int len) throws IOException;
 
@@ -1327,7 +1344,16 @@ public abstract class JsonGenerator
      */
     public void writeEmbeddedObject(Object object) throws IOException {
         // 01-Sep-2016, tatu: As per [core#318], handle small number of cases
-        throw new JsonGenerationException("No native support for writing embedded objects",
+        if (object == null) {
+            writeNull();
+            return;
+        }
+        if (object instanceof byte[]) {
+            writeBinary((byte[]) object);
+            return;
+        }
+        throw new JsonGenerationException("No native support for writing embedded objects of type "
+                +object.getClass().getName(),
                 this);
     }
     

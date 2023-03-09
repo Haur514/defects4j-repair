@@ -1,13 +1,14 @@
 package com.fasterxml.jackson.core.base;
 
-import java.io.*;
-import java.math.BigDecimal;
-
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.core.json.DupDetector;
 import com.fasterxml.jackson.core.json.JsonWriteContext;
 import com.fasterxml.jackson.core.json.PackageVersion;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.math.BigDecimal;
 
 /**
  * This base class implements part of API that a JSON generator exposes
@@ -298,10 +299,12 @@ public abstract class GeneratorBase extends JsonGenerator
     @Override public void writeFieldName(SerializableString name) throws IOException {
         writeFieldName(name.getValue());
     }
-    
+
     //public abstract void writeString(String text) throws IOException;
 
     //public abstract void writeString(char[] text, int offset, int len) throws IOException;
+
+    //public abstract void writeString(Reader reader, int len) throws IOException;
 
     //public abstract void writeRaw(String text) throws IOException,;
 
@@ -340,10 +343,10 @@ public abstract class GeneratorBase extends JsonGenerator
     }
 
     /*
-   /**********************************************************
-   /* Public API, write methods, primitive
-   /**********************************************************
-    */
+    /**********************************************************
+    /* Public API, write methods, primitive
+    /**********************************************************
+     */
 
     // Not implemented at this level, added as placeholders
 

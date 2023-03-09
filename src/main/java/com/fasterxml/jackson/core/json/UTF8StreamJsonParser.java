@@ -28,6 +28,8 @@ public class UTF8StreamJsonParser
     // pre-processing task, to simplify first pass, keep it fast.
     protected final static int[] _icLatin1 = CharTypes.getInputCodeLatin1();
 
+    protected final static int FEAT_MASK_TRAILING_COMMA = Feature.ALLOW_TRAILING_COMMA.getMask();
+
     /*
     /**********************************************************
     /* Configuration
@@ -118,7 +120,7 @@ public class UTF8StreamJsonParser
      * buffer.
      */
     protected boolean _bufferRecyclable;
-    
+
     /*
     /**********************************************************
     /* Life-cycle
@@ -152,7 +154,7 @@ public class UTF8StreamJsonParser
     public void setCodec(ObjectCodec c) {
         _objectCodec = c;
     }
-    
+
     /*
     /**********************************************************
     /* Overrides for life-cycle
@@ -176,7 +178,7 @@ public class UTF8StreamJsonParser
     public Object getInputSource() {
         return _inputStream;
     }
-    
+
     /*
     /**********************************************************
     /* Overrides, low-level reading
@@ -259,14 +261,12 @@ public class UTF8StreamJsonParser
         }
         return true;
     }
-    
+
     @Override
     protected void _closeInput() throws IOException
     {
-        /* 25-Nov-2008, tatus: As per [JACKSON-16] we are not to call close()
-         *   on the underlying InputStream, unless we "own" it, or auto-closing
-         *   feature is enabled.
-         */
+        // We are not to call close() on the underlying InputStream
+        // unless we "own" it, or auto-closing feature is enabled.
         if (_inputStream != null) {
             if (_ioContext.isResourceManaged() || isEnabled(Feature.AUTO_CLOSE_SOURCE)) {
                 _inputStream.close();
@@ -290,11 +290,9 @@ public class UTF8StreamJsonParser
         if (_bufferRecyclable) {
             byte[] buf = _inputBuffer;
             if (buf != null) {
-                /* 21-Nov-2014, tatu: Let's not set it to null; this way should
-                 *   get slightly more meaningful error messages in case someone
-                 *   closes parser indirectly, without realizing.
-                 */
-                _inputBuffer = ByteArrayBuilder.NO_BYTES;
+                // Let's not set it to null; this way should get slightly more meaningful
+                // error messages in case someone closes parser indirectly, without realizing.
+                _inputBuffer = NO_BYTES;
                 _ioContext.releaseReadIOBuffer(buf);
             }
         }
@@ -739,19 +737,11 @@ public class UTF8StreamJsonParser
 
         // Closing scope?
         if (i == INT_RBRACKET) {
-            _updateLocation();
-            if (!_parsingContext.inArray()) {
-                _reportMismatchedEndMarker(i, '}');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
+            _closeArrayScope();
             return (_currToken = JsonToken.END_ARRAY);
         }
         if (i == INT_RCURLY) {
-            _updateLocation();
-            if (!_parsingContext.inObject()) {
-                _reportMismatchedEndMarker(i, ']');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
+            _closeObjectScope();
             return (_currToken = JsonToken.END_OBJECT);
         }
 
@@ -761,11 +751,16 @@ public class UTF8StreamJsonParser
                 _reportUnexpectedChar(i, "was expecting comma to separate "+_parsingContext.typeDesc()+" entries");
             }
             i = _skipWS();
+            // Was that a trailing comma?
+            if ((_features & FEAT_MASK_TRAILING_COMMA) != 0) {
+                if ((i == INT_RBRACKET) || (i == INT_RCURLY)) {
+                    return _closeScope(i);
+                }
+            }
         }
 
-        /* And should we now have a name? Always true for
-         * Object contexts, since the intermediate 'expect-value'
-         * state is never retained.
+        /* And should we now have a name? Always true for Object contexts
+         * since the intermediate 'expect-value' state is never retained.
          */
         if (!_parsingContext.inObject()) {
             _updateLocation();
@@ -793,10 +788,8 @@ public class UTF8StreamJsonParser
             t = _parseNegNumber();
             break;
 
-            /* Should we have separate handling for plus? Although
-             * it is not allowed per se, it may be erroneously used,
-             * and could be indicate by a more specific error message.
-             */
+            // Should we have separate handling for plus? Although it is not allowed per se,
+            // it may be erroneously used, and could be indicate by a more specific error message.
         case '0':
         case '1':
         case '2':
@@ -810,15 +803,15 @@ public class UTF8StreamJsonParser
             t = _parsePosNumber(i);
             break;
         case 'f':
-            _matchToken("false", 1);
+            _matchFalse();
              t = JsonToken.VALUE_FALSE;
             break;
         case 'n':
-            _matchToken("null", 1);
+            _matchNull();
             t = JsonToken.VALUE_NULL;
             break;
         case 't':
-            _matchToken("true", 1);
+            _matchTrue();
             t = JsonToken.VALUE_TRUE;
             break;
         case '[':
@@ -849,13 +842,13 @@ public class UTF8StreamJsonParser
             _parsingContext = _parsingContext.createChildObjectContext(_tokenInputRow, _tokenInputCol);
             return (_currToken = JsonToken.START_OBJECT);
         case 't':
-            _matchToken("true", 1);
+            _matchTrue();
             return (_currToken = JsonToken.VALUE_TRUE);
         case 'f':
-            _matchToken("false", 1);
+            _matchFalse();
             return (_currToken = JsonToken.VALUE_FALSE);
         case 'n':
-            _matchToken("null", 1);
+            _matchNull();
             return (_currToken = JsonToken.VALUE_NULL);
         case '-':
             return (_currToken = _parseNegNumber());
@@ -931,20 +924,12 @@ public class UTF8StreamJsonParser
 
         // Closing scope?
         if (i == INT_RBRACKET) {
-            _updateLocation();
-            if (!_parsingContext.inArray()) {
-                _reportMismatchedEndMarker(i, '}');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
+            _closeArrayScope();
             _currToken = JsonToken.END_ARRAY;
             return false;
         }
         if (i == INT_RCURLY) {
-            _updateLocation();
-            if (!_parsingContext.inObject()) {
-                _reportMismatchedEndMarker(i, ']');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
+            _closeObjectScope();
             _currToken = JsonToken.END_OBJECT;
             return false;
         }
@@ -955,8 +940,15 @@ public class UTF8StreamJsonParser
                 _reportUnexpectedChar(i, "was expecting comma to separate "+_parsingContext.typeDesc()+" entries");
             }
             i = _skipWS();
-        }
 
+            // Was that a trailing comma?
+            if ((_features & FEAT_MASK_TRAILING_COMMA) != 0) {
+                if ((i == INT_RBRACKET) || (i == INT_RCURLY)) {
+                    _closeScope(i);
+                    return false;
+                }
+            }
+        }
         if (!_parsingContext.inObject()) {
             _updateLocation();
             _nextTokenNotInObject(i);
@@ -1018,20 +1010,12 @@ public class UTF8StreamJsonParser
         _binaryValue = null;
 
         if (i == INT_RBRACKET) {
-            _updateLocation();
-            if (!_parsingContext.inArray()) {
-                _reportMismatchedEndMarker(i, '}');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
+            _closeArrayScope();
             _currToken = JsonToken.END_ARRAY;
             return null;
         }
         if (i == INT_RCURLY) {
-            _updateLocation();
-            if (!_parsingContext.inObject()) {
-                _reportMismatchedEndMarker(i, ']');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
+            _closeObjectScope();
             _currToken = JsonToken.END_OBJECT;
             return null;
         }
@@ -1042,7 +1026,15 @@ public class UTF8StreamJsonParser
                 _reportUnexpectedChar(i, "was expecting comma to separate "+_parsingContext.typeDesc()+" entries");
             }
             i = _skipWS();
+            // Was that a trailing comma?
+            if ((_features & FEAT_MASK_TRAILING_COMMA) != 0) {
+                if ((i == INT_RBRACKET) || (i == INT_RCURLY)) {
+                    _closeScope(i);
+                    return null;
+                }
+            }
         }
+
         if (!_parsingContext.inObject()) {
             _updateLocation();
             _nextTokenNotInObject(i);
@@ -1079,15 +1071,15 @@ public class UTF8StreamJsonParser
             t = _parsePosNumber(i);
             break;
         case 'f':
-            _matchToken("false", 1);
+            _matchFalse();
              t = JsonToken.VALUE_FALSE;
             break;
         case 'n':
-            _matchToken("null", 1);
+            _matchNull();
             t = JsonToken.VALUE_NULL;
             break;
         case 't':
-            _matchToken("true", 1);
+            _matchTrue();
             t = JsonToken.VALUE_TRUE;
             break;
         case '[':
@@ -1170,15 +1162,15 @@ public class UTF8StreamJsonParser
             _nextToken = JsonToken.START_OBJECT;
             return;
         case 't':
-            _matchToken("true", 1);
+            _matchTrue();
             _nextToken = JsonToken.VALUE_TRUE;
             return;
         case 'f':
-            _matchToken("false", 1);
+            _matchFalse();
             _nextToken = JsonToken.VALUE_FALSE;
             return;
         case 'n':
-            _matchToken("null", 1);
+            _matchNull();
             _nextToken = JsonToken.VALUE_NULL;
             return;
         case '-':
@@ -1227,15 +1219,15 @@ public class UTF8StreamJsonParser
             t = JsonToken.START_OBJECT;
             break;
         case 't':
-            _matchToken("true", 1);
+            _matchTrue();
             t = JsonToken.VALUE_TRUE;
             break;
         case 'f':
-            _matchToken("false", 1);
+            _matchFalse();
              t = JsonToken.VALUE_FALSE;
             break;
         case 'n':
-            _matchToken("null", 1);
+            _matchNull();
             t = JsonToken.VALUE_NULL;
             break;
         case '-':
@@ -2622,17 +2614,15 @@ public class UTF8StreamJsonParser
      * Method for handling cases where first non-space character
      * of an expected value token is not legal for standard JSON content.
      */
-    protected JsonToken _handleUnexpectedValue(int c)
-        throws IOException
+    protected JsonToken _handleUnexpectedValue(int c) throws IOException
     {
         // Most likely an error, unless we are to allow single-quote-strings
         switch (c) {
-        /*
-         * This check proceeds only if the Feature.ALLOW_MISSING_VALUES is enabled
-         * The Check is for missing values. Incase of missing values in an array, the next token will be either ',' or ']'.
-         * This case, decrements the already incremented _inputPtr in the buffer in case of comma(,) 
-         * so that the existing flow goes back to checking the next token which will be comma again and
-         * it continues the parsing.
+        /* This check proceeds only if `Feature.ALLOW_MISSING_VALUES` is enabled;
+         * it is for missing values. In case of missing values in an array the next token
+         * will be either ',' or ']'. This case, decrements the already incremented _inputPtr
+         * in the buffer in case of comma (`,`) so that the existing flow goes back to checking
+         * the next token which will be comma again and  it parsing continues.
          * Also the case returns NULL as current token in case of ',' or ']'.    
          */
         case ']':
@@ -2641,13 +2631,12 @@ public class UTF8StreamJsonParser
             }
             // fall through
         case ',':
-            /* 28-Mar-2016: [core#116]: If Feature.ALLOW_MISSING_VALUES is enabled
-             *   we may allow "missing values", that is, encountering a trailing
-             *   comma or closing marker where value would be expected
-             */
+            // 28-Mar-2016: [core#116]: If Feature.ALLOW_MISSING_VALUES is enabled
+            //   we may allow "missing values", that is, encountering a trailing
+            //   comma or closing marker where value would be expected
             if (isEnabled(Feature.ALLOW_MISSING_VALUES)) {
-               _inputPtr--;
-               return JsonToken.VALUE_NULL;
+                --_inputPtr;
+                return JsonToken.VALUE_NULL;
             }
             // fall through
         case '}':
@@ -2690,8 +2679,7 @@ public class UTF8StreamJsonParser
         return null;
     }
 
-    protected JsonToken _handleApos()
-        throws IOException
+    protected JsonToken _handleApos() throws IOException
     {
         int c = 0;
         // Otherwise almost verbatim copy of _finishString()
@@ -2779,13 +2767,18 @@ public class UTF8StreamJsonParser
 
         return JsonToken.VALUE_STRING;
     }
-    
+
+    /*
+    /**********************************************************
+    /* Internal methods, well-known token decoding
+    /**********************************************************
+     */
+
     /**
      * Method called if expected numeric value (due to leading sign) does not
      * look like a number
      */
-    protected JsonToken _handleInvalidNumberStart(int ch, boolean neg)
-        throws IOException
+    protected JsonToken _handleInvalidNumberStart(int ch, boolean neg) throws IOException
     {
         while (ch == 'I') {
             if (_inputPtr >= _inputEnd) {
@@ -2806,12 +2799,72 @@ public class UTF8StreamJsonParser
             if (isEnabled(Feature.ALLOW_NON_NUMERIC_NUMBERS)) {
                 return resetAsNaN(match, neg ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
             }
-            _reportError("Non-standard token '"+match+"': enable JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS to allow");
+            _reportError("Non-standard token '%s': enable JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS to allow",
+                    match);
         }
         reportUnexpectedNumberChar(ch, "expected digit (0-9) to follow minus sign, for valid numeric value");
         return null;
     }
 
+    // NOTE: first character already decoded
+    protected final void _matchTrue() throws IOException
+    {
+        int ptr = _inputPtr;
+        if ((ptr + 3) < _inputEnd) {
+            byte[] buf = _inputBuffer;
+            if ((buf[ptr++] == 'r') 
+                   && (buf[ptr++] == 'u')
+                   && (buf[ptr++] == 'e')) {
+                int ch = buf[ptr] & 0xFF;
+                _inputPtr = ptr;
+                if (ch >= INT_0 && ch != INT_RBRACKET && ch != INT_RCURLY) { // expected/allowed chars
+                    _checkMatchEnd("true", 4, ch);
+                }
+                return;
+            }
+        }
+        _matchToken2("true", 1);
+    }
+
+    protected final void _matchFalse() throws IOException
+    {
+        int ptr = _inputPtr;
+        if ((ptr + 4) < _inputEnd) {
+            byte[] buf = _inputBuffer;
+            if ((buf[ptr++] == 'a') 
+                   && (buf[ptr++] == 'l')
+                   && (buf[ptr++] == 's')
+                   && (buf[ptr++] == 'e')) {
+                int ch = buf[ptr] & 0xFF;
+                _inputPtr = ptr;
+                if (ch >= INT_0 && ch != INT_RBRACKET && ch != INT_RCURLY) { // expected/allowed chars
+                    _checkMatchEnd("false", 5, ch);
+                }
+                return;
+            }
+        }
+        _matchToken2("false", 1);
+    }
+
+    protected final void _matchNull() throws IOException
+    {
+        int ptr = _inputPtr;
+        if ((ptr + 3) < _inputEnd) {
+            byte[] buf = _inputBuffer;
+            if ((buf[ptr++] == 'u') 
+                   && (buf[ptr++] == 'l')
+                   && (buf[ptr++] == 'l')) {
+                int ch = buf[ptr] & 0xFF;
+                _inputPtr = ptr;
+                if (ch >= INT_0 && ch != INT_RBRACKET && ch != INT_RCURLY) { // expected/allowed chars
+                    _checkMatchEnd("null", 4, ch);
+                }
+                return;
+            }
+        }
+        _matchToken2("null", 1);
+    }
+    
     protected final void _matchToken(String matchStr, int i) throws IOException
     {
         final int len = matchStr.length();
@@ -3497,35 +3550,40 @@ public class UTF8StreamJsonParser
     /**********************************************************
      */
 
-    protected void _reportInvalidToken(String matchedPart) throws IOException
-     {
-         _reportInvalidToken(matchedPart, "'null', 'true', 'false' or NaN");
-     }
+    protected void _reportInvalidToken(String matchedPart, int ptr) throws IOException {
+        _inputPtr = ptr;
+        _reportInvalidToken(matchedPart, "'null', 'true', 'false' or NaN");
+    }
+
+    protected void _reportInvalidToken(String matchedPart) throws IOException {
+        _reportInvalidToken(matchedPart, "'null', 'true', 'false' or NaN");
+    }
 
     protected void _reportInvalidToken(String matchedPart, String msg) throws IOException
-     {
-         StringBuilder sb = new StringBuilder(matchedPart);
+    {
+        /* Let's just try to find what appears to be the token, using
+         * regular Java identifier character rules. It's just a heuristic,
+         * nothing fancy here (nor fast).
+         */
+        StringBuilder sb = new StringBuilder(matchedPart);
+        while ((_inputPtr < _inputEnd) || _loadMore()) {
+            int i = (int) _inputBuffer[_inputPtr++];
+            char c = (char) _decodeCharForError(i);
+            if (!Character.isJavaIdentifierPart(c)) {
+                // 11-Jan-2016, tatu: note: we will fully consume the character,
+                // included or not, so if recovery was possible, it'd be off-by-one...
+                break;
+            }
+            sb.append(c);
+            if (sb.length() >= MAX_ERROR_TOKEN_LENGTH) {
+                sb.append("...");
+                break;
+            }
+        }
+        _reportError("Unrecognized token '%s': was expecting %s", sb, msg);
+    }
 
-         /* Let's just try to find what appears to be the token, using
-          * regular Java identifier character rules. It's just a heuristic,
-          * nothing fancy here (nor fast).
-          */
-         while (true) {
-             if (_inputPtr >= _inputEnd && !_loadMore()) {
-                 break;
-             }
-             int i = (int) _inputBuffer[_inputPtr++];
-             char c = (char) _decodeCharForError(i);
-             if (!Character.isJavaIdentifierPart(c)) {
-                 break;
-             }
-             sb.append(c);
-         }
-         _reportError("Unrecognized token '"+sb.toString()+"': was expecting "+msg);
-     }
-        
-    protected void _reportInvalidChar(int c)
-        throws JsonParseException
+    protected void _reportInvalidChar(int c) throws JsonParseException
     {
         // Either invalid WS or illegal UTF-8 start char
         if (c < INT_SPACE) {
@@ -3534,15 +3592,11 @@ public class UTF8StreamJsonParser
         _reportInvalidInitial(c);
     }
 
-    protected void _reportInvalidInitial(int mask)
-        throws JsonParseException
-    {
+    protected void _reportInvalidInitial(int mask) throws JsonParseException {
         _reportError("Invalid UTF-8 start byte 0x"+Integer.toHexString(mask));
     }
 
-    protected void _reportInvalidOther(int mask)
-        throws JsonParseException
-    {
+    protected void _reportInvalidOther(int mask) throws JsonParseException {
         _reportError("Invalid UTF-8 middle byte 0x"+Integer.toHexString(mask));
     }
 
@@ -3689,13 +3743,12 @@ public class UTF8StreamJsonParser
     @Override
     public JsonLocation getTokenLocation()
     {
-        final Object src = _ioContext.getSourceReference();
         if (_currToken == JsonToken.FIELD_NAME) {
             long total = _currInputProcessed + (_nameStartOffset-1);
-            return new JsonLocation(src,
+            return new JsonLocation(_getSourceReference(),
                     total, -1L, _nameStartRow, _nameStartCol);
         }
-        return new JsonLocation(src,
+        return new JsonLocation(_getSourceReference(),
                 _tokenInputTotal-1, -1L, _tokenInputRow, _tokenInputCol);
     }
 
@@ -3704,7 +3757,7 @@ public class UTF8StreamJsonParser
     public JsonLocation getCurrentLocation()
     {
         int col = _inputPtr - _currInputRowStart + 1; // 1-based
-        return new JsonLocation(_ioContext.getSourceReference(),
+        return new JsonLocation(_getSourceReference(),
                 _currInputProcessed + _inputPtr, -1L, // bytes, chars
                 _currInputRow, col);
     }
@@ -3733,8 +3786,33 @@ public class UTF8StreamJsonParser
     /**********************************************************
      */
 
+    private final JsonToken _closeScope(int i) throws JsonParseException {
+        if (i == INT_RCURLY) {
+            _closeObjectScope();
+            return (_currToken = JsonToken.END_OBJECT);
+        }
+        _closeArrayScope();
+        return (_currToken = JsonToken.END_ARRAY);
+    }
+
+    private final void _closeArrayScope() throws JsonParseException {
+        _updateLocation();
+        if (!_parsingContext.inArray()) {
+            _reportMismatchedEndMarker(']', '}');
+        }
+        _parsingContext = _parsingContext.clearAndGetParent();
+    }
+
+    private final void _closeObjectScope() throws JsonParseException {
+        _updateLocation();
+        if (!_parsingContext.inObject()) {
+            _reportMismatchedEndMarker('}', ']');
+        }
+        _parsingContext = _parsingContext.clearAndGetParent();
+    }
+
     /**
-     * Helper method needed to fix [Issue#148], masking of 0x00 character
+     * Helper method needed to fix [jackson-core#148], masking of 0x00 character
      */
     private final static int pad(int q, int bytes) {
         return (bytes == 4) ? q : (q | (-1 << (bytes << 3)));

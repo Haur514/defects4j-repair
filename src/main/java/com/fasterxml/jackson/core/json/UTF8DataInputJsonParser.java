@@ -569,25 +569,20 @@ public class UTF8DataInputJsonParser
         if (_tokenIncomplete) {
             _skipString(); // only strings can be partial
         }
-        int i = _skipWS();
+        int i = _skipWSOrEnd();
+        if (i < 0) { // end-of-input
+            // Close/release things like input source, symbol table and recyclable buffers
+            close();
+            return (_currToken = null);
+        }
         // clear any data retained so far
         _binaryValue = null;
         _tokenInputRow = _currInputRow;
 
         // Closing scope?
-        if (i == INT_RBRACKET) {
-            if (!_parsingContext.inArray()) {
-                _reportMismatchedEndMarker(i, '}');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
-            return (_currToken = JsonToken.END_ARRAY);
-        }
-        if (i == INT_RCURLY) {
-            if (!_parsingContext.inObject()) {
-                _reportMismatchedEndMarker(i, ']');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
-            return (_currToken = JsonToken.END_OBJECT);
+        if (i == INT_RBRACKET || i == INT_RCURLY) {
+            _closeScope(i);
+            return _currToken;
         }
 
         // Nope: do we then expect a comma?
@@ -596,6 +591,14 @@ public class UTF8DataInputJsonParser
                 _reportUnexpectedChar(i, "was expecting comma to separate "+_parsingContext.typeDesc()+" entries");
             }
             i = _skipWS();
+
+            // Was that a trailing comma?
+            if (Feature.ALLOW_TRAILING_COMMA.enabledIn(_features)) {
+                if (i == INT_RBRACKET || i == INT_RCURLY) {
+                    _closeScope(i);
+                    return _currToken;
+                }
+            }
         }
 
         /* And should we now have a name? Always true for
@@ -759,20 +762,8 @@ public class UTF8DataInputJsonParser
         _binaryValue = null;
         _tokenInputRow = _currInputRow;
 
-        if (i == INT_RBRACKET) {
-            if (!_parsingContext.inArray()) {
-                _reportMismatchedEndMarker(i, '}');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
-            _currToken = JsonToken.END_ARRAY;
-            return null;
-        }
-        if (i == INT_RCURLY) {
-            if (!_parsingContext.inObject()) {
-                _reportMismatchedEndMarker(i, ']');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
-            _currToken = JsonToken.END_OBJECT;
+        if (i == INT_RBRACKET || i == INT_RCURLY) {
+            _closeScope(i);
             return null;
         }
 
@@ -782,6 +773,15 @@ public class UTF8DataInputJsonParser
                 _reportUnexpectedChar(i, "was expecting comma to separate "+_parsingContext.typeDesc()+" entries");
             }
             i = _skipWS();
+
+            // Was that a trailing comma?
+            if (Feature.ALLOW_TRAILING_COMMA.enabledIn(_features)) {
+                if (i == INT_RBRACKET || i == INT_RCURLY) {
+                    _closeScope(i);
+                    return null;
+                }
+            }
+
         }
         if (!_parsingContext.inObject()) {
             _nextTokenNotInObject(i);
@@ -2199,6 +2199,45 @@ public class UTF8DataInputJsonParser
         }
     }
 
+    /**
+     * Alternative to {@link #_skipWS} that handles possible {@link EOFException}
+     * caused by trying to read past the end of {@link InputData}.
+     *
+     * @since 2.9
+     */
+    private final int _skipWSOrEnd() throws IOException
+    {
+        int i = _nextByte;
+        if (i < 0) {
+            try {
+                i = _inputData.readUnsignedByte();
+            } catch (EOFException e) {
+                return _eofAsNextChar();
+            }
+        } else {
+            _nextByte = -1;
+        }
+        while (true) {
+            if (i > INT_SPACE) {
+                if (i == INT_SLASH || i == INT_HASH) {
+                    return _skipWSComment(i);
+                }
+                return i;
+            } else {
+                // 06-May-2016, tatu: Could verify validity of WS, but for now why bother.
+                //   ... but line number is useful thingy
+                if (i == INT_CR || i == INT_LF) {
+                    ++_currInputRow;
+                }
+            }
+            try {
+                i = _inputData.readUnsignedByte();
+            } catch (EOFException e) {
+                return _eofAsNextChar();
+            }
+        }
+    }
+    
     private final int _skipWSComment(int i) throws IOException
     {
         while (true) {
@@ -2770,16 +2809,12 @@ public class UTF8DataInputJsonParser
 
     @Override
     public JsonLocation getTokenLocation() {
-        final Object src = _ioContext.getSourceReference();
-        return new JsonLocation(src,
-                -1L, -1L, _tokenInputRow, -1);
+        return new JsonLocation(_getSourceReference(), -1L, -1L, _tokenInputRow, -1);
     }
 
     @Override
     public JsonLocation getCurrentLocation() {
-        final Object src = _ioContext.getSourceReference();
-        return new JsonLocation(src,
-                -1L, -1L, _currInputRow, -1);
+        return new JsonLocation(_getSourceReference(), -1L, -1L, _currInputRow, -1);
     }
 
     /*
@@ -2787,6 +2822,23 @@ public class UTF8DataInputJsonParser
     /* Internal methods, other
     /**********************************************************
      */
+
+    private void _closeScope(int i) throws JsonParseException {
+        if (i == INT_RBRACKET) {
+            if (!_parsingContext.inArray()) {
+                _reportMismatchedEndMarker(i, '}');
+            }
+            _parsingContext = _parsingContext.clearAndGetParent();
+            _currToken = JsonToken.END_ARRAY;
+        }
+        if (i == INT_RCURLY) {
+            if (!_parsingContext.inObject()) {
+                _reportMismatchedEndMarker(i, ']');
+            }
+            _parsingContext = _parsingContext.clearAndGetParent();
+            _currToken = JsonToken.END_OBJECT;
+        }
+    }
 
     /**
      * Helper method needed to fix [Issue#148], masking of 0x00 character

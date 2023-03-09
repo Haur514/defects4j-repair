@@ -170,59 +170,6 @@ public abstract class ParserBase extends ParserMinimalBase
      */
     protected byte[] _binaryValue;
 
-    /*
-    /**********************************************************
-    /* Constants and fields of former 'JsonNumericParserBase'
-    /**********************************************************
-     */
-
-    final protected static int NR_UNKNOWN = 0;
-
-    // First, integer types
-
-    final protected static int NR_INT = 0x0001;
-    final protected static int NR_LONG = 0x0002;
-    final protected static int NR_BIGINT = 0x0004;
-
-    // And then floating point types
-
-    final protected static int NR_DOUBLE = 0x008;
-    final protected static int NR_BIGDECIMAL = 0x0010;
-
-    // Also, we need some numeric constants
-
-    final static BigInteger BI_MIN_INT = BigInteger.valueOf(Integer.MIN_VALUE);
-    final static BigInteger BI_MAX_INT = BigInteger.valueOf(Integer.MAX_VALUE);
-
-    final static BigInteger BI_MIN_LONG = BigInteger.valueOf(Long.MIN_VALUE);
-    final static BigInteger BI_MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE);
-    
-    final static BigDecimal BD_MIN_LONG = new BigDecimal(BI_MIN_LONG);
-    final static BigDecimal BD_MAX_LONG = new BigDecimal(BI_MAX_LONG);
-
-    final static BigDecimal BD_MIN_INT = new BigDecimal(BI_MIN_INT);
-    final static BigDecimal BD_MAX_INT = new BigDecimal(BI_MAX_INT);
-
-    final static long MIN_INT_L = (long) Integer.MIN_VALUE;
-    final static long MAX_INT_L = (long) Integer.MAX_VALUE;
-
-    // These are not very accurate, but have to do... (for bounds checks)
-
-    final static double MIN_LONG_D = (double) Long.MIN_VALUE;
-    final static double MAX_LONG_D = (double) Long.MAX_VALUE;
-
-    final static double MIN_INT_D = (double) Integer.MIN_VALUE;
-    final static double MAX_INT_D = (double) Integer.MAX_VALUE;
-
-    // Digits, numeric
-    final protected static int INT_0 = '0';
-    final protected static int INT_9 = '9';
-
-    final protected static int INT_MINUS = '-';
-    final protected static int INT_PLUS = '+';
-
-    final protected static char CHAR_NULL = '\0';
-    
     // Numeric value holders: multiple fields used for
     // for efficiency
 
@@ -434,7 +381,7 @@ public abstract class ParserBase extends ParserMinimalBase
      */
     @Override
     public JsonLocation getTokenLocation() {
-        return new JsonLocation(_ioContext.getSourceReference(),
+        return new JsonLocation(_getSourceReference(),
                 -1L, getTokenCharacterOffset(), // bytes, chars
                 getTokenLineNr(),
                 getTokenColumnNr());
@@ -447,7 +394,7 @@ public abstract class ParserBase extends ParserMinimalBase
     @Override
     public JsonLocation getCurrentLocation() {
         int col = _inputPtr - _currInputRowStart + 1; // 1-based
-        return new JsonLocation(_ioContext.getSourceReference(),
+        return new JsonLocation(_getSourceReference(),
                 -1L, _currInputProcessed + _inputPtr, // bytes, chars
                 _currInputRow, col);
     }
@@ -496,7 +443,7 @@ public abstract class ParserBase extends ParserMinimalBase
 
     /*
     /**********************************************************
-    /* Abstract methods needed from sub-classes
+    /* Abstract methods for sub-classes to implement
     /**********************************************************
      */
 
@@ -535,7 +482,7 @@ public abstract class ParserBase extends ParserMinimalBase
             _reportInvalidEOF(String.format(
                     ": expected close marker for %s (start marker at %s)",
                     marker,
-                    _parsingContext.getStartLocation(_ioContext.getSourceReference())),
+                    _parsingContext.getStartLocation(_getSourceReference())),
                     null);
         }
     }
@@ -546,17 +493,6 @@ public abstract class ParserBase extends ParserMinimalBase
     protected final int _eofAsNextChar() throws JsonParseException {
         _handleEOF();
         return -1;
-    }
-    
-    /*
-    /**********************************************************
-    /* Internal/package methods: Error reporting
-    /**********************************************************
-     */
-    
-    protected void _reportMismatchedEndMarker(int actCh, char expCh) throws JsonParseException {
-        String startDesc = ""+_parsingContext.getStartLocation(_ioContext.getSourceReference());
-        _reportError("Unexpected close marker '"+((char) actCh)+"': expected '"+expCh+"' (for "+_parsingContext.typeDesc()+" starting at "+startDesc+")");
     }
 
     /*
@@ -618,7 +554,19 @@ public abstract class ParserBase extends ParserMinimalBase
         _numTypesValid = NR_DOUBLE;
         return JsonToken.VALUE_NUMBER_FLOAT;
     }
-    
+
+    @Override
+    public boolean isNaN() {
+        if (_currToken == JsonToken.VALUE_NUMBER_FLOAT) {
+            if ((_numTypesValid & NR_DOUBLE) != 0) {
+                // 10-Mar-2017, tatu: Alas, `Double.isFinite(d)` only added in JDK 8
+                double d = _numberDouble;
+                return Double.isNaN(d) || Double.isInfinite(d);              
+            }
+        }
+        return false;
+    }
+
     /*
     /**********************************************************
     /* Numeric accessors of public API
@@ -1043,34 +991,19 @@ public abstract class ParserBase extends ParserMinimalBase
         }
         _numTypesValid |= NR_BIGDECIMAL;
     }
-    
+
     /*
     /**********************************************************
-    /* Number handling exceptions
+    /* Internal/package methods: Error reporting
     /**********************************************************
-     */    
-    
-    protected void reportUnexpectedNumberChar(int ch, String comment) throws JsonParseException {
-        String msg = "Unexpected character ("+_getCharDesc(ch)+") in numeric value";
-        if (comment != null) {
-            msg += ": "+comment;
-        }
-        _reportError(msg);
-    }
-    
-    protected void reportInvalidNumber(String msg) throws JsonParseException {
-        _reportError("Invalid numeric value: "+msg);
-    }
+     */
 
-    protected void reportOverflowInt() throws IOException {
-        _reportError(String.format("Numeric value (%s) out of range of int (%d - %s)",
-                getText(), Integer.MIN_VALUE, Integer.MAX_VALUE));
+    protected void _reportMismatchedEndMarker(int actCh, char expCh) throws JsonParseException {
+        JsonReadContext ctxt = getParsingContext();
+        _reportError(String.format(
+                "Unexpected close marker '%s': expected '%c' (for %s starting at %s)",
+                (char) actCh, expCh, ctxt.typeDesc(), ctxt.getStartLocation(_getSourceReference())));
     }
-    
-    protected void reportOverflowLong() throws IOException {
-        _reportError(String.format("Numeric value (%s) out of range of long (%d - %s)",
-                getText(), Long.MIN_VALUE, Long.MAX_VALUE));
-    }    
 
     /*
     /**********************************************************
@@ -1139,7 +1072,8 @@ public abstract class ParserBase extends ParserMinimalBase
     protected IllegalArgumentException reportInvalidBase64Char(Base64Variant b64variant, int ch, int bindex, String msg) throws IllegalArgumentException {
         String base;
         if (ch <= INT_SPACE) {
-            base = "Illegal white space character (code 0x"+Integer.toHexString(ch)+") as character #"+(bindex+1)+" of 4-char base64 unit: can only used between units";
+            base = String.format("Illegal white space character (code 0x%s) as character #%d of 4-char base64 unit: can only used between units",
+                    Integer.toHexString(ch), (bindex+1));
         } else if (b64variant.usesPaddingChar(ch)) {
             base = "Unexpected padding character ('"+b64variant.getPaddingChar()+"') as character #"+(bindex+1)+" of 4-char base64 unit: padding only legal as 3rd or 4th character";
         } else if (!Character.isDefined(ch) || Character.isISOControl(ch)) {
@@ -1154,6 +1088,25 @@ public abstract class ParserBase extends ParserMinimalBase
         return new IllegalArgumentException(base);
     }
 
+    /*
+    /**********************************************************
+    /* Internal/package methods: other
+    /**********************************************************
+     */
+
+    /**
+     * Helper method used to encapsulate logic of including (or not) of
+     * "source reference" when constructing {@link JsonLocation} instances.
+     *
+     * @since 2.9
+     */
+    protected Object _getSourceReference() {
+        if (JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION.enabledIn(_features)) {
+            return _ioContext.getSourceReference();
+        }
+        return null;
+    }
+    
     /*
     /**********************************************************
     /* Stuff that was abstract and required before 2.8, but that

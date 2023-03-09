@@ -19,6 +19,8 @@ import static com.fasterxml.jackson.core.JsonTokenId.*;
 public class ReaderBasedJsonParser // final in 2.3, earlier
     extends ParserBase
 {
+    protected final static int FEAT_MASK_TRAILING_COMMA = Feature.ALLOW_TRAILING_COMMA.getMask();
+
     // Latin1 encoding is not supported, but we do use 8-bit subset for
     // pre-processing task, to simplify first pass, keep it fast.
     protected final static int[] _icLatin1 = CharTypes.getInputCodeLatin1();
@@ -443,13 +445,13 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     @Override
     public byte[] getBinaryValue(Base64Variant b64variant) throws IOException
     {
-        if (_currToken != JsonToken.VALUE_STRING &&
-                (_currToken != JsonToken.VALUE_EMBEDDED_OBJECT || _binaryValue == null)) {
+        if ((_currToken == JsonToken.VALUE_EMBEDDED_OBJECT) && (_binaryValue != null)) {
+            return _binaryValue;
+        }
+        if (_currToken != JsonToken.VALUE_STRING) {
             _reportError("Current token ("+_currToken+") not VALUE_STRING or VALUE_EMBEDDED_OBJECT, can not access as binary");
         }
-        /* To ensure that we won't see inconsistent data, better clear up
-         * state...
-         */
+        // To ensure that we won't see inconsistent data, better clear up state
         if (_tokenIncomplete) {
             try {
                 _binaryValue = _decodeBase64(b64variant);
@@ -652,26 +654,22 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         _binaryValue = null;
 
         // Closing scope?
-        if (i == INT_RBRACKET) {
-            _updateLocation();
-            if (!_parsingContext.inArray()) {
-                _reportMismatchedEndMarker(i, '}');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
-            return (_currToken = JsonToken.END_ARRAY);
-        }
-        if (i == INT_RCURLY) {
-            _updateLocation();
-            if (!_parsingContext.inObject()) {
-                _reportMismatchedEndMarker(i, ']');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
-            return (_currToken = JsonToken.END_OBJECT);
+        if (i == INT_RBRACKET || i == INT_RCURLY) {
+            _closeScope(i);
+            return _currToken;
         }
 
         // Nope: do we then expect a comma?
         if (_parsingContext.expectComma()) {
             i = _skipComma(i);
+
+            // Was that a trailing comma?
+            if ((_features & FEAT_MASK_TRAILING_COMMA) != 0) {
+                if ((i == INT_RBRACKET) || (i == INT_RCURLY)) {
+                    _closeScope(i);
+                    return _currToken;
+                }
+            }
         }
 
         /* And should we now have a name? Always true for Object contexts, since
@@ -811,26 +809,22 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         }
         _binaryValue = null;
 
-        if (i == INT_RBRACKET) {
-            _updateLocation();
-            if (!_parsingContext.inArray()) {
-                _reportMismatchedEndMarker(i, '}');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
-            _currToken = JsonToken.END_ARRAY;
+        // Closing scope?
+        if (i == INT_RBRACKET || i == INT_RCURLY) {
+            _closeScope(i);
             return false;
         }
-        if (i == INT_RCURLY) {
-            _updateLocation();
-            if (!_parsingContext.inObject()) {
-                _reportMismatchedEndMarker(i, ']');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
-            _currToken = JsonToken.END_OBJECT;
-            return false;
-        }
+
         if (_parsingContext.expectComma()) {
             i = _skipComma(i);
+
+            // Was that a trailing comma?
+            if ((_features & FEAT_MASK_TRAILING_COMMA) != 0) {
+                if ((i == INT_RBRACKET) || (i == INT_RCURLY)) {
+                    _closeScope(i);
+                    return false;
+                }
+            }
         }
 
         if (!_parsingContext.inObject()) {
@@ -890,26 +884,18 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             return null;
         }
         _binaryValue = null;
-        if (i == INT_RBRACKET) {
-            _updateLocation();
-            if (!_parsingContext.inArray()) {
-                _reportMismatchedEndMarker(i, '}');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
-            _currToken = JsonToken.END_ARRAY;
-            return null;
-        }
-        if (i == INT_RCURLY) {
-            _updateLocation();
-            if (!_parsingContext.inObject()) {
-                _reportMismatchedEndMarker(i, ']');
-            }
-            _parsingContext = _parsingContext.clearAndGetParent();
-            _currToken = JsonToken.END_OBJECT;
+        if (i == INT_RBRACKET || i == INT_RCURLY) {
+            _closeScope(i);
             return null;
         }
         if (_parsingContext.expectComma()) {
             i = _skipComma(i);
+            if ((_features & FEAT_MASK_TRAILING_COMMA) != 0) {
+                if ((i == INT_RBRACKET) || (i == INT_RCURLY)) {
+                    _closeScope(i);
+                    return null;
+                }
+            }
         }
         if (!_parsingContext.inObject()) {
             _updateLocation();
@@ -1898,7 +1884,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             }
             return _handleInvalidNumberStart(_inputBuffer[_inputPtr++], false);
         }
-        // [Issue#77] Try to decode most likely token
+        // [core#77] Try to decode most likely token
         if (Character.isJavaIdentifierStart(i)) {
             _reportInvalidToken(""+((char) i), "('true', 'false' or 'null')");
         }
@@ -2608,34 +2594,50 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     protected final void _matchToken(String matchStr, int i) throws IOException
     {
         final int len = matchStr.length();
+        if ((_inputPtr + len) >= _inputEnd) {
+            _matchToken2(matchStr, i);
+            return;
+        }
 
         do {
-            if (_inputPtr >= _inputEnd) {
-                if (!_loadMore()) {
-                    _reportInvalidToken(matchStr.substring(0, i));
-                }
-            }
             if (_inputBuffer[_inputPtr] != matchStr.charAt(i)) {
                 _reportInvalidToken(matchStr.substring(0, i));
             }
             ++_inputPtr;
         } while (++i < len);
-
-        // but let's also ensure we either get EOF, or non-alphanum char...
-        if (_inputPtr >= _inputEnd) {
-            if (!_loadMore()) {
-                return;
-            }
+        int ch = _inputBuffer[_inputPtr];
+        if (ch >= '0' && ch != ']' && ch != '}') { // expected/allowed chars
+            _checkMatchEnd(matchStr, i, ch);
         }
-        char c = _inputBuffer[_inputPtr];
-        if (c < '0' || c == ']' || c == '}') { // expected/allowed chars
+    }
+
+    private final void _matchToken2(String matchStr, int i) throws IOException
+    {
+        final int len = matchStr.length();
+        do {
+            if (((_inputPtr >= _inputEnd) && !_loadMore())
+                ||  (_inputBuffer[_inputPtr] != matchStr.charAt(i))) {
+                _reportInvalidToken(matchStr.substring(0, i));
+            }
+            ++_inputPtr;
+        } while (++i < len);
+    
+        // but let's also ensure we either get EOF, or non-alphanum char...
+        if (_inputPtr >= _inputEnd && !_loadMore()) {
             return;
         }
-        // if Java letter, it's a problem tho
-        if (Character.isJavaIdentifierPart(c)) {
+        int ch = _inputBuffer[_inputPtr];
+        if (ch >= '0' && ch != ']' && ch != '}') { // expected/allowed chars
+            _checkMatchEnd(matchStr, i, ch);
+        }
+    }
+
+    private final void _checkMatchEnd(String matchStr, int i, int c) throws IOException {
+        // but actually only alphanums are problematic
+        char ch = (char) c;
+        if (Character.isJavaIdentifierPart(ch)) {
             _reportInvalidToken(matchStr.substring(0, i));
         }
-        return;
     }
 
     /*
@@ -2766,20 +2768,19 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     @Override
     public JsonLocation getTokenLocation()
     {
-        final Object src = _ioContext.getSourceReference();
         if (_currToken == JsonToken.FIELD_NAME) {
             long total = _currInputProcessed + (_nameStartOffset-1);
-            return new JsonLocation(src,
+            return new JsonLocation(_getSourceReference(),
                     -1L, total, _nameStartRow, _nameStartCol);
         }
-        return new JsonLocation(src,
+        return new JsonLocation(_getSourceReference(),
                 -1L, _tokenInputTotal-1, _tokenInputRow, _tokenInputCol);
     }
 
     @Override
     public JsonLocation getCurrentLocation() {
         int col = _inputPtr - _currInputRowStart + 1; // 1-based
-        return new JsonLocation(_ioContext.getSourceReference(),
+        return new JsonLocation(_getSourceReference(),
                 -1L, _currInputProcessed + _inputPtr,
                 _currInputRow, col);
     }
@@ -2814,24 +2815,48 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
     protected void _reportInvalidToken(String matchedPart, String msg) throws IOException
     {
-        StringBuilder sb = new StringBuilder(matchedPart);
         /* Let's just try to find what appears to be the token, using
          * regular Java identifier character rules. It's just a heuristic,
          * nothing fancy here.
          */
-        while (true) {
-            if (_inputPtr >= _inputEnd) {
-                if (!_loadMore()) {
-                    break;
-                }
-            }
+        StringBuilder sb = new StringBuilder(matchedPart);
+        while ((_inputPtr < _inputEnd) || _loadMore()) {
             char c = _inputBuffer[_inputPtr];
             if (!Character.isJavaIdentifierPart(c)) {
                 break;
             }
             ++_inputPtr;
             sb.append(c);
+            if (sb.length() >= MAX_ERROR_TOKEN_LENGTH) {
+                sb.append("...");
+                break;
+            }
         }
-        _reportError("Unrecognized token '"+sb.toString()+"': was expecting "+msg);
+        _reportError("Unrecognized token '%s': was expecting %s", sb, msg);
+    }
+
+    /*
+    /**********************************************************
+    /* Internal methods, other
+    /**********************************************************
+     */
+
+    private void _closeScope(int i) throws JsonParseException {
+        if (i == INT_RBRACKET) {
+            _updateLocation();
+            if (!_parsingContext.inArray()) {
+                _reportMismatchedEndMarker(i, '}');
+            }
+            _parsingContext = _parsingContext.clearAndGetParent();
+            _currToken = JsonToken.END_ARRAY;
+        }
+        if (i == INT_RCURLY) {
+            _updateLocation();
+            if (!_parsingContext.inObject()) {
+                _reportMismatchedEndMarker(i, ']');
+            }
+            _parsingContext = _parsingContext.clearAndGetParent();
+            _currToken = JsonToken.END_OBJECT;
+        }
     }
 }

@@ -107,3 +107,35 @@ Mikael Staldal (mikaelstaldal@github)
 Kevin Gallardo (newkek@github)
   * Reported #296: JsonParserSequence skips a token on a switched Parser
    (2.8.0)
+
+Alessio Soldano (asoldano@github)
+  * Contributed #322: Trim tokens in error messages to 256 byte to prevent attacks
+   (2.8.6)
+
+Arnaud Roger (arnaudroger@github)
+  * Contributed #359: FilteringGeneratorDelegate does not override writeStartObject(Object forValue)
+   (2.8.8)
+
+Alex Yursha (AlexYursha@github)
+  * Contributed #312: Add `JsonProcessingException.clearLocation()` to allow clearing
+    possibly security-sensitive information
+   (2.9.0)
+
+Brad Hess (bdhess@github)
+  * Contributed #323: Add `JsonParser.ALLOW_TRAILING_COMMA` to work for Arrays and Objects
+   (2.9.0)
+  * Reported #325: `DataInput` backed parser should handle `EOFException` at end of doc
+   (2.9.0)
+
+Logan Widick (uhhhh2@github)
+  * Contributed #17: Add 'JsonGenerator.writeString(Reader r, int charLength)'
+   (2.9.0)
+
+Michael Sims (MichaelSims@github)
+  * Reported, contributed fix for #372: JsonParserSequence#skipChildren() throws exception
+   when current delegate is TokenBuffer.Parser with "incomplete" JSON
+   (2.9.0)
+
+Rafal Foltynski (rfoltyns@github)
+  * Contributed #374: Minimal and DefaultPrettyPrinter with configurable separators
+   (2.9.0)

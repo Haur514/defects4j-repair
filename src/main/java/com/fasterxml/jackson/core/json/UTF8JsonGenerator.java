@@ -5,7 +5,10 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import com.fasterxml.jackson.core.*;
-import com.fasterxml.jackson.core.io.*;
+import com.fasterxml.jackson.core.io.CharTypes;
+import com.fasterxml.jackson.core.io.CharacterEscapes;
+import com.fasterxml.jackson.core.io.IOContext;
+import com.fasterxml.jackson.core.io.NumberOutput;
 
 public class UTF8JsonGenerator
     extends JsonGeneratorImpl
@@ -462,6 +465,49 @@ public class UTF8JsonGenerator
     }
 
     @Override
+    public void writeString(Reader reader, int len) throws IOException {
+        _verifyValueWrite(WRITE_STRING);
+        if (reader == null) {
+            _reportError("null reader");
+        }
+
+        int toRead = (len >= 0) ? len : Integer.MAX_VALUE;
+
+        final char[] buf = _charBuffer;
+
+        //Add leading quote
+        if ((_outputTail + len) >= _outputEnd) {
+            _flushBuffer();
+        }
+        _outputBuffer[_outputTail++] = _quoteChar;
+
+        //read
+        while (toRead > 0){
+            int toReadNow = Math.min(toRead, buf.length);
+            int numRead = reader.read(buf, 0, toReadNow);
+            if(numRead <= 0){
+                break;
+            }
+            if ((_outputTail + len) >= _outputEnd) {
+                _flushBuffer();
+            }
+            _writeStringSegments(buf, 0, numRead);
+            //decrease tracker
+            toRead -= numRead;
+        }
+
+        //Add trailing quote
+        if ((_outputTail + len) >= _outputEnd) {
+            _flushBuffer();
+        }
+        _outputBuffer[_outputTail++] = _quoteChar;
+
+        if (toRead > 0 && len >= 0){
+            _reportError("Didn't read enough from reader");
+        }
+    }
+
+    @Override
     public void writeString(char[] text, int offset, int len) throws IOException
     {
         _verifyValueWrite(WRITE_STRING);
@@ -562,9 +608,10 @@ public class UTF8JsonGenerator
     public void writeRaw(String text, int offset, int len) throws IOException
     {
         final char[] buf = _charBuffer;
+        final int cbufLen = buf.length;
 
         // minor optimization: see if we can just get and copy
-        if (len <= buf.length) {
+        if (len <= cbufLen) {
             text.getChars(offset, offset+len, buf, 0);
             writeRaw(buf, 0, len);
             return;
@@ -573,7 +620,8 @@ public class UTF8JsonGenerator
         // If not, need segmented approach. For speed, let's also use input buffer
         // size that is guaranteed to fit in output buffer; each char can expand to
         // at most 3 bytes, so at most 1/3 of buffer size.
-        final int maxChunk = (_outputEnd >> 2) + (_outputEnd >> 4); // == (1/4 + 1/16) == 5/16
+        final int maxChunk = Math.min(cbufLen,
+                (_outputEnd >> 2) + (_outputEnd >> 4)); // == (1/4 + 1/16) == 5/16
         final int maxBytes = maxChunk * 3;
 
         while (len > 0) {
@@ -584,7 +632,11 @@ public class UTF8JsonGenerator
             }
             // If this is NOT the last segment and if the last character looks like
             // split surrogate second half, drop it
-            if (len > 0) {
+            // 21-Mar-2017, tatu: Note that we could check for either `len` or `len2`;
+            //    point here is really that we only "punt" surrogate if it is NOT the
+            //    only character left; otherwise we'd end up with a poison pill if the
+            //    very last character was unpaired first-surrogate
+            if (len2 > 1) {
                 char ch = buf[len2-1];
                 if ((ch >= SURR1_FIRST) && (ch <= SURR1_LAST)) {
                     --len2;

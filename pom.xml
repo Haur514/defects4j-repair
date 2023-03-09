@@ -2,16 +2,17 @@
   <modelVersion>4.0.0</modelVersion> 
   <parent>
     <groupId>com.fasterxml.jackson</groupId>
+    <!-- One of few Jackson modules that depend on parent and not jackson-bom -->
     <artifactId>jackson-parent</artifactId>
-    <version>2.8</version>
+    <version>2.9</version>
   </parent>
 
-  <groupId>com.fasterxml.jackson.core</groupId>
+   <groupId>com.fasterxml.jackson.core</groupId>
   <artifactId>jackson-core</artifactId>
   <name>Jackson-core</name>
-  <version>2.8.3-SNAPSHOT</version>
+  <version>2.9.0-SNAPSHOT</version>
   <packaging>bundle</packaging>
-  <description>Core Jackson abstractions, basic JSON streaming API implementation</description>
+  <description>Core Jackson processing abstractions (aka Streaming API), implementation for JSON</description>
   <inceptionYear>2008</inceptionYear>
 
   <url>https://github.com/FasterXML/jackson-core</url>
@@ -23,7 +24,7 @@
   </scm>
 
   <properties>
-    <!-- 29-Apr-2016, tatu: Retain Java6/JDK1.6 compatibility for streaming for Jackson 2.8 -->
+    <!-- 16-Sep-2016, tatu: Retain Java6/JDK1.6 compatibility for streaming for Jackson 2.x -->
     <javac.src.version>1.6</javac.src.version>
     <javac.target.version>1.6</javac.target.version>
 
