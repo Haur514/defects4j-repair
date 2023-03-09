@@ -127,7 +127,7 @@ public abstract class JsonParser
 
         /**
          * Feature that can be enabled to accept quoting of all character
-         * using backslash qooting mechanism: if not enabled, only characters
+         * using backslash quoting mechanism: if not enabled, only characters
          * that are explicitly listed by JSON specification can be thus
          * escaped (see JSON spec for small list of these characters)
          *<p>
@@ -208,20 +208,20 @@ public abstract class JsonParser
             }
             return flags;
         }
-        
+
         private Feature(boolean defaultState) {
             _mask = (1 << ordinal());
             _defaultState = defaultState;
         }
-        
+
         public boolean enabledByDefault() { return _defaultState; }
-        
+
         /**
          * @since 2.3
          */
         public boolean enabledIn(int flags) { return (flags & _mask) != 0; }
 
-        public int getMask() { return (1 << ordinal()); }
+        public int getMask() { return _mask; }
     }
 
     /*
@@ -277,6 +277,34 @@ public abstract class JsonParser
      */
     public Object getInputSource() { return null; }
 
+    /**
+     * Helper method, usually equivalent to:
+     *<code>
+     *   getParsingContext().getCurrentValue();
+     *</code>
+     * 
+     * @since 2.5
+     */
+    public Object getCurrentValue() {
+        JsonStreamContext ctxt = getParsingContext();
+        return (ctxt == null) ? null : ctxt.getCurrentValue();
+    }
+
+    /**
+     * Helper method, usually equivalent to:
+     *<code>
+     *   getParsingContext().setCurrentValue(v);
+     *</code>
+     * 
+     * @since 2.5
+     */
+    public void setCurrentValue(Object v) {
+        JsonStreamContext ctxt = getParsingContext();
+        if (ctxt != null) {
+            ctxt.setCurrentValue(v);
+        }
+    }
+    
     /*
     /**********************************************************
     /* Format support
@@ -455,7 +483,7 @@ public abstract class JsonParser
     /**
      * Method for checking whether specified {@link Feature} is enabled.
      */
-    public boolean isEnabled(Feature f) { return (_features & f.getMask()) != 0; }
+    public boolean isEnabled(Feature f) { return f.enabledIn(_features); }
 
     /**
      * Bulk access method for getting state of all standard {@link Feature}s.
@@ -467,8 +495,8 @@ public abstract class JsonParser
     public int getFeatureMask() { return _features; }
 
     /**
-     * Bulk set method for (re)settting states of all standard {@link Feature}s
-     * 
+     * Bulk set method for (re)setting states of all standard {@link Feature}s
+     *
      * @since 2.3
      * 
      * @return This parser object, to allow chaining of calls
@@ -520,15 +548,28 @@ public abstract class JsonParser
      * and returns result of that comparison.
      * It is functionally equivalent to:
      *<pre>
-     *  return (nextToken() == JsonToken.FIELD_NAME) && str.getValue().equals(getCurrentName());
+     *  return (nextToken() == JsonToken.FIELD_NAME) &amp;&amp; str.getValue().equals(getCurrentName());
      *</pre>
      * but may be faster for parser to verify, and can therefore be used if caller
      * expects to get such a property name from input next.
      * 
-     * @param str Property name to compare next token to (if next token is <code>JsonToken.FIELD_NAME<code>)
+     * @param str Property name to compare next token to (if next token is
+     *   <code>JsonToken.FIELD_NAME</code>)
      */
     public boolean nextFieldName(SerializableString str) throws IOException, JsonParseException {
         return (nextToken() == JsonToken.FIELD_NAME) && str.getValue().equals(getCurrentName());
+    }
+
+    /**
+     * Method that fetches next token (as if calling {@link #nextToken}) and
+     * verifies whether it is {@link JsonToken#FIELD_NAME}; if it is,
+     * returns same as {@link #getCurrentName()}, otherwise null.
+     * 
+     * @since 2.5
+     */
+    public String nextFieldName() throws IOException, JsonParseException {
+        return (nextToken() == JsonToken.FIELD_NAME)
+                ? getCurrentName() : null;
     }
 
     /**
@@ -671,6 +712,21 @@ public abstract class JsonParser
     public abstract boolean hasCurrentToken();
 
     /**
+     * Method that is functionally equivalent to:
+     *<code>
+     *  return getCurrentTokenId() == id
+     *</code>
+     * but may be more efficiently implemented.
+     *<p>
+     * Note that no traversal or conversion is performed; so in some
+     * cases calling method like {@link #isExpectedStartArrayToken()}
+     * is necessary instead.
+     *
+     * @since 2.5
+     */
+    public abstract boolean hasTokenId(int id);
+
+    /**
      * Method that can be called to get the name associated with
      * the current token: for {@link JsonToken#FIELD_NAME}s it will
      * be the same as what {@link #getText} returns;
@@ -709,7 +765,9 @@ public abstract class JsonParser
      * token indicates start array (usually meaning that current token
      * is {@link JsonToken#START_ARRAY}) when start array is expected.
      * For some specialized parsers this can return true for other cases
-     * as well; this is usually done to emulate arrays.
+     * as well; this is usually done to emulate arrays in cases underlying
+     * format is ambiguous (XML, for example, has no format-level difference
+     * between Objects and Arrays; it just has elements).
      *<p>
      * Default implementation is equivalent to:
      *<pre>
@@ -723,6 +781,14 @@ public abstract class JsonParser
      */
     public boolean isExpectedStartArrayToken() { return getCurrentToken() == JsonToken.START_ARRAY; }
 
+    /**
+     * Similar to {@link #isExpectedStartArrayToken()}, but checks whether stream
+     * currently points to {@link JsonToken#START_OBJECT}.
+     * 
+     * @since 2.5
+     */
+    public boolean isExpectedStartObjectToken() { return getCurrentToken() == JsonToken.START_OBJECT; }
+    
     /*
     /**********************************************************
     /* Public API, token state overrides
@@ -1390,7 +1456,9 @@ public abstract class JsonParser
      * represented by root {@link TreeNode} of resulting model.
      * For JSON Arrays it will an array node (with child nodes),
      * for objects object node (with child nodes), and for other types
-     * matching leaf node type
+     * matching leaf node type. Empty or whitespace documents are null.
+     *
+     * @return root of the document, or null if empty or whitespace.
      */
     @SuppressWarnings("unchecked")
     public <T extends TreeNode> T readValueAsTree() throws IOException {

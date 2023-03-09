@@ -11,7 +11,7 @@ import com.fasterxml.jackson.core.*;
  */
 @SuppressWarnings("resource")
 public class TestNumericValues
-    extends com.fasterxml.jackson.test.BaseTest
+    extends com.fasterxml.jackson.core.BaseTest
 {
     private final JsonFactory FACTORY = new JsonFactory();
     
@@ -430,6 +430,7 @@ public class TestNumericValues
             sb.append('9');
         }
         String NUM = sb.toString();
+        // force use of new factory, just in case (might still recycle same buffers tho?)
         JsonFactory f = new JsonFactory();
         _testLongNumbers(f, NUM, false);
         _testLongNumbers(f, NUM, true);
@@ -439,8 +440,8 @@ public class TestNumericValues
     {
         final String doc = "[ "+num+" ]";
         JsonParser jp = useStream
-                ? FACTORY.createParser(doc.getBytes("UTF-8"))
-                        : FACTORY.createParser(doc);
+                ? f.createParser(doc.getBytes("UTF-8"))
+                        : f.createParser(doc);
         assertToken(JsonToken.START_ARRAY, jp.nextToken());
         assertToken(JsonToken.VALUE_NUMBER_INT, jp.nextToken());
         assertEquals(num, jp.getText());

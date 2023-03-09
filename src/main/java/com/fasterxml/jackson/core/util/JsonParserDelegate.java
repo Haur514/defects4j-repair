@@ -25,6 +25,16 @@ public class JsonParserDelegate extends JsonParser
         delegate = d;
     }
 
+    @Override
+    public Object getCurrentValue() {
+        return delegate.getCurrentValue();
+    }
+
+    @Override
+    public void setCurrentValue(Object v) {
+        delegate.setCurrentValue(v);
+    }
+
     /*
     /**********************************************************
     /* Public API, configuration
@@ -87,10 +97,13 @@ public class JsonParserDelegate extends JsonParser
     @Override public JsonToken getCurrentToken() { return delegate.getCurrentToken(); }
     @Override public int getCurrentTokenId() { return delegate.getCurrentTokenId(); }
     @Override public boolean hasCurrentToken() { return delegate.hasCurrentToken(); }
+    @Override public boolean hasTokenId(int id) { return delegate.hasTokenId(id); }
+    
     @Override public String getCurrentName() throws IOException, JsonParseException { return delegate.getCurrentName(); }
     @Override public JsonLocation getCurrentLocation() { return delegate.getCurrentLocation(); }
     @Override public JsonStreamContext getParsingContext() { return delegate.getParsingContext(); }
     @Override public boolean isExpectedStartArrayToken() { return delegate.isExpectedStartArrayToken(); }
+    @Override public boolean isExpectedStartObjectToken() { return delegate.isExpectedStartObjectToken(); }
 
     /*
     /**********************************************************

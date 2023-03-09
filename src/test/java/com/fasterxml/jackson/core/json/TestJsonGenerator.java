@@ -9,11 +9,10 @@ import java.io.*;
  * functionality works as expected.
  */
 public class TestJsonGenerator
-    extends com.fasterxml.jackson.test.BaseTest
+    extends com.fasterxml.jackson.core.BaseTest
 {
     // // // First, tests for primitive (non-structured) values
 
-    @SuppressWarnings("resource")
     public void testStringWrite() throws Exception
     {
         JsonFactory jf = new JsonFactory();
@@ -226,15 +225,14 @@ public class TestJsonGenerator
         
         gen.close();
     }
-    
+
     /*
     /**********************************************************
     /* Internal methods
     /**********************************************************
      */
-    
-    private void doTestIntWrite(boolean pad)
-        throws Exception
+
+    private void doTestIntWrite(boolean pad) throws Exception
     {
         int[] VALUES = new int[] {
             0, 1, -9, 32, -32, 57, 189, 2017, -9999, 13240, 123456,

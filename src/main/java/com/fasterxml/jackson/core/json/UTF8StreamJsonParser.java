@@ -166,14 +166,18 @@ public class UTF8StreamJsonParser
      */
 
     @Override
-    protected final boolean loadMore()
-        throws IOException
+    protected final boolean loadMore() throws IOException
     {
         _currInputProcessed += _inputEnd;
         _currInputRowStart -= _inputEnd;
         
         if (_inputStream != null) {
-            int count = _inputStream.read(_inputBuffer, 0, _inputBuffer.length);
+            int space = _inputBuffer.length;
+            if (space == 0) { // only occurs when we've been closed
+                return false;
+            }
+            
+            int count = _inputStream.read(_inputBuffer, 0, space);
             if (count > 0) {
                 _inputPtr = 0;
                 _inputEnd = count;
@@ -193,8 +197,7 @@ public class UTF8StreamJsonParser
      * Helper method that will try to load at least specified number bytes in
      * input buffer, possible moving existing data around if necessary
      */
-    protected final boolean _loadToHaveAtLeast(int minAvailable)
-        throws IOException
+    protected final boolean _loadToHaveAtLeast(int minAvailable) throws IOException
     {
         // No input stream, no leading (either we are closed, or have non-stream input source)
         if (_inputStream == null) {
@@ -257,7 +260,11 @@ public class UTF8StreamJsonParser
         if (_bufferRecyclable) {
             byte[] buf = _inputBuffer;
             if (buf != null) {
-                _inputBuffer = null;
+                /* 21-Nov-2014, tatu: Let's not set it to null; this way should
+                 *   get slightly more meaningful error messages in case someone
+                 *   closes parser indirectly, without realizing.
+                 */
+                _inputBuffer = ByteArrayBuilder.NO_BYTES;
                 _ioContext.releaseReadIOBuffer(buf);
             }
         }
@@ -813,7 +820,7 @@ public class UTF8StreamJsonParser
     /* Public API, traversal, nextXxxValue/nextFieldName
     /**********************************************************
      */
-    
+
     @Override
     public boolean nextFieldName(SerializableString str) throws IOException
     {
@@ -900,6 +907,120 @@ public class UTF8StreamJsonParser
             }
         }
         return _isNextTokenNameMaybe(i, str);
+    }
+
+    @Override
+    public String nextFieldName() throws IOException
+    {
+        // // // Note: this is almost a verbatim copy of nextToken()
+
+        _numTypesValid = NR_UNKNOWN;
+        if (_currToken == JsonToken.FIELD_NAME) {
+            _nextAfterName();
+            return null;
+        }
+        if (_tokenIncomplete) {
+            _skipString();
+        }
+        int i = _skipWSOrEnd();
+        if (i < 0) {
+            close();
+            _currToken = null;
+            return null;
+        }
+        _tokenInputTotal = _currInputProcessed + _inputPtr - 1;
+        _tokenInputRow = _currInputRow;
+        _tokenInputCol = _inputPtr - _currInputRowStart - 1;
+
+        _binaryValue = null;
+
+        if (i == INT_RBRACKET) {
+            if (!_parsingContext.inArray()) {
+                _reportMismatchedEndMarker(i, '}');
+            }
+            _parsingContext = _parsingContext.getParent();
+            _currToken = JsonToken.END_ARRAY;
+            return null;
+        }
+        if (i == INT_RCURLY) {
+            if (!_parsingContext.inObject()) {
+                _reportMismatchedEndMarker(i, ']');
+            }
+            _parsingContext = _parsingContext.getParent();
+            _currToken = JsonToken.END_OBJECT;
+            return null;
+        }
+
+        // Nope: do we then expect a comma?
+        if (_parsingContext.expectComma()) {
+            if (i != INT_COMMA) {
+                _reportUnexpectedChar(i, "was expecting comma to separate "+_parsingContext.getTypeDesc()+" entries");
+            }
+            i = _skipWS();
+        }
+
+        if (!_parsingContext.inObject()) {
+            _nextTokenNotInObject(i);
+            return null;
+        }
+
+        Name n = _parseName(i);
+        final String nameStr = n.getName();
+        _parsingContext.setCurrentName(nameStr);
+        _currToken = JsonToken.FIELD_NAME;
+
+        i = _skipColon();
+        if (i == INT_QUOTE) {
+            _tokenIncomplete = true;
+            _nextToken = JsonToken.VALUE_STRING;
+            return nameStr;
+        }
+        JsonToken t;
+        switch (i) {
+        case '-':
+            t = _parseNegNumber();
+            break;
+
+            /* Should we have separate handling for plus? Although
+             * it is not allowed per se, it may be erroneously used,
+             * and could be indicate by a more specific error message.
+             */
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+            t = _parsePosNumber(i);
+            break;
+        case 'f':
+            _matchToken("false", 1);
+             t = JsonToken.VALUE_FALSE;
+            break;
+        case 'n':
+            _matchToken("null", 1);
+            t = JsonToken.VALUE_NULL;
+            break;
+        case 't':
+            _matchToken("true", 1);
+            t = JsonToken.VALUE_TRUE;
+            break;
+        case '[':
+            t = JsonToken.START_ARRAY;
+            break;
+        case '{':
+            t = JsonToken.START_OBJECT;
+            break;
+
+        default:
+            t = _handleUnexpectedValue(i);
+        }
+        _nextToken = t;
+        return nameStr;
     }
 
     // Variant called when we know there's at least 4 more bytes available
@@ -1956,7 +2077,7 @@ public class UTF8StreamJsonParser
             if (qlen >= quads.length) {
                 _quadBuffer = quads = growArrayBy(quads, quads.length);
             }
-            quads[qlen++] = currQuad;
+            quads[qlen++] = pad(currQuad, currQuadBytes);
         }
         Name name = _symbols.findName(quads, qlen);
         if (name == null) {
@@ -1974,6 +2095,7 @@ public class UTF8StreamJsonParser
     private final Name findName(int q1, int lastQuadBytes)
         throws JsonParseException
     {
+        q1 = pad(q1, lastQuadBytes);
         // Usually we'll find it from the canonical symbol table already
         Name name = _symbols.findName(q1);
         if (name != null) {
@@ -1987,6 +2109,7 @@ public class UTF8StreamJsonParser
     private final Name findName(int q1, int q2, int lastQuadBytes)
         throws JsonParseException
     {
+        q2 = pad(q2, lastQuadBytes);
         // Usually we'll find it from the canonical symbol table already
         Name name = _symbols.findName(q1, q2);
         if (name != null) {
@@ -2004,7 +2127,7 @@ public class UTF8StreamJsonParser
         if (qlen >= quads.length) {
             _quadBuffer = quads = growArrayBy(quads, quads.length);
         }
-        quads[qlen++] = lastQuad;
+        quads[qlen++] = pad(lastQuad, lastQuadBytes);
         Name name = _symbols.findName(quads, qlen);
         if (name == null) {
             return addName(quads, qlen, lastQuadBytes);
@@ -3240,7 +3363,7 @@ public class UTF8StreamJsonParser
 
     /*
     /**********************************************************
-    /* Binary access
+    /* Internal methods, binary access
     /**********************************************************
      */
 
@@ -3354,5 +3477,18 @@ public class UTF8StreamJsonParser
             decodedData = (decodedData << 6) | bits;
             builder.appendThreeBytes(decodedData);
         }
+    }
+
+    /*
+    /**********************************************************
+    /* Internal methods, other
+    /**********************************************************
+     */
+
+    /**
+     * Helper method needed to fix [Issue#148], masking of 0x00 character
+     */
+    private final static int pad(int q, int bytes) {
+        return (bytes == 4) ? q : (q | (-1 << (bytes << 3)));
     }
 }

@@ -1,7 +1,6 @@
 package com.fasterxml.jackson.core.util;
 
 import java.io.*;
-import java.util.Arrays;
 
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.core.io.SerializedString;
@@ -18,7 +17,7 @@ public class DefaultPrettyPrinter
     implements PrettyPrinter, Instantiatable<DefaultPrettyPrinter>,
         java.io.Serializable
 {
-    private static final long serialVersionUID = -5512586643324525213L;
+    private static final long serialVersionUID = 1;
 
     /**
      * Constant that specifies default "root-level" separator to use between
@@ -36,8 +35,7 @@ public class DefaultPrettyPrinter
      */
     public interface Indenter
     {
-        void writeIndentation(JsonGenerator jg, int level)
-            throws IOException, JsonGenerationException;
+        void writeIndentation(JsonGenerator jg, int level) throws IOException;
 
         /**
          * @return True if indenter is considered inline (does not add linefeeds),
@@ -59,7 +57,7 @@ public class DefaultPrettyPrinter
      * system-specific linefeeds, and 2 spaces per level (as opposed to,
      * say, single tabs)
      */
-    protected Indenter _objectIndenter = Lf2SpacesIndenter.instance;
+    protected Indenter _objectIndenter = DefaultIndenter.SYSTEM_LINEFEED_INSTANCE;
 
     /**
      * String printed between root-level values, if any.
@@ -381,9 +379,7 @@ public class DefaultPrettyPrinter
         public static final NopIndenter instance = new NopIndenter();
 
         @Override
-        public void writeIndentation(JsonGenerator jg, int level)
-            throws IOException, JsonGenerationException
-        { }
+        public void writeIndentation(JsonGenerator jg, int level) throws IOException { }
 
         @Override
         public boolean isInline() { return true; }
@@ -409,75 +405,43 @@ public class DefaultPrettyPrinter
         @Override
         public boolean isInline() { return true; }
     }
-
+    
     /**
-     * Default linefeed-based indenter uses system-specific linefeeds and
-     * 2 spaces for indentation per level.
+     * @deprecated Since 2.5 use {@link DefaultIndenter} instead
      */
-    public static class Lf2SpacesIndenter extends NopIndenter
+    @Deprecated
+    public static class Lf2SpacesIndenter extends DefaultIndenter
     {
-        private final static String SYS_LF;
-        static {
-            String lf = null;
-            try {
-                lf = System.getProperty("line.separator");
-            } catch (Throwable t) { } // access exception?
-            SYS_LF = (lf == null) ? "\n" : lf;
-        }
-
-        final static int SPACE_COUNT = 64;
-        final static char[] SPACES = new char[SPACE_COUNT];
-        static {
-            Arrays.fill(SPACES, ' ');
-        }
-
+        /** @deprecated Use {@link DefaultIndenter#SYSTEM_LINEFEED_INSTANCE} instead.
+         */
         @SuppressWarnings("hiding")
+        @Deprecated
         public static final Lf2SpacesIndenter instance = new Lf2SpacesIndenter();
 
-        /**
-         * Linefeed used; default value is the platform-specific linefeed.
+        /** @deprecated Use {@code new DefaultIndenter("  ", DefaultIndenter.SYS_LF)} instead
          */
-        protected final String _lf;
-
-        public Lf2SpacesIndenter() { this(SYS_LF); }
+        @Deprecated
+        public Lf2SpacesIndenter() {
+            super("  ", DefaultIndenter.SYS_LF);
+        }
         
-        /**
-         * @since 2.3
+        /** @deprecated Use {@code new DefaultIndenter("  ", lf)} instead
          */
+        @Deprecated
         public Lf2SpacesIndenter(String lf) {
-            _lf = lf;
+            super("  ", lf);
         }
 
         /**
-         * "Mutant factory" method that will return an instance that uses
-         * specified String as linefeed.
-         * 
-         * @since 2.3
+         * Note: method was accidentally missing from 2.5.0; put back for 2.5.1 and
+         * later 2.5.x versions.
          */
-        public Lf2SpacesIndenter withLinefeed(String lf)
-        {
-            if (lf.equals(_lf)) {
+        @Override
+        public Lf2SpacesIndenter withLinefeed(String lf) {
+            if (lf.equals(getEol())) {
                 return this;
             }
             return new Lf2SpacesIndenter(lf);
-        }
-        
-        @Override
-        public boolean isInline() { return false; }
-
-        @Override
-        public void writeIndentation(JsonGenerator jg, int level)
-            throws IOException, JsonGenerationException
-        {
-            jg.writeRaw(_lf);
-            if (level > 0) { // should we err on negative values (as there's some flaw?)
-                level += level; // 2 spaces per level
-                while (level > SPACE_COUNT) { // should never happen but...
-                    jg.writeRaw(SPACES, 0, SPACE_COUNT); 
-                    level -= SPACES.length;
-                }
-                jg.writeRaw(SPACES, 0, level);
-            }
         }
     }
 }

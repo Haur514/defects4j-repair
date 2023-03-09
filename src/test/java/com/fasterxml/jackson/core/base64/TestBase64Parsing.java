@@ -7,7 +7,7 @@ import java.io.*;
 import com.fasterxml.jackson.core.*;
 
 public class TestBase64Parsing
-    extends com.fasterxml.jackson.test.BaseTest
+    extends com.fasterxml.jackson.core.BaseTest
 {
     public void testBase64UsingInputStream() throws Exception
     {
@@ -97,7 +97,6 @@ public class TestBase64Parsing
         return result;
     }
 
-    @SuppressWarnings("resource")
     private void _testStreaming(boolean useBytes) throws IOException
     {
         final int[] SIZES = new int[] {

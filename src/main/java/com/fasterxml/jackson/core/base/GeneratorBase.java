@@ -15,6 +15,11 @@ import com.fasterxml.jackson.core.util.VersionUtil;
  */
 public abstract class GeneratorBase extends JsonGenerator
 {
+    public final static int SURR1_FIRST = 0xD800;
+    public final static int SURR1_LAST = 0xDBFF;
+    public final static int SURR2_FIRST = 0xDC00;
+    public final static int SURR2_LAST = 0xDFFF;
+
     /**
      * Set of feature masks related to features that need updates of other
      * local configuration or state.
@@ -23,8 +28,17 @@ public abstract class GeneratorBase extends JsonGenerator
      */
     protected final static int DERIVED_FEATURES_MASK = Feature.WRITE_NUMBERS_AS_STRINGS.getMask()
             | Feature.ESCAPE_NON_ASCII.getMask()
-//            | Feature.STRICT_DUPLICATE_DETECTION.getMask()
+            | Feature.STRICT_DUPLICATE_DETECTION.getMask()
             ;
+
+    // // // Constants for validation messages (since 2.6)
+
+    protected final String WRITE_BINARY = "write a binary value";
+    protected final String WRITE_BOOLEAN = "write a boolean value";
+    protected final String WRITE_NULL = "write a null";
+    protected final String WRITE_NUMBER = "write a number";
+    protected final String WRITE_RAW = "write a raw (unencoded) value";
+    protected final String WRITE_STRING = "write a string";
 
     /*
     /**********************************************************
@@ -76,10 +90,21 @@ public abstract class GeneratorBase extends JsonGenerator
     protected GeneratorBase(int features, ObjectCodec codec) {
         super();
         _features = features;
+        _objectCodec = codec;
         DupDetector dups = Feature.STRICT_DUPLICATE_DETECTION.enabledIn(features)
                 ? DupDetector.rootDetector(this) : null;
         _writeContext = JsonWriteContext.createRootContext(dups);
+        _cfgNumbersAsStrings = Feature.WRITE_NUMBERS_AS_STRINGS.enabledIn(features);
+    }
+
+    /**
+     * @since 2.5
+     */
+    protected GeneratorBase(int features, ObjectCodec codec, JsonWriteContext ctxt) {
+        super();
+        _features = features;
         _objectCodec = codec;
+        _writeContext = ctxt;
         _cfgNumbersAsStrings = Feature.WRITE_NUMBERS_AS_STRINGS.enabledIn(features);
     }
 
@@ -88,13 +113,29 @@ public abstract class GeneratorBase extends JsonGenerator
      * package as the implementation class.
      */
     @Override public Version version() { return VersionUtil.versionFor(getClass()); }
-    
+
+    @Override
+    public Object getCurrentValue() {
+        return _writeContext.getCurrentValue();
+    }
+
+    @Override
+    public void setCurrentValue(Object v) {
+        _writeContext.setCurrentValue(v);
+    }
+
     /*
     /**********************************************************
     /* Configuration
     /**********************************************************
      */
 
+
+    @Override public final boolean isEnabled(Feature f) { return (_features & f.getMask()) != 0; }
+    @Override public int getFeatureMask() { return _features; }
+
+    //public JsonGenerator configure(Feature f, boolean state) { }
+    
     @Override
     public JsonGenerator enable(Feature f) {
         final int mask = f.getMask();
@@ -104,10 +145,10 @@ public abstract class GeneratorBase extends JsonGenerator
                 _cfgNumbersAsStrings = true;
             } else if (f == Feature.ESCAPE_NON_ASCII) {
                 setHighestNonEscapedChar(127);
-                /*
             } else if (f == Feature.STRICT_DUPLICATE_DETECTION) {
-            */
-                // !!! TODO
+                if (_writeContext.getDupDetector() == null) { // but only if disabled currently
+                    _writeContext = _writeContext.withDupDetector(DupDetector.rootDetector(this));
+                }
             }
         }
         return this;
@@ -122,19 +163,12 @@ public abstract class GeneratorBase extends JsonGenerator
                 _cfgNumbersAsStrings = false;
             } else if (f == Feature.ESCAPE_NON_ASCII) {
                 setHighestNonEscapedChar(0);
-                /*
             } else if (f == Feature.STRICT_DUPLICATE_DETECTION) {
-                // !!! TODO
-                 */
+                _writeContext = _writeContext.withDupDetector(null);
             }
         }
         return this;
     }
-
-    //public JsonGenerator configure(Feature f, boolean state) { }
-
-    @Override public final boolean isEnabled(Feature f) { return (_features & f.getMask()) != 0; }
-    @Override public int getFeatureMask() { return _features; }
 
     @Override public JsonGenerator setFeatureMask(int newMask) {
         int changed = newMask ^ _features;
@@ -148,11 +182,15 @@ public abstract class GeneratorBase extends JsonGenerator
                     setHighestNonEscapedChar(0);
                 }
             }
-            /*
             if (Feature.STRICT_DUPLICATE_DETECTION.enabledIn(changed)) {
-                // !!! TODO
+                if (Feature.STRICT_DUPLICATE_DETECTION.enabledIn(newMask)) { // enabling
+                    if (_writeContext.getDupDetector() == null) { // but only if disabled currently
+                        _writeContext = _writeContext.withDupDetector(DupDetector.rootDetector(this));
+                    }
+                } else { // disabling
+                    _writeContext = _writeContext.withDupDetector(null);
+                }
             }
-            */
         }
         return this;
     }
@@ -218,7 +256,7 @@ public abstract class GeneratorBase extends JsonGenerator
     public void writeString(SerializableString text) throws IOException {
         writeString(text.getValue());
     }
-    
+
     @Override public void writeRawValue(String text) throws IOException {
         _verifyValueWrite("write raw value");
         writeRaw(text);
@@ -232,6 +270,11 @@ public abstract class GeneratorBase extends JsonGenerator
     @Override public void writeRawValue(char[] text, int offset, int len) throws IOException {
         _verifyValueWrite("write raw value");
         writeRaw(text, offset, len);
+    }
+
+    @Override public void writeRawValue(SerializableString text) throws IOException {
+        _verifyValueWrite("write raw value");
+        writeRaw(text);
     }
 
     @Override
@@ -328,4 +371,24 @@ public abstract class GeneratorBase extends JsonGenerator
      *   if value output is NOT legal in current generator output state.
      */
     protected abstract void _verifyValueWrite(String typeMsg) throws IOException;
+
+    /*
+    /**********************************************************
+    /* UTF-8 related helper method(s)
+    /**********************************************************
+     */
+
+    /**
+     * @since 2.5
+     */
+    protected final int _decodeSurrogate(int surr1, int surr2) throws IOException
+    {
+        // First is known to be valid, but how about the other?
+        if (surr2 < SURR2_FIRST || surr2 > SURR2_LAST) {
+            String msg = "Incomplete surrogate pair: first char 0x"+Integer.toHexString(surr1)+", second 0x"+Integer.toHexString(surr2);
+            _reportError(msg);
+        }
+        int c = 0x10000 + ((surr1 - SURR1_FIRST) << 10) + (surr2 - SURR2_FIRST);
+        return c;
+    }
 }

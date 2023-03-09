@@ -144,6 +144,12 @@ public abstract class JsonGenerator
          * if format uses escaping mechanisms (which is generally true
          * for textual formats but not for binary formats).
          *<p>
+         * Note that this setting may not necessarily make sense for all
+         * data formats (for example, binary formats typically do not use
+         * any escaping mechanisms; and some textual formats do not have
+         * general-purpose escaping); if so, settings is simply ignored.
+         * Put another way, effects of this feature are data-format specific.
+         *<p>
          * Feature is disabled by default.
          */
         ESCAPE_NON_ASCII(false),
@@ -158,11 +164,35 @@ public abstract class JsonGenerator
          *<p>
          * Note that enabling this feature will incur performance overhead
          * due to having to store and check additional information.
+         *<p>
+         * Feature is disabled by default.
          * 
          * @since 2.3
          */
         STRICT_DUPLICATE_DETECTION(false),
-            ;
+
+        /**
+         * Feature that determines what to do if the underlying data format requires knowledge
+         * of all properties to output, and if no definition is found for a property that
+         * caller tries to write. If enabled, such properties will be quietly ignored;
+         * if disabled, a {@link JsonProcessingException} will be thrown to indicate the
+         * problem.
+         * Typically most textual data formats do NOT require schema information (although
+         * some do, such as CSV), whereas many binary data formats do require definitions
+         * (such as Avro, protobuf), although not all (Smile, CBOR, BSON and MessagePack do not).
+         *<p>
+         * Note that support for this feature is implemented by individual data format
+         * module, if (and only if) it makes sense for the format in question. For JSON,
+         * for example, this feature has no effect as properties need not be pre-defined.
+         *<p>
+         * Feature is disabled by default, meaning that if the underlying data format
+         * requires knowledge of all properties to output, attempts to write an unknown
+         * property will result in a {@link JsonProcessingException}
+         *
+         * @since 2.5
+         */
+        IGNORE_UNKNOWN(false),
+        ;
 
         private final boolean _defaultState;
         private final int _mask;
@@ -257,6 +287,34 @@ public abstract class JsonGenerator
      */
     public Object getOutputTarget() {
         return null;
+    }
+
+    /**
+     * Helper method, usually equivalent to:
+     *<code>
+     *   getOutputContext().getCurrentValue();
+     *</code>
+     * 
+     * @since 2.5
+     */
+    public Object getCurrentValue() {
+        JsonStreamContext ctxt = getOutputContext();
+        return (ctxt == null) ? null : ctxt.getCurrentValue();
+    }
+
+    /**
+     * Helper method, usually equivalent to:
+     *<code>
+     *   getOutputContext().setCurrentValue(v);
+     *</code>
+     * 
+     * @since 2.5
+     */
+    public void setCurrentValue(Object v) {
+        JsonStreamContext ctxt = getOutputContext();
+        if (ctxt != null) {
+            ctxt.setCurrentValue(v);
+        }
     }
 
     /*
@@ -560,6 +618,8 @@ public abstract class JsonGenerator
      *   number of values written (before matching call to
      *   {@link #writeEndArray()} MUST match; generator MAY verify
      *   this is the case.
+     *   
+     * @since 2.4
      */
     public void writeStartArray(int size) throws IOException {
         writeStartArray();
@@ -584,8 +644,7 @@ public abstract class JsonGenerator
      * are allowed: meaning everywhere except for when
      * a field name is expected.
      */
-    public abstract void writeStartObject()
-        throws IOException;
+    public abstract void writeStartObject() throws IOException;
 
     /**
      * Method for writing closing marker of a JSON Object value
@@ -597,8 +656,7 @@ public abstract class JsonGenerator
      * complete value, or START-OBJECT marker (see JSON specification
      * for more details).
      */
-    public abstract void writeEndObject()
-        throws IOException;
+    public abstract void writeEndObject() throws IOException;
 
     /**
      * Method for writing a field name (JSON String surrounded by
@@ -609,8 +667,7 @@ public abstract class JsonGenerator
      * JSON specification for details), when field name is expected
      * (field names alternate with values).
      */
-    public abstract void writeFieldName(String name)
-        throws IOException;
+    public abstract void writeFieldName(String name) throws IOException;
 
     /**
      * Method similar to {@link #writeFieldName(String)}, main difference
@@ -623,8 +680,7 @@ public abstract class JsonGenerator
      * serialized String; implementations are strongly encouraged to make
      * use of more efficient methods argument object has.
      */
-    public abstract void writeFieldName(SerializableString name)
-        throws IOException;
+    public abstract void writeFieldName(SerializableString name) throws IOException;
 
     /*
     /**********************************************************
@@ -639,8 +695,7 @@ public abstract class JsonGenerator
      * surrounded in double quotes, and contents will be properly
      * escaped as required by JSON specification.
      */
-    public abstract void writeString(String text)
-        throws IOException;
+    public abstract void writeString(String text) throws IOException;
 
     /**
      * Method for outputting a String value. Depending on context
@@ -649,8 +704,7 @@ public abstract class JsonGenerator
      * surrounded in double quotes, and contents will be properly
      * escaped as required by JSON specification.
      */
-    public abstract void writeString(char[] text, int offset, int len)
-        throws IOException;
+    public abstract void writeString(char[] text, int offset, int len) throws IOException;
 
     /**
      * Method similar to {@link #writeString(String)}, but that takes
@@ -662,8 +716,7 @@ public abstract class JsonGenerator
      * sub-classes should override it with more efficient implementation
      * if possible.
      */
-    public abstract void writeString(SerializableString text)
-        throws IOException;
+    public abstract void writeString(SerializableString text) throws IOException;
 
     /**
      * Method similar to {@link #writeString(String)} but that takes as
@@ -702,13 +755,13 @@ public abstract class JsonGenerator
      */
     public abstract void writeUTF8String(byte[] text, int offset, int length)
         throws IOException;
-    
+
     /*
     /**********************************************************
     /* Public API, write methods, binary/raw content
     /**********************************************************
      */
-    
+
     /**
      * Method that will force generator to copy
      * input text verbatim with <b>no</b> modifications (including
@@ -787,7 +840,7 @@ public abstract class JsonGenerator
     public void writeRaw(SerializableString raw) throws IOException {
         writeRaw(raw.getValue());
     }
-    
+
     /**
      * Method that will force generator to copy
      * input text verbatim without any modifications, but assuming
@@ -801,6 +854,17 @@ public abstract class JsonGenerator
     public abstract void writeRawValue(String text, int offset, int len) throws IOException;
 
     public abstract void writeRawValue(char[] text, int offset, int len) throws IOException;
+
+    /**
+     * Method similar to {@link #writeRawValue(String)}, but potentially more
+     * efficient as it may be able to use pre-encoded content (similar to
+     * {@link #writeRaw(SerializableString)}.
+     * 
+     * @since 2.5
+     */
+    public void writeRawValue(SerializableString raw) throws IOException {
+        writeRawValue(raw.getValue());
+    }
 
     /**
      * Method that will output given chunk of binary data as base64
@@ -894,69 +958,83 @@ public abstract class JsonGenerator
      */
 
     /**
-     * Method for outputting given value as Json number.
+     * Method for outputting given value as JSON number.
      * Can be called in any context where a value is expected
      * (Array value, Object field value, root-level value).
      * Additional white space may be added around the value
      * if pretty-printing is enabled.
+     *
+     * @param v Number value to write
      *
      * @since 2.2
      */
     public void writeNumber(short v) throws IOException { writeNumber((int) v); }
 
     /**
-     * Method for outputting given value as Json number.
+     * Method for outputting given value as JSON number.
      * Can be called in any context where a value is expected
      * (Array value, Object field value, root-level value).
      * Additional white space may be added around the value
      * if pretty-printing is enabled.
+     *
+     * @param v Number value to write
      */
     public abstract void writeNumber(int v) throws IOException;
 
     /**
-     * Method for outputting given value as Json number.
+     * Method for outputting given value as JSON number.
      * Can be called in any context where a value is expected
      * (Array value, Object field value, root-level value).
      * Additional white space may be added around the value
      * if pretty-printing is enabled.
+     *
+     * @param v Number value to write
      */
     public abstract void writeNumber(long v) throws IOException;
 
     /**
-     * Method for outputting given value as Json number.
+     * Method for outputting given value as JSON number.
      * Can be called in any context where a value is expected
      * (Array value, Object field value, root-level value).
      * Additional white space may be added around the value
      * if pretty-printing is enabled.
+     *
+     * @param v Number value to write
      */
     public abstract void writeNumber(BigInteger v) throws IOException;
 
     /**
-     * Method for outputting indicate Json numeric value.
+     * Method for outputting indicate JSON numeric value.
      * Can be called in any context where a value is expected
      * (Array value, Object field value, root-level value).
      * Additional white space may be added around the value
      * if pretty-printing is enabled.
+     *
+     * @param v Number value to write
      */
-    public abstract void writeNumber(double d) throws IOException;
+    public abstract void writeNumber(double v) throws IOException;
 
     /**
-     * Method for outputting indicate Json numeric value.
+     * Method for outputting indicate JSON numeric value.
      * Can be called in any context where a value is expected
      * (Array value, Object field value, root-level value).
      * Additional white space may be added around the value
      * if pretty-printing is enabled.
+     *
+     * @param v Number value to write
      */
-    public abstract void writeNumber(float f) throws IOException;
+    public abstract void writeNumber(float v) throws IOException;
 
     /**
-     * Method for outputting indicate Json numeric value.
+     * Method for outputting indicate JSON numeric value.
      * Can be called in any context where a value is expected
      * (Array value, Object field value, root-level value).
      * Additional white space may be added around the value
      * if pretty-printing is enabled.
+     *
+     * @param v Number value to write
      */
-    public abstract void writeNumber(BigDecimal dec) throws IOException;
+    public abstract void writeNumber(BigDecimal v) throws IOException;
 
     /**
      * Write method that can be used for custom numeric types that can
@@ -968,9 +1046,9 @@ public abstract class JsonGenerator
      *<p>
      * Note: because of lack of type safety, some generator
      * implementations may not be able to implement this
-     * method. For example, if a binary json format is used,
+     * method. For example, if a binary JSON format is used,
      * it may require type information for encoding; similarly
-     * for generator-wrappers around Java objects or Json nodes.
+     * for generator-wrappers around Java objects or JSON nodes.
      * If implementation does not implement this method,
      * it needs to throw {@link UnsupportedOperationException}.
      * 
@@ -1565,5 +1643,4 @@ public abstract class JsonGenerator
         throw new IllegalStateException("No ObjectCodec defined for the generator, can only serialize simple wrapper types (type passed "
                 +value.getClass().getName()+")");
     }    
-
 }

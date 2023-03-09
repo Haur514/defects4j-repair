@@ -25,8 +25,8 @@ public class JsonWriteContext extends JsonStreamContext
 
     // // // Optional duplicate detection
 
-    protected final DupDetector _dups;
-    
+    protected DupDetector _dups;
+
     /*
     /**********************************************************
     /* Simple instance reuse slots; speed up things
@@ -37,12 +37,23 @@ public class JsonWriteContext extends JsonStreamContext
 
     protected JsonWriteContext _child = null;
 
+    /*
+    /**********************************************************
+    /* Location/state information (minus source reference)
+    /**********************************************************
+     */
+    
     /**
      * Name of the field of which value is to be parsed; only
      * used for OBJECT contexts
      */
     protected String _currentName;
 
+    /**
+     * @since 2.5
+     */
+    protected Object _currentValue;
+    
     /**
      * Marker used to indicate that we just received a name, and
      * now expect a value
@@ -68,11 +79,31 @@ public class JsonWriteContext extends JsonStreamContext
         _index = -1;
         _currentName = null;
         _gotName = false;
+        _currentValue = null;
         if (_dups != null) { _dups.reset(); }
         return this;
     }
+
+    public JsonWriteContext withDupDetector(DupDetector dups) {
+        _dups = dups;
+        return this;
+    }
+
+    @Override
+    public Object getCurrentValue() {
+        return _currentValue;
+    }
+
+    @Override
+    public void setCurrentValue(Object v) {
+        _currentValue = v;
+    }
     
-    // // // Factory methods
+    /*
+    /**********************************************************
+    /* Factory methods
+    /**********************************************************
+     */
 
     /**
      * @deprecated Since 2.3; use method that takes argument
@@ -106,6 +137,10 @@ public class JsonWriteContext extends JsonStreamContext
 
     @Override public final JsonWriteContext getParent() { return _parent; }
     @Override public final String getCurrentName() { return _currentName; }
+
+    public DupDetector getDupDetector() {
+        return _dups;
+    }
     
     // // // API sub-classes are to implement
 
@@ -114,7 +149,10 @@ public class JsonWriteContext extends JsonStreamContext
      *
      * @return Index of the field entry (0-based)
      */
-    public final int writeFieldName(String name) throws JsonProcessingException {
+    public int writeFieldName(String name) throws JsonProcessingException {
+        if (_gotName) {
+            return JsonWriteContext.STATUS_EXPECT_VALUE;
+        }
         _gotName = true;
         _currentName = name;
         if (_dups != null) { _checkDup(_dups, name); }
@@ -125,7 +163,7 @@ public class JsonWriteContext extends JsonStreamContext
         if (dd.isDup(name)) { throw new JsonGenerationException("Duplicate field '"+name+"'"); }
     }
     
-    public final int writeValue() {
+    public int writeValue() {
         // Most likely, object:
         if (_type == TYPE_OBJECT) {
             _gotName = false;
