@@ -70,8 +70,8 @@ public class Base32 extends BaseNCodec {
             -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 10-1f
             -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 20-2f
             -1, -1, 26, 27, 28, 29, 30, 31, -1, -1, -1, -1, -1, -1, -1, -1, // 30-3f 2-7
-            -1,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, // 40-4f A-N
-            15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,                     // 50-5a O-Z
+            -1,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, // 40-4f A-O
+            15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,                     // 50-5a P-Z
     };
 
     /**
@@ -85,8 +85,8 @@ public class Base32 extends BaseNCodec {
     };
 
     /**
-     * This array is a lookup table that translates Unicode characters drawn from the "Base32 |Hex Alphabet" (as
-     * specified in Table 3 of RFC 4648) into their 5-bit positive integer equivalents. Characters that are not in the
+     * This array is a lookup table that translates Unicode characters drawn from the "Base32 Hex Alphabet" (as
+     * specified in Table 4 of RFC 4648) into their 5-bit positive integer equivalents. Characters that are not in the
      * Base32 Hex alphabet but fall within the bounds of the array are translated to -1.
      */
     private static final byte[] HEX_DECODE_TABLE = {
@@ -95,13 +95,13 @@ public class Base32 extends BaseNCodec {
             -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 10-1f
             -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 20-2f
              0,  1,  2,  3,  4,  5,  6,  7,  8,  9, -1, -1, -1, -1, -1, -1, // 30-3f 2-7
-            -1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, // 40-4f A-N
-            25, 26, 27, 28, 29, 30, 31, 32,                                 // 50-57 O-V
+            -1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, // 40-4f A-O
+            25, 26, 27, 28, 29, 30, 31, 32,
     };
 
     /**
      * This array is a lookup table that translates 5-bit positive integer index values into their
-     * "Base32 Hex Alphabet" equivalents as specified in Table 3 of RFC 4648.
+     * "Base32 Hex Alphabet" equivalents as specified in Table 4 of RFC 4648.
      */
     private static final byte[] HEX_ENCODE_TABLE = {
             '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
