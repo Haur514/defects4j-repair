@@ -136,13 +136,13 @@
           <include name="**/Test*.java"/>
           <include name="**/*Test.java"/>
           <include name="**/*TestCase.java"/>
-          <exclude name="**/failing/*.java"/>
+          <exclude name="**/failing/**/*.java"/>
         </fileset>
       </batchtest>
       <batchtest todir="${maven.test.reports}" if="test">
         <fileset dir="${maven.build.testDir.0}">
           <include name="**/${test}.java"/>
-          <exclude name="**/failing/*.java"/>
+          <exclude name="**/failing/**/*.java"/>
         </fileset>
       </batchtest>
     </junit>
@@ -204,7 +204,7 @@
              linksource="false" 
              breakiterator="false" 
              maxmemory="1g" 
-             additionalparam="-hdf project.name &quot;Jackson-core 2.9.0-SNAPSHOT&quot;&#10;                  -d /tmp/initialize-revisions.pl_30279_1557252573/55f/target/site/apidocs">
+             additionalparam="-hdf project.name &quot;Jackson-core 2.9.0-SNAPSHOT&quot;&#10;                  -d /tmp/initialize-revisions.pl_30279_1557252573/57f/target/site/apidocs">
       <link href="http://docs.oracle.com/javase/7/docs/api/"/>
       <doclet name="com.google.doclava.Doclava" 
                path="${maven.repo.local}/com/google/doclava/doclava/1.0.3/doclava-1.0.3.jar"/>

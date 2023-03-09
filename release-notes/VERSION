@@ -18,6 +18,7 @@ JSON library.
 
 #17: Add 'JsonGenerator.writeString(Reader r, int charLength)'
  (constributed by Logan W)
+#57: Add support for non-blocking ("async") JSON parsing
 #304: Optimize `NumberOutput.outputLong()` method
 #306: Add new method in `JsonStreamContext` to construct `JsonPointer`
 #312: Add `JsonProcessingException.clearLocation()` to allow clearing
@@ -29,6 +30,7 @@ JSON library.
 #325: `DataInput` backed parser should handle `EOFException` at end of doc
  (reported by Brad H)
 #330: `FilteringParserDelegate` seems to miss last closing `END_OBJECT`
+ (contributed by Rafal F)
 #340: Making `WriterBasedJsonGenerator` non-final
  (requested by rfoltyns@github)
 #356: Improve indication of "source reference" in `JsonLocation` wrt `byte[]`,`char[]`
@@ -37,6 +39,11 @@ JSON library.
  (contributed by Michael S)
 #374: Minimal and DefaultPrettyPrinter with configurable separators 
  (contributed by Rafal F)
+
+2.8.9 (not yet released)
+
+#382: ArrayIndexOutOfBoundsException from UTF32Reader.read on invalid input
+ (reported by Wil S)
 
 2.8.8 (05-Apr-2017)
 

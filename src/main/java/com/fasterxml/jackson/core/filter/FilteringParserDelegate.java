@@ -233,18 +233,13 @@ public class FilteringParserDelegate extends JsonParserDelegate
         // Check for _allowMultipleMatches - false and at least there is one token - which is _currToken
         // check for no buffered context _exposedContext - null
         // If all the conditions matches then check for scalar / non-scalar property
+
         if (!_allowMultipleMatches && (_currToken != null) && (_exposedContext == null)) {
-            //if not scalar and ended successfully, and !includePath, then return null
-                if (_currToken.isStructEnd()) {
-                    if (_headContext.isStartHandled()) {
-                        return (_currToken = null);
-                    }
-                } else if (_currToken.isScalarValue()) {
-                    //else if scalar, and scalar not present in obj/array and !includePath and INCLUDE_ALL matched once
-                    // then return null 
-                    if (!_headContext.isStartHandled() && (_itemFilter == TokenFilter.INCLUDE_ALL)) {
-                        return (_currToken = null);
-                    }
+            // if scalar, and scalar not present in obj/array and !includePath and INCLUDE_ALL
+            // matched once, return null
+            if (_currToken.isScalarValue() && !_headContext.isStartHandled() && !_includePath
+                    && (_itemFilter == TokenFilter.INCLUDE_ALL)) {
+                return (_currToken = null);
             }
         }
         // Anything buffered?
@@ -442,7 +437,7 @@ public class FilteringParserDelegate extends JsonParserDelegate
                 f = _headContext.checkValue(f);
                 if ((f == TokenFilter.INCLUDE_ALL)
                         || ((f != null) && f.includeValue(delegate))) {
-                    return (_currToken = t);
+                        return (_currToken = t);
                 }
             }
             // Otherwise not included (leaves must be explicitly included)
@@ -602,7 +597,7 @@ public class FilteringParserDelegate extends JsonParserDelegate
                     f = _headContext.checkValue(f);
                     if ((f == TokenFilter.INCLUDE_ALL)
                             || ((f != null) && f.includeValue(delegate))) {
-                        return (_currToken = t);
+                            return (_currToken = t);
                     }
                 }
                 // Otherwise not included (leaves must be explicitly included)
@@ -734,7 +729,7 @@ public class FilteringParserDelegate extends JsonParserDelegate
                     f = _headContext.checkValue(f);
                     if ((f == TokenFilter.INCLUDE_ALL)
                             || ((f != null) && f.includeValue(delegate))) {
-                        return _nextBuffered(buffRoot);
+                            return _nextBuffered(buffRoot);
                     }
                 }
                 // Otherwise not included (leaves must be explicitly included)
@@ -772,7 +767,8 @@ public class FilteringParserDelegate extends JsonParserDelegate
             }
         }
     }
-    
+
+
     @Override
     public JsonToken nextValue() throws IOException {
         // Re-implemented same as ParserMinimalBase:

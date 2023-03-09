@@ -1,13 +1,15 @@
 package com.fasterxml.jackson.core.json.async;
 
 import java.io.*;
-import java.util.Arrays;
 
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.core.base.ParserBase;
 import com.fasterxml.jackson.core.io.IOContext;
 import com.fasterxml.jackson.core.json.JsonReadContext;
 import com.fasterxml.jackson.core.sym.ByteQuadsCanonicalizer;
+import com.fasterxml.jackson.core.util.ByteArrayBuilder;
+
+import static com.fasterxml.jackson.core.JsonTokenId.*;
 
 /**
  * Intermediate base class for non-blocking JSON parsers.
@@ -33,16 +35,19 @@ public abstract class NonBlockingJsonParserBase
      */
     protected final static int MAJOR_ROOT = 1;
 
-    protected final static int MAJOR_OBJECT_FIELD = 2;
-    protected final static int MAJOR_OBJECT_VALUE = 3;
+    protected final static int MAJOR_OBJECT_FIELD_FIRST = 2;
+    protected final static int MAJOR_OBJECT_FIELD_NEXT = 3;
 
-    protected final static int MAJOR_ARRAY_ELEMENT = 4;
+    protected final static int MAJOR_OBJECT_VALUE = 4;
+
+    protected final static int MAJOR_ARRAY_ELEMENT_FIRST = 5;
+    protected final static int MAJOR_ARRAY_ELEMENT_NEXT = 6;
 
     /**
      * State after non-blocking input source has indicated that no more input
      * is forthcoming AND we have exhausted all the input
      */
-    protected final static int MAJOR_CLOSED = 5;
+    protected final static int MAJOR_CLOSED = 7;
 
     /*
     /**********************************************************************
@@ -54,25 +59,57 @@ public abstract class NonBlockingJsonParserBase
      * State between root-level value, waiting for at least one white-space
      * character as separator
      */
-    protected final static int MINOR_FIELD_ROOT_NEED_SEPARATOR = 1;
+    protected final static int MINOR_ROOT_NEED_SEPARATOR = 1;
 
     /**
      * State between root-level value, having processed at least one white-space
      * character, and expecting either more, start of a value, or end of input
      * stream.
      */
-    protected final static int MINOR_FIELD_ROOT_GOT_SEPARATOR = 2;
-    
+    protected final static int MINOR_ROOT_GOT_SEPARATOR = 2;
+
+    // state before field name itself, waiting for quote (or unquoted name)
+    protected final static int MINOR_FIELD_LEADING_WS = 3;
+    // state before field name, expecting comma (or closing curly), then field name
+    protected final static int MINOR_FIELD_LEADING_COMMA = 4;
+
+    // State within regular (double-quoted) field name
     protected final static int MINOR_FIELD_NAME = 10;
+    // State within regular (double-quoted) field name, within escape (having
+    // encountered either just backslash, or backslash and 'u' and 0 - 3 hex digits,
+    protected final static int MINOR_FIELD_NAME_ESCAPE = 11;
 
-    protected final static int MINOR_VALUE_NUMBER = 11;
+    protected final static int MINOR_VALUE_LEADING_WS = 14;
+    protected final static int MINOR_VALUE_LEADING_COMMA = 15;
+    protected final static int MINOR_VALUE_LEADING_COLON = 16;
 
-    protected final static int MINOR_VALUE_STRING = 15;
+    protected final static int MINOR_VALUE_TOKEN_NULL = 17;
+    protected final static int MINOR_VALUE_TOKEN_TRUE = 18;
+    protected final static int MINOR_VALUE_TOKEN_FALSE = 19;
+    
+    protected final static int MINOR_NUMBER_LEADING_MINUS = 20;
+    protected final static int MINOR_NUMBER_LEADING_ZERO = 21;
+    protected final static int MINOR_NUMBER_INTEGER_DIGITS = 22;
 
-    protected final static int MINOR_VALUE_TOKEN_NULL = 15;
-    protected final static int MINOR_VALUE_TOKEN_TRUE = 15;
-    protected final static int MINOR_VALUE_TOKEN_FALSE = 15;
+    protected final static int MINOR_NUMBER_FRACTION_DIGITS = 24;
+    protected final static int MINOR_NUMBER_EXPONENT_MARKER = 25;
+    protected final static int MINOR_NUMBER_EXPONENT_DIGITS = 27;
 
+    protected final static int MINOR_VALUE_STRING = 30;
+    protected final static int MINOR_VALUE_STRING_ESCAPE = 31;
+    protected final static int MINOR_VALUE_STRING_UTF8_2 = 32;
+    protected final static int MINOR_VALUE_STRING_UTF8_3 = 33;
+    protected final static int MINOR_VALUE_STRING_UTF8_4 = 34;
+
+    /**
+     * Special state at which point decoding of a non-quoted token has encountered
+     * a problem; that is, either not matching fully (like "truf" instead of "true",
+     * at "tru"), or not having trailing separator (or end of input), like "trueful".
+     * Attempt is made, then, to decode likely full input token to report suitable
+     * error.
+     */
+    protected final static int MINOR_VALUE_TOKEN_ERROR = 60;
+    
     /*
     /**********************************************************************
     /* Helper objects, symbols (field names)
@@ -87,13 +124,20 @@ public abstract class NonBlockingJsonParserBase
     /**
      * Temporary buffer used for name parsing.
      */
-    protected int[] _quadBuffer = NO_INTS;
+    protected int[] _quadBuffer = new int[8];
 
-    /**
-     * Quads used for hash calculation
-     */
-    protected int _quad1, _quad2;
+    protected int _quadLength;
 
+    protected int _quad1;
+
+    protected int _pending32;
+
+    protected int _pendingBytes;
+
+    protected int _quoted32;
+
+    protected int _quotedDigits;
+    
     /*
     /**********************************************************************
     /* Additional parsing state
@@ -123,35 +167,6 @@ public abstract class NonBlockingJsonParserBase
 
     /*
     /**********************************************************************
-    /* Other buffering
-    /**********************************************************************
-     */
-    
-    /**
-     * Temporary buffer for holding content if input not contiguous (but can
-     * fit in buffer)
-     */
-    protected byte[] _inputCopy;
-
-    /**
-     * Number of bytes buffered in <code>_inputCopy</code>
-     */
-    protected int _inputCopyLen;
-
-    /**
-     * Temporary storage for 32-bit values (int, float), as well as length markers
-     * for length-prefixed values.
-     */
-    protected int _pending32;
-
-    /**
-     * Temporary storage for 64-bit values (long, double), secondary storage
-     * for some other things (scale of BigDecimal values)
-     */
-    protected long _pending64;
-
-    /*
-    /**********************************************************************
     /* Life-cycle
     /**********************************************************************
      */
@@ -161,9 +176,6 @@ public abstract class NonBlockingJsonParserBase
     {
         super(ctxt, parserFeatures);
         _symbols = sym;
-        // We don't need a lot; for most things maximum known a-priori length below 70 bytes
-        _inputCopy = ctxt.allocReadIOBuffer(500);
-
         _currToken = null;
         _majorState = MAJOR_INITIAL;
         _majorStateAfterValue = MAJOR_ROOT;
@@ -205,6 +217,15 @@ public abstract class NonBlockingJsonParserBase
     public abstract int releaseBuffered(OutputStream out) throws IOException;
 
     @Override
+    protected void _releaseBuffers() throws IOException
+    {
+        super._releaseBuffers();
+        // Merge found symbols, if any:
+        _symbols.release();
+        // any other temp buffers?
+    }
+
+    @Override
     public Object getInputSource() {
         // since input is "pushed", to traditional source...
         return null;
@@ -212,7 +233,11 @@ public abstract class NonBlockingJsonParserBase
 
     @Override
     protected void _closeInput() throws IOException {
-        // nothing to do here
+        // 30-May-2017, tatu: Seems like this is the most certain way to prevent
+        //    further decoding... not the optimal place, but due to inheritance
+        //    hierarchy most convenient.
+        _inputPtr = 0;
+        _inputEnd = 0;
     }
 
     /*
@@ -254,87 +279,156 @@ public abstract class NonBlockingJsonParserBase
         if (_currToken == JsonToken.VALUE_STRING) {
             return _textBuffer.contentsAsString();
         }
-        JsonToken t = _currToken;
-        if (t == null || _currToken == JsonToken.NOT_AVAILABLE) { // null only before/after document
+        return _getText2(_currToken);
+    }
+
+    protected final String _getText2(JsonToken t)
+    {
+        if (t == null) {
             return null;
         }
-        if (t == JsonToken.FIELD_NAME) {
+        switch (t.id()) {
+        case ID_NOT_AVAILABLE:
+            return null;
+        case ID_FIELD_NAME:
             return _parsingContext.getCurrentName();
+        case ID_STRING:
+            // fall through
+        case ID_NUMBER_INT:
+        case ID_NUMBER_FLOAT:
+            return _textBuffer.contentsAsString();
+        default:
+          return t.asString();
         }
-        if (t.isNumeric()) {
-            // TODO: optimize?
-            return getNumberValue().toString();
+    }
+
+    @Override // since 2.8
+    public int getText(Writer writer) throws IOException
+    {
+        JsonToken t = _currToken;
+        if (t == JsonToken.VALUE_STRING) {
+            return _textBuffer.contentsToWriter(writer);
         }
-        return _currToken.asString();
+        if (t == JsonToken.FIELD_NAME) {
+            String n = _parsingContext.getCurrentName();
+            writer.write(n);
+            return n.length();
+        }
+        if (t != null) {
+            if (t.isNumeric()) {
+                return _textBuffer.contentsToWriter(writer);
+            }
+            if (t == JsonToken.NOT_AVAILABLE) {
+                _reportError("Current token not available: can not call this method");
+            }
+            char[] ch = t.asCharArray();
+            writer.write(ch);
+            return ch.length;
+        }
+        return 0;
+    }
+
+    // // // Let's override default impls for improved performance
+    
+    // @since 2.1
+    @Override
+    public String getValueAsString() throws IOException
+    {
+        if (_currToken == JsonToken.VALUE_STRING) {
+            return _textBuffer.contentsAsString();
+        }
+        if (_currToken == JsonToken.FIELD_NAME) {
+            return getCurrentName();
+        }
+        return super.getValueAsString(null);
+    }
+    
+    // @since 2.1
+    @Override
+    public String getValueAsString(String defValue) throws IOException
+    {
+        if (_currToken == JsonToken.VALUE_STRING) {
+            return _textBuffer.contentsAsString();
+        }
+        if (_currToken == JsonToken.FIELD_NAME) {
+            return getCurrentName();
+        }
+        return super.getValueAsString(defValue);
     }
 
     @Override
     public char[] getTextCharacters() throws IOException
     {
-        switch (currentTokenId()) {
-        case JsonTokenId.ID_STRING:
-            return _textBuffer.getTextBuffer();
-        case JsonTokenId.ID_FIELD_NAME:
-            if (!_nameCopied) {
-                String name = _parsingContext.getCurrentName();
-                int nameLen = name.length();
-                if (_nameCopyBuffer == null) {
-                    _nameCopyBuffer = _ioContext.allocNameCopyBuffer(nameLen);
-                } else if (_nameCopyBuffer.length < nameLen) {
-                    _nameCopyBuffer = new char[nameLen];
+        if (_currToken != null) { // null only before/after document
+            switch (_currToken.id()) {
+                
+            case ID_FIELD_NAME:
+                if (!_nameCopied) {
+                    String name = _parsingContext.getCurrentName();
+                    int nameLen = name.length();
+                    if (_nameCopyBuffer == null) {
+                        _nameCopyBuffer = _ioContext.allocNameCopyBuffer(nameLen);
+                    } else if (_nameCopyBuffer.length < nameLen) {
+                        _nameCopyBuffer = new char[nameLen];
+                    }
+                    name.getChars(0, nameLen, _nameCopyBuffer, 0);
+                    _nameCopied = true;
                 }
-                name.getChars(0, nameLen, _nameCopyBuffer, 0);
-                _nameCopied = true;
+                return _nameCopyBuffer;
+    
+            case ID_STRING:
+                // fall through
+            case ID_NUMBER_INT:
+            case ID_NUMBER_FLOAT:
+                return _textBuffer.getTextBuffer();
+                
+            default:
+                return _currToken.asCharArray();
             }
-            return _nameCopyBuffer;
-        case JsonTokenId.ID_NUMBER_INT:
-        case JsonTokenId.ID_NUMBER_FLOAT:
-            return getNumberValue().toString().toCharArray();
-        case JsonTokenId.ID_NO_TOKEN:
-        case JsonTokenId.ID_NOT_AVAILABLE:
-            return null;
-        default:
-            return _currToken.asCharArray();
         }
-    }
-
-    @Override    
-    public int getTextLength() throws IOException
-    {
-        switch (currentTokenId()) {
-        case JsonTokenId.ID_STRING:
-            return _textBuffer.size();
-        case JsonTokenId.ID_FIELD_NAME:
-            return _parsingContext.getCurrentName().length();
-        case JsonTokenId.ID_NUMBER_INT:
-        case JsonTokenId.ID_NUMBER_FLOAT:
-            return getNumberValue().toString().length();
-        case JsonTokenId.ID_NO_TOKEN:
-        case JsonTokenId.ID_NOT_AVAILABLE:
-            return 0; // or throw exception?
-        default:
-            return _currToken.asCharArray().length;
-        }
+        return null;
     }
 
     @Override
-    public int getTextOffset() throws IOException {
+    public int getTextLength() throws IOException
+    {
+        if (_currToken != null) { // null only before/after document
+            switch (_currToken.id()) {
+                
+            case ID_FIELD_NAME:
+                return _parsingContext.getCurrentName().length();
+            case ID_STRING:
+                // fall through
+            case ID_NUMBER_INT:
+            case ID_NUMBER_FLOAT:
+                return _textBuffer.size();
+                
+            default:
+                return _currToken.asCharArray().length;
+            }
+        }
         return 0;
     }
 
     @Override
-    public int getText(Writer w) throws IOException
+    public int getTextOffset() throws IOException
     {
-        if (_currToken == JsonToken.VALUE_STRING) {
-            return _textBuffer.contentsToWriter(w);
+        // Most have offset of 0, only some may have other values:
+        if (_currToken != null) {
+            switch (_currToken.id()) {
+            case ID_FIELD_NAME:
+                return 0;
+            case ID_STRING:
+                // fall through
+            case ID_NUMBER_INT:
+            case ID_NUMBER_FLOAT:
+                return _textBuffer.getTextOffset();
+            default:
+            }
         }
-        if (_currToken == JsonToken.NOT_AVAILABLE) {
-            _reportError("Current token not available: can not call this method");
-        }
-        // otherwise default handling works fine
-        return super.getText(w);
+        return 0;
     }
-    
+
     /*
     /**********************************************************************
     /* Public API, access to token information, binary
@@ -344,10 +438,25 @@ public abstract class NonBlockingJsonParserBase
     @Override
     public byte[] getBinaryValue(Base64Variant b64variant) throws IOException
     {
-        if (_currToken != JsonToken.VALUE_EMBEDDED_OBJECT ) {
-            _reportError("Current token (%s) not VALUE_EMBEDDED_OBJECT, can not access as binary", _currToken);
+        if (_currToken != JsonToken.VALUE_STRING) {
+            _reportError("Current token (%s) not VALUE_STRING or VALUE_EMBEDDED_OBJECT, can not access as binary",
+                    _currToken);
+        }
+        if (_binaryValue == null) {
+            @SuppressWarnings("resource")
+            ByteArrayBuilder builder = _getByteArrayBuilder();
+            _decodeBase64(getText(), builder, b64variant);
+            _binaryValue = builder.toByteArray();
         }
         return _binaryValue;
+    }
+
+    @Override
+    public int readBinaryValue(Base64Variant b64variant, OutputStream out) throws IOException
+    {
+        byte[] b = getBinaryValue(b64variant);
+        out.write(b);
+        return b.length;
     }
 
     @Override
@@ -359,16 +468,6 @@ public abstract class NonBlockingJsonParserBase
         return null;
     }
 
-    @Override
-    public int readBinaryValue(Base64Variant b64variant, OutputStream out)
-            throws IOException {
-        if (_currToken != JsonToken.VALUE_EMBEDDED_OBJECT ) {
-            _reportError("Current token (%s) not VALUE_EMBEDDED_OBJECT, can not access as binary", _currToken);
-        }
-        out.write(_binaryValue);
-        return _binaryValue.length;
-    }
-
     /*
     /**********************************************************************
     /* Handling of nested scope, state
@@ -378,16 +477,16 @@ public abstract class NonBlockingJsonParserBase
     protected final JsonToken _startArrayScope() throws IOException
     {
         _parsingContext = _parsingContext.createChildArrayContext(-1, -1);
-        _majorState = MAJOR_ARRAY_ELEMENT;
-        _majorStateAfterValue = MAJOR_ARRAY_ELEMENT;
+        _majorState = MAJOR_ARRAY_ELEMENT_FIRST;
+        _majorStateAfterValue = MAJOR_ARRAY_ELEMENT_NEXT;
         return (_currToken = JsonToken.START_ARRAY);
     }
 
     protected final JsonToken _startObjectScope() throws IOException
     {
         _parsingContext = _parsingContext.createChildObjectContext(-1, -1);
-        _majorState = MAJOR_OBJECT_FIELD;
-        _majorStateAfterValue = MAJOR_OBJECT_FIELD;
+        _majorState = MAJOR_OBJECT_FIELD_FIRST;
+        _majorStateAfterValue = MAJOR_OBJECT_FIELD_NEXT;
         return (_currToken = JsonToken.START_OBJECT);
     }
 
@@ -400,9 +499,9 @@ public abstract class NonBlockingJsonParserBase
         _parsingContext = ctxt;
         int st;
         if (ctxt.inObject()) {
-            st = MAJOR_OBJECT_FIELD;
+            st = MAJOR_OBJECT_FIELD_NEXT;
         } else if (ctxt.inArray()) {
-            st = MAJOR_ARRAY_ELEMENT;
+            st = MAJOR_ARRAY_ELEMENT_NEXT;
         } else {
             st = MAJOR_ROOT;
         }
@@ -420,9 +519,9 @@ public abstract class NonBlockingJsonParserBase
         _parsingContext = ctxt;
         int st;
         if (ctxt.inObject()) {
-            st = MAJOR_OBJECT_FIELD;
+            st = MAJOR_OBJECT_FIELD_NEXT;
         } else if (ctxt.inArray()) {
-            st = MAJOR_ARRAY_ELEMENT;
+            st = MAJOR_ARRAY_ELEMENT_NEXT;
         } else {
             st = MAJOR_ROOT;
         }
@@ -432,101 +531,171 @@ public abstract class NonBlockingJsonParserBase
     }
 
     /*
-    /**********************************************************************
-    /* Internal methods, field name parsing
-    /**********************************************************************
+    /**********************************************************
+    /* Internal methods, symbol (name) handling
+    /**********************************************************
      */
 
-    // Helper method for trying to find specified encoded UTF-8 byte sequence
-    // from symbol table; if successful avoids actual decoding to String
-    protected final String _findDecodedFromSymbols(byte[] inBuf, int inPtr, int len) throws IOException
+    protected final String _findName(int q1, int lastQuadBytes) throws JsonParseException
     {
-        // First: maybe we already have this name decoded?
-        if (len < 5) {
-            int q = inBuf[inPtr] & 0xFF;
-            if (--len > 0) {
-                q = (q << 8) + (inBuf[++inPtr] & 0xFF);
-                if (--len > 0) {
-                    q = (q << 8) + (inBuf[++inPtr] & 0xFF);
-                    if (--len > 0) {
-                        q = (q << 8) + (inBuf[++inPtr] & 0xFF);
-                    }
-                }
-            }
-            _quad1 = q;
-            return _symbols.findName(q);
+        q1 = _padLastQuad(q1, lastQuadBytes);
+        // Usually we'll find it from the canonical symbol table already
+        String name = _symbols.findName(q1);
+        if (name != null) {
+            return name;
         }
-        if (len < 9) {
-            // First quadbyte is easy
-            int q1 = (inBuf[inPtr] & 0xFF) << 8;
-            q1 += (inBuf[++inPtr] & 0xFF);
-            q1 <<= 8;
-            q1 += (inBuf[++inPtr] & 0xFF);
-            q1 <<= 8;
-            q1 += (inBuf[++inPtr] & 0xFF);
-            int q2 = (inBuf[++inPtr] & 0xFF);
-            len -= 5;
-            if (len > 0) {
-                q2 = (q2 << 8) + (inBuf[++inPtr] & 0xFF);
-                if (--len > 0) {
-                    q2 = (q2 << 8) + (inBuf[++inPtr] & 0xFF);
-                    if (--len > 0) {
-                        q2 = (q2 << 8) + (inBuf[++inPtr] & 0xFF);
-                    }
-                }
-            }
-            _quad1 = q1;
-            _quad2 = q2;
-            return _symbols.findName(q1, q2);
-        }
-        return _findDecodedLonger(inBuf, inPtr, len);
-    }
-    
-    // Method for locating names longer than 8 bytes (in UTF-8)
-    private final String _findDecodedLonger(byte[] inBuf, int inPtr, int len) throws IOException
-    {
-        // first, need enough buffer to store bytes as ints:
-        {
-            int bufLen = (len + 3) >> 2;
-            if (bufLen > _quadBuffer.length) {
-                _quadBuffer = Arrays.copyOf(_quadBuffer, bufLen+4);
-            }
-        }
-        // then decode, full quads first
-        int offset = 0;
-        do {
-            int q = (inBuf[inPtr++] & 0xFF) << 8;
-            q |= inBuf[inPtr++] & 0xFF;
-            q <<= 8;
-            q |= inBuf[inPtr++] & 0xFF;
-            q <<= 8;
-            q |= inBuf[inPtr++] & 0xFF;
-            _quadBuffer[offset++] = q;
-        } while ((len -= 4) > 3);
-        // and then leftovers
-        if (len > 0) {
-            int q = inBuf[inPtr] & 0xFF;
-            if (--len > 0) {
-                q = (q << 8) + (inBuf[++inPtr] & 0xFF);
-                if (--len > 0) {
-                    q = (q << 8) + (inBuf[++inPtr] & 0xFF);
-                }
-            }
-            _quadBuffer[offset++] = q;
-        }
-        return _symbols.findName(_quadBuffer, offset);
+        // If not, more work. We'll need add stuff to buffer
+        _quadBuffer[0] = q1;
+        return _addName(_quadBuffer, 1, lastQuadBytes);
     }
 
-    protected final String _addDecodedToSymbols(int len, String name)
+    protected final String _findName(int q1, int q2, int lastQuadBytes) throws JsonParseException
     {
-        if (len < 5) {
-            return _symbols.addName(name, _quad1);
+        q2 = _padLastQuad(q2, lastQuadBytes);
+        // Usually we'll find it from the canonical symbol table already
+        String name = _symbols.findName(q1, q2);
+        if (name != null) {
+            return name;
         }
-        if (len < 9) {
-            return _symbols.addName(name, _quad1, _quad2);
+        // If not, more work. We'll need add stuff to buffer
+        _quadBuffer[0] = q1;
+        _quadBuffer[1] = q2;
+        return _addName(_quadBuffer, 2, lastQuadBytes);
+    }
+
+    protected final String _findName(int q1, int q2, int q3, int lastQuadBytes) throws JsonParseException
+    {
+        q3 = _padLastQuad(q3, lastQuadBytes);
+        String name = _symbols.findName(q1, q2, q3);
+        if (name != null) {
+            return name;
         }
-        int qlen = (len + 3) >> 2;
-        return _symbols.addName(name, _quadBuffer, qlen);
+        int[] quads = _quadBuffer;
+        quads[0] = q1;
+        quads[1] = q2;
+        quads[2] = _padLastQuad(q3, lastQuadBytes);
+        return _addName(quads, 3, lastQuadBytes);
+    }
+
+    /**
+     * This is the main workhorse method used when we take a symbol
+     * table miss. It needs to demultiplex individual bytes, decode
+     * multi-byte chars (if any), and then construct Name instance
+     * and add it to the symbol table.
+     */
+    protected final String _addName(int[] quads, int qlen, int lastQuadBytes) throws JsonParseException
+    {
+        /* Ok: must decode UTF-8 chars. No other validation is
+         * needed, since unescaping has been done earlier as necessary
+         * (as well as error reporting for unescaped control chars)
+         */
+        // 4 bytes per quad, except last one maybe less
+        int byteLen = (qlen << 2) - 4 + lastQuadBytes;
+
+        /* And last one is not correctly aligned (leading zero bytes instead
+         * need to shift a bit, instead of trailing). Only need to shift it
+         * for UTF-8 decoding; need revert for storage (since key will not
+         * be aligned, to optimize lookup speed)
+         */
+        int lastQuad;
+
+        if (lastQuadBytes < 4) {
+            lastQuad = quads[qlen-1];
+            // 8/16/24 bit left shift
+            quads[qlen-1] = (lastQuad << ((4 - lastQuadBytes) << 3));
+        } else {
+            lastQuad = 0;
+        }
+
+        // Need some working space, TextBuffer works well:
+        char[] cbuf = _textBuffer.emptyAndGetCurrentSegment();
+        int cix = 0;
+
+        for (int ix = 0; ix < byteLen; ) {
+            int ch = quads[ix >> 2]; // current quad, need to shift+mask
+            int byteIx = (ix & 3);
+            ch = (ch >> ((3 - byteIx) << 3)) & 0xFF;
+            ++ix;
+
+            if (ch > 127) { // multi-byte
+                int needed;
+                if ((ch & 0xE0) == 0xC0) { // 2 bytes (0x0080 - 0x07FF)
+                    ch &= 0x1F;
+                    needed = 1;
+                } else if ((ch & 0xF0) == 0xE0) { // 3 bytes (0x0800 - 0xFFFF)
+                    ch &= 0x0F;
+                    needed = 2;
+                } else if ((ch & 0xF8) == 0xF0) { // 4 bytes; double-char with surrogates and all...
+                    ch &= 0x07;
+                    needed = 3;
+                } else { // 5- and 6-byte chars not valid xml chars
+                    _reportInvalidInitial(ch);
+                    needed = ch = 1; // never really gets this far
+                }
+                if ((ix + needed) > byteLen) {
+                    _reportInvalidEOF(" in field name", JsonToken.FIELD_NAME);
+                }
+                
+                // Ok, always need at least one more:
+                int ch2 = quads[ix >> 2]; // current quad, need to shift+mask
+                byteIx = (ix & 3);
+                ch2 = (ch2 >> ((3 - byteIx) << 3));
+                ++ix;
+                
+                if ((ch2 & 0xC0) != 0x080) {
+                    _reportInvalidOther(ch2);
+                }
+                ch = (ch << 6) | (ch2 & 0x3F);
+                if (needed > 1) {
+                    ch2 = quads[ix >> 2];
+                    byteIx = (ix & 3);
+                    ch2 = (ch2 >> ((3 - byteIx) << 3));
+                    ++ix;
+                    
+                    if ((ch2 & 0xC0) != 0x080) {
+                        _reportInvalidOther(ch2);
+                    }
+                    ch = (ch << 6) | (ch2 & 0x3F);
+                    if (needed > 2) { // 4 bytes? (need surrogates on output)
+                        ch2 = quads[ix >> 2];
+                        byteIx = (ix & 3);
+                        ch2 = (ch2 >> ((3 - byteIx) << 3));
+                        ++ix;
+                        if ((ch2 & 0xC0) != 0x080) {
+                            _reportInvalidOther(ch2 & 0xFF);
+                        }
+                        ch = (ch << 6) | (ch2 & 0x3F);
+                    }
+                }
+                if (needed > 2) { // surrogate pair? once again, let's output one here, one later on
+                    ch -= 0x10000; // to normalize it starting with 0x0
+                    if (cix >= cbuf.length) {
+                        cbuf = _textBuffer.expandCurrentSegment();
+                    }
+                    cbuf[cix++] = (char) (0xD800 + (ch >> 10));
+                    ch = 0xDC00 | (ch & 0x03FF);
+                }
+            }
+            if (cix >= cbuf.length) {
+                cbuf = _textBuffer.expandCurrentSegment();
+            }
+            cbuf[cix++] = (char) ch;
+        }
+
+        // Ok. Now we have the character array, and can construct the String
+        String baseName = new String(cbuf, 0, cix);
+        // And finally, un-align if necessary
+        if (lastQuadBytes < 4) {
+            quads[qlen-1] = lastQuad;
+        }
+        return _symbols.addName(baseName, quads, qlen);
+    }
+
+    /**
+     * Helper method needed to fix [jackson-core#148], masking of 0x00 character
+     */
+    protected final static int _padLastQuad(int q, int bytes) {
+        return (bytes == 4) ? q : (q | (-1 << (bytes << 3)));
     }
 
     /*
@@ -548,6 +717,13 @@ public abstract class NonBlockingJsonParserBase
         return (_currToken = null);
     }
 
+    protected final JsonToken _fieldComplete(String name) throws IOException
+    {
+        _majorState = MAJOR_OBJECT_VALUE;
+        _parsingContext.setCurrentName(name);
+        return (_currToken = JsonToken.FIELD_NAME);
+    }
+
     protected final JsonToken _valueComplete(JsonToken t) throws IOException
     {
         _majorState = _majorStateAfterValue;
@@ -555,18 +731,50 @@ public abstract class NonBlockingJsonParserBase
         return t;
     }
 
+    protected final JsonToken _valueCompleteInt(int value, String asText) throws IOException
+    {
+        _textBuffer.resetWithString(asText);
+        _intLength = asText.length();
+        _numTypesValid = NR_INT; // to force parsing
+        _numberInt = value;
+        _majorState = _majorStateAfterValue;
+        JsonToken t = JsonToken.VALUE_NUMBER_INT;
+        _currToken = t;
+        return t;
+    }
+
     /*
     /**********************************************************************
-    /* Internal methods, error reporting
+    /* Internal methods, error reporting, related
     /**********************************************************************
      */
 
+    protected final void _updateLocation()
+    {
+        _tokenInputRow = _currInputRow;
+        final int ptr = _inputPtr;
+        _tokenInputTotal = _currInputProcessed + ptr;
+        _tokenInputCol = ptr - _currInputRowStart;
+    }
+
+    protected void _reportInvalidChar(int c) throws JsonParseException {
+        // Either invalid WS or illegal UTF-8 start char
+        if (c < INT_SPACE) {
+            _throwInvalidSpace(c);
+        }
+        _reportInvalidInitial(c);
+    }
+    
     protected void _reportInvalidInitial(int mask) throws JsonParseException {
         _reportError("Invalid UTF-8 start byte 0x"+Integer.toHexString(mask));
     }
 	
     protected void _reportInvalidOther(int mask, int ptr) throws JsonParseException {
         _inputPtr = ptr;
+        _reportInvalidOther(mask);
+    }
+
+    protected void _reportInvalidOther(int mask) throws JsonParseException {
         _reportError("Invalid UTF-8 middle byte 0x"+Integer.toHexString(mask));
     }
 }
