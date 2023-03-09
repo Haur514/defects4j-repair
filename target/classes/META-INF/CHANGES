@@ -1,6 +1,26 @@
 jsoup changelog
 
-*** Release 1.10.3 [PENDING]
+*** Release 1.11.1 [PENDING]
+  * Updated language level to Java 7 from Java 5. To maintain Android support (of minversion 8), try-with-resources are
+    not used.
+    <https://github.com/jhy/jsoup/issues/899>
+
+  * When loading content from a URL or a file, the content is now parsed as it streams in from the network or disk,
+    rather than being fully buffered before parsing. This substantially reduces memory consumption & large garbage
+    objects when loading large files.
+    <https://github.com/jhy/jsoup/issues/904>
+
+  * Bugfix: if a document was was redecoded after character set detection, the HTML parser was not reset correctly,
+    which could lead to an incorrect DOM.
+    <https://github.com/jhy/jsoup/issues/877>
+
+  * Bugfix: attributes with the same name but different case would be incorrectly treated as different attributes.
+    <https://github.com/jhy/jsoup/pull/903>
+
+  * Bugfix: self-closing tags for known empty elements were incorrectly treated as errors.
+    <https://github.com/jhy/jsoup/issues/868>
+
+*** Release 1.10.3 [2017-Jun-11]
   * Added Elements.eachText() and Elements.eachAttr(name), which return a list of Element's text or attribute values,
     respectively. This makes it simpler to for example get a list of each URL on a page:
     List<String> urls = doc.select("a").eachAttr("abs:href"");
@@ -8,7 +28,7 @@ jsoup changelog
   * Improved selector validation for :contains(...) with unbalanced quotes.
     <https://github.com/jhy/jsoup/issues/803>
 
-  * Improved the speed of index based CSS selectors and other methods that use elementSiblingIndex, by a factor of 18x.
+  * Improved the speed of index based CSS selectors and other methods that use elementSiblingIndex, by a factor of 34x.
     <https://github.com/jhy/jsoup/pull/862>
 
   * Added Node.clearAttributes(), to simplify removing of all attributes of a Node / Element.
@@ -34,6 +54,12 @@ jsoup changelog
 
   * Bugfix: when parsing unknown tags in case-sensitive HTML mode, end tags would not close scope correctly.
     <https://github.com/jhy/jsoup/issues/819>
+
+  * In Jsoup.Connection, ensure there is no Content-Type set when being redirected to a GET.
+    <https://github.com/jhy/jsoup/pull/895>
+
+  * Bugfix: in certain locales (Turkey specifically), lowercasing and case insensitivity could fail for specific items.
+    <https://github.com/jhy/jsoup/pull/820>
 
 *** Release 1.10.2 [2017-Jan-02]
  * Improved startup time, particularly on Android, by reducing garbage generation and CPU execution time when loading
