@@ -22,7 +22,6 @@ public class UTF8JsonGenerator
     private final static byte BYTE_BACKSLASH = (byte) '\\';
     private final static byte BYTE_COMMA = (byte) ',';
     private final static byte BYTE_COLON = (byte) ':';
-    private final static byte BYTE_QUOTE = (byte) '"';
 
     // intermediate copies only made up to certain length...
     private final static int MAX_BYTES_TO_BUFFER = 512;
@@ -35,7 +34,7 @@ public class UTF8JsonGenerator
 
     /*
     /**********************************************************
-    /* Output buffering
+    /* Configuration
     /**********************************************************
      */
 
@@ -43,6 +42,20 @@ public class UTF8JsonGenerator
      * Underlying output stream used for writing JSON content.
      */
     final protected OutputStream _outputStream;
+
+    /**
+     * Character used for quoting JSON Object property names
+     * and String values.
+     *
+     * @since 2.8
+     */
+    protected byte _quoteChar = '"'; // TODO: make configurable
+    
+    /*
+    /**********************************************************
+    /* Output buffering
+    /**********************************************************
+     */
 
     /**
      * Intermediate buffer in which contents are buffered before
@@ -193,7 +206,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         // But as one segment, or multiple?
         if (len <= _outputMaxContiguous) {
             if ((_outputTail + len) > _outputEnd) { // caller must ensure enough space
@@ -207,7 +220,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
     
     @Override
@@ -234,7 +247,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         int len = name.appendQuotedUTF8(_outputBuffer, _outputTail);
         if (len < 0) { // couldn't append, bit longer processing
             _writeBytes(name.asQuotedUTF8());
@@ -244,7 +257,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
     }    
 
     private final void _writeUnq(SerializableString name) throws IOException {
@@ -281,7 +294,7 @@ public class UTF8JsonGenerator
     public final void writeEndArray() throws IOException
     {
         if (!_writeContext.inArray()) {
-            _reportError("Current context not an ARRAY but "+_writeContext.getTypeDesc());
+            _reportError("Current context not Array but "+_writeContext.typeDesc());
         }
         if (_cfgPrettyPrinter != null) {
             _cfgPrettyPrinter.writeEndArray(this, _writeContext.getEntryCount());
@@ -309,11 +322,30 @@ public class UTF8JsonGenerator
         }
     }
 
+    @Override // since 2.8
+    public void writeStartObject(Object forValue) throws IOException
+    {
+        _verifyValueWrite("start an object");
+        JsonWriteContext ctxt = _writeContext.createChildObjectContext();
+        _writeContext = ctxt;
+        if (forValue != null) {
+            ctxt.setCurrentValue(forValue);
+        }
+        if (_cfgPrettyPrinter != null) {
+            _cfgPrettyPrinter.writeStartObject(this);
+        } else {
+            if (_outputTail >= _outputEnd) {
+                _flushBuffer();
+            }
+            _outputBuffer[_outputTail++] = '{';
+        }
+    }
+    
     @Override
     public final void writeEndObject() throws IOException
     {
         if (!_writeContext.inObject()) {
-            _reportError("Current context not an object but "+_writeContext.getTypeDesc());
+            _reportError("Current context not Object but "+_writeContext.typeDesc());
         }
         if (_cfgPrettyPrinter != null) {
             _cfgPrettyPrinter.writeEndObject(this, _writeContext.getEntryCount());
@@ -353,7 +385,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         name.getChars(0, len, _charBuffer, 0);
         // But as one segment, or multiple?
         if (len <= _outputMaxContiguous) {
@@ -367,7 +399,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
 
     protected final void _writePPFieldName(SerializableString name) throws IOException
@@ -387,14 +419,14 @@ public class UTF8JsonGenerator
             if (_outputTail >= _outputEnd) {
                 _flushBuffer();
             }
-            _outputBuffer[_outputTail++] = BYTE_QUOTE;
+            _outputBuffer[_outputTail++] = _quoteChar;
         }
         _writeBytes(name.asQuotedUTF8());
         if (addQuotes) {
             if (_outputTail >= _outputEnd) {
                 _flushBuffer();
             }
-            _outputBuffer[_outputTail++] = BYTE_QUOTE;
+            _outputBuffer[_outputTail++] = _quoteChar;
         }
     }
     
@@ -421,12 +453,12 @@ public class UTF8JsonGenerator
         if ((_outputTail + len) >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         _writeStringSegment(text, 0, len); // we checked space already above
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
 
     @Override
@@ -436,7 +468,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         // One or multiple segments?
         if (len <= _outputMaxContiguous) {
             if ((_outputTail + len) > _outputEnd) { // caller must ensure enough space
@@ -450,7 +482,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
 
     @Override
@@ -460,7 +492,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         int len = text.appendQuotedUTF8(_outputBuffer, _outputTail);
         if (len < 0) {
             _writeBytes(text.asQuotedUTF8());
@@ -470,7 +502,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
     
     @Override
@@ -480,12 +512,12 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         _writeBytes(text, offset, length);
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
 
     @Override
@@ -495,7 +527,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         // One or multiple segments?
         if (len <= _outputMaxContiguous) {
             _writeUTF8Segment(text, offset, len);
@@ -505,7 +537,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
 
     /*
@@ -683,13 +715,13 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         _writeBinary(b64variant, data, offset, offset+len);
         // and closing quotes
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
 
     @Override
@@ -702,7 +734,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         byte[] encodingBuffer = _ioContext.allocBase64Buffer();
         int bytes;
         try {
@@ -722,7 +754,7 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         return bytes;
     }
     
@@ -751,9 +783,9 @@ public class UTF8JsonGenerator
         if ((_outputTail + 8) >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         _outputTail = NumberOutput.outputInt(s, _outputBuffer, _outputTail);
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
     } 
     
     @Override
@@ -776,9 +808,9 @@ public class UTF8JsonGenerator
         if ((_outputTail + 13) >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         _outputTail = NumberOutput.outputInt(i, _outputBuffer, _outputTail);
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
     }    
 
     @Override
@@ -801,9 +833,9 @@ public class UTF8JsonGenerator
         if ((_outputTail + 23) >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         _outputTail = NumberOutput.outputLong(l, _outputBuffer, _outputTail);
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
 
     @Override
@@ -883,12 +915,12 @@ public class UTF8JsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
         writeRaw(value);
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
     
     @Override
@@ -1112,7 +1144,7 @@ public class UTF8JsonGenerator
             if (_outputTail >= _outputEnd) {
                 _flushBuffer();
             }
-            _outputBuffer[_outputTail++] = BYTE_QUOTE;        
+            _outputBuffer[_outputTail++] = _quoteChar;        
         }
 
         int left = text.length();
@@ -1132,7 +1164,7 @@ public class UTF8JsonGenerator
             if (_outputTail >= _outputEnd) {
                 _flushBuffer();
             }
-            _outputBuffer[_outputTail++] = BYTE_QUOTE;
+            _outputBuffer[_outputTail++] = _quoteChar;
         }
     }
 

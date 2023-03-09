@@ -4,6 +4,7 @@ import java.io.IOException;
 
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.core.JsonParser.Feature;
+import com.fasterxml.jackson.core.io.JsonEOFException;
 import com.fasterxml.jackson.core.io.NumberInput;
 import com.fasterxml.jackson.core.util.ByteArrayBuilder;
 import com.fasterxml.jackson.core.util.VersionUtil;
@@ -95,8 +96,14 @@ public abstract class ParserMinimalBase extends JsonParser
      */
 
     @Override public abstract JsonToken nextToken() throws IOException;
-    @Override public JsonToken getCurrentToken() { return _currToken; }
 
+    @Override public JsonToken currentToken() { return _currToken; }
+    @Override public int currentTokenId() {
+        final JsonToken t = _currToken;
+        return (t == null) ? JsonTokenId.ID_NO_TOKEN : t.id();
+    }
+    
+    @Override public JsonToken getCurrentToken() { return _currToken; }
     @Override public int getCurrentTokenId() {
         final JsonToken t = _currToken;
         return (t == null) ? JsonTokenId.ID_NO_TOKEN : t.id();
@@ -250,7 +257,7 @@ public abstract class ParserMinimalBase extends JsonParser
             case ID_NULL:
                 return false;
             case ID_EMBEDDED_OBJECT:
-                Object value = this.getEmbeddedObject();
+                Object value = getEmbeddedObject();
                 if (value instanceof Boolean) {
                     return (Boolean) value;
                 }
@@ -293,7 +300,7 @@ public abstract class ParserMinimalBase extends JsonParser
             case ID_NULL:
                 return 0;
             case ID_EMBEDDED_OBJECT:
-                Object value = this.getEmbeddedObject();
+                Object value = getEmbeddedObject();
                 if (value instanceof Number) {
                     return ((Number) value).intValue();
                 }
@@ -333,7 +340,7 @@ public abstract class ParserMinimalBase extends JsonParser
             case ID_NULL:
                 return 0L;
             case ID_EMBEDDED_OBJECT:
-                Object value = this.getEmbeddedObject();
+                Object value = getEmbeddedObject();
                 if (value instanceof Number) {
                     return ((Number) value).longValue();
                 }
@@ -409,7 +416,6 @@ public abstract class ParserMinimalBase extends JsonParser
      */
     protected void _decodeBase64(String str, ByteArrayBuilder builder, Base64Variant b64variant) throws IOException
     {
-        // just call helper method introduced in 2.2.3
         try {
             b64variant.decode(str, builder);
         } catch (IllegalArgumentException e) {
@@ -451,17 +457,48 @@ public abstract class ParserMinimalBase extends JsonParser
     }
 
     protected void _reportInvalidEOF() throws JsonParseException {
-        _reportInvalidEOF(" in "+_currToken);
+        _reportInvalidEOF(" in "+_currToken, _currToken);
     }
 
-    protected void _reportInvalidEOF(String msg) throws JsonParseException {
-        _reportError("Unexpected end-of-input"+msg);
+    /**
+     * @since 2.8
+     */
+    protected void _reportInvalidEOFInValue(JsonToken type) throws JsonParseException {
+        String msg;
+        if (type == JsonToken.VALUE_STRING) {
+            msg = " in a String value";
+        } else if ((type == JsonToken.VALUE_NUMBER_INT)
+                || (type == JsonToken.VALUE_NUMBER_FLOAT)) {
+            msg = " in a Number value";
+        } else {
+            msg = " in a value";
+        }
+        _reportInvalidEOF(msg, type);
     }
 
+    /**
+     * @since 2.8
+     */
+    protected void _reportInvalidEOF(String msg, JsonToken currToken) throws JsonParseException {
+        throw new JsonEOFException(this, currToken, "Unexpected end-of-input"+msg);
+    }
+
+    /**
+     * @deprecated Since 2.8 use {@link #_reportInvalidEOF(String, JsonToken)} instead
+     */
+    @Deprecated // since 2.8
     protected void _reportInvalidEOFInValue() throws JsonParseException {
         _reportInvalidEOF(" in a value");
     }
-
+    
+    /**
+     * @deprecated Since 2.8 use {@link #_reportInvalidEOF(String, JsonToken)} instead
+     */
+    @Deprecated // since 2.8
+    protected void _reportInvalidEOF(String msg) throws JsonParseException {
+        throw new JsonEOFException(this, null, "Unexpected end-of-input"+msg);
+    }
+    
     protected void _reportMissingRootWS(int ch) throws JsonParseException {
         _reportUnexpectedChar(ch, "Expected space separating root-level values");
     }

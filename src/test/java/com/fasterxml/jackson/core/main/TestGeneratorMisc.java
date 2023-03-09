@@ -11,6 +11,7 @@ import com.fasterxml.jackson.core.*;
  * Set of basic unit tests for verifying basic generator
  * features.
  */
+@SuppressWarnings("resource")
 public class TestGeneratorMisc
     extends com.fasterxml.jackson.core.BaseTest
 {
@@ -20,8 +21,7 @@ public class TestGeneratorMisc
     /**********************************************************
      */
 
-    public void testIsClosed()
-        throws IOException
+    public void testIsClosed() throws IOException
     {
         JsonFactory jf = new JsonFactory();
         for (int i = 0; i < 2; ++i) {
@@ -240,46 +240,41 @@ public class TestGeneratorMisc
      */
     public void testLongerObjects() throws Exception
     {
-        JsonFactory jf = new JsonFactory();
-        for (int i = 0; i < 2; ++i) {
-            boolean useChars = (i == 0);
-            JsonGenerator jgen;
-            ByteArrayOutputStream bout = new ByteArrayOutputStream(200);
-            if (useChars) {
-                jgen = jf.createGenerator(new OutputStreamWriter(bout, "UTF-8"));
-            } else {
-                jgen = jf.createGenerator(bout, JsonEncoding.UTF8);
+        final JsonFactory jf = new JsonFactory();
+        _testLongerObjects(jf, 0);
+        _testLongerObjects(jf, 1);
+        _testLongerObjects(jf, 2);
+    }
+
+    public void _testLongerObjects(JsonFactory jf, int mode) throws Exception
+    {
+        JsonGenerator g;
+        ByteArrayOutputStream bout = new ByteArrayOutputStream(200);
+
+        switch (mode) {
+        case 0:
+            g = jf.createGenerator(new OutputStreamWriter(bout, "UTF-8"));
+            break;
+        case 1:
+            g = jf.createGenerator(bout, JsonEncoding.UTF8);
+            break;
+        case 2:
+            {
+                DataOutputStream dout = new DataOutputStream(bout);
+                g = jf.createGenerator((DataOutput) dout);
             }
+        
+            break;
+        default:
+            fail("Unknown mode "+mode);
+            g = null;
+        }
 
-            jgen.writeStartObject();
+        g.writeStartObject();
 
-            for (int rounds = 0; rounds < 1500; ++rounds) {
-                for (int letter = 'a'; letter <= 'z'; ++letter) {
-                    for (int index = 0; index < 20; ++index) {
-                        String name;
-                        if (letter > 'f') {
-                            name = "X"+letter+index;
-                        } else if (letter > 'p') {
-                            name = ""+letter+index;
-                        } else {
-                            name = "__"+index+letter;
-                        }
-                        jgen.writeFieldName(name);
-                        jgen.writeNumber(index-1);
-                    }
-                    jgen.writeRaw('\n');
-                }
-            }
-            jgen.writeEndObject();
-            jgen.close();
-
-            byte[] json = bout.toByteArray();
-            JsonParser jp = jf.createParser(json);
-            assertToken(JsonToken.START_OBJECT, jp.nextToken());
-            for (int rounds = 0; rounds < 1500; ++rounds) {
+        for (int rounds = 0; rounds < 1500; ++rounds) {
             for (int letter = 'a'; letter <= 'z'; ++letter) {
                 for (int index = 0; index < 20; ++index) {
-                    assertToken(JsonToken.FIELD_NAME, jp.nextToken());
                     String name;
                     if (letter > 'f') {
                         name = "X"+letter+index;
@@ -288,14 +283,37 @@ public class TestGeneratorMisc
                     } else {
                         name = "__"+index+letter;
                     }
-                    assertEquals(name, jp.getCurrentName());
-                    assertToken(JsonToken.VALUE_NUMBER_INT, jp.nextToken());
-                    assertEquals(index-1, jp.getIntValue());
+                    g.writeFieldName(name);
+                    g.writeNumber(index-1);
                 }
+                g.writeRaw('\n');
             }
-            }
-            assertToken(JsonToken.END_OBJECT, jp.nextToken());
-            jp.close();
         }
+        g.writeEndObject();
+        g.close();
+
+        byte[] json = bout.toByteArray();
+        JsonParser jp = jf.createParser(json);
+        assertToken(JsonToken.START_OBJECT, jp.nextToken());
+        for (int rounds = 0; rounds < 1500; ++rounds) {
+        for (int letter = 'a'; letter <= 'z'; ++letter) {
+            for (int index = 0; index < 20; ++index) {
+                assertToken(JsonToken.FIELD_NAME, jp.nextToken());
+                String name;
+                if (letter > 'f') {
+                    name = "X"+letter+index;
+                } else if (letter > 'p') {
+                    name = ""+letter+index;
+                } else {
+                    name = "__"+index+letter;
+                }
+                assertEquals(name, jp.getCurrentName());
+                assertToken(JsonToken.VALUE_NUMBER_INT, jp.nextToken());
+                assertEquals(index-1, jp.getIntValue());
+            }
+        }
+        }
+        assertToken(JsonToken.END_OBJECT, jp.nextToken());
+        jp.close();
     }
 }

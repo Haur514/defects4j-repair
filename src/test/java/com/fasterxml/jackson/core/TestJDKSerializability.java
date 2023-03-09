@@ -11,7 +11,7 @@ import com.fasterxml.jackson.core.PrettyPrinter;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 
 /**
- * Unit tests for [Issue#31] (https://github.com/FasterXML/jackson-core/issues/31)
+ * Unit tests for [core#31] (https://github.com/FasterXML/jackson-core/issues/31)
  */
 public class TestJDKSerializability extends BaseTest
 {
@@ -47,6 +47,58 @@ public class TestJDKSerializability extends BaseTest
         // what should we test?
         assertNotNull(back);
     }
+
+    public void testLocation() throws Exception
+    {
+        JsonFactory jf = new JsonFactory();
+        JsonParser jp = jf.createParser("  { }");
+        assertToken(JsonToken.START_OBJECT, jp.nextToken());
+        JsonLocation loc = jp.getCurrentLocation();
+
+        byte[] stuff = jdkSerialize(loc);
+        JsonLocation loc2 = jdkDeserialize(stuff);
+        assertNotNull(loc2);
+        
+        assertEquals(loc.getLineNr(), loc2.getLineNr());
+        assertEquals(loc.getColumnNr(), loc2.getColumnNr());
+        jp.close();
+    }
+
+    public void testParseException() throws Exception
+    {
+        JsonFactory jf = new JsonFactory();
+        JsonParser p = jf.createParser("  { garbage! }");
+        JsonParseException exc = null;
+        try {
+            p.nextToken();
+            p.nextToken();
+            fail("Should not get here");
+        } catch (JsonParseException e) {
+            exc = e;
+        }
+        p.close();
+        byte[] stuff = jdkSerialize(exc);
+        JsonParseException result = jdkDeserialize(stuff);
+        assertNotNull(result);
+    }
+
+    public void testGenerationException() throws Exception
+    {
+        JsonFactory jf = new JsonFactory();
+        JsonGenerator g = jf.createGenerator(new ByteArrayOutputStream());
+        JsonGenerationException exc = null;
+        g.writeStartObject();
+        try {
+            g.writeNumber(4);
+            fail("Should not get here");
+        } catch (JsonGenerationException e) {
+            exc = e;
+        }
+        g.close();
+        byte[] stuff = jdkSerialize(exc);
+        JsonGenerationException result = jdkDeserialize(stuff);
+        assertNotNull(result);
+    }
     
     /*
     /**********************************************************
@@ -76,7 +128,7 @@ public class TestJDKSerializability extends BaseTest
             objIn.close();
         }
     }
-    
+
     @SuppressWarnings("resource")
     protected String _copyJson(JsonFactory f, String json, boolean useBytes) throws IOException
     {
@@ -92,13 +144,13 @@ public class TestJDKSerializability extends BaseTest
         return sw.toString();
     }
         
-    protected void _copyJson(JsonFactory f, String json, JsonGenerator jg) throws IOException
+    protected void _copyJson(JsonFactory f, String json, JsonGenerator g) throws IOException
     {
-        JsonParser jp = f.createParser(json);
-        while (jp.nextToken() != null) {
-            jg.copyCurrentEvent(jp);
+        JsonParser p = f.createParser(json);
+        while (p.nextToken() != null) {
+            g.copyCurrentEvent(p);
         }
-        jp.close();
-        jg.close();
+        p.close();
+        g.close();
     }
 }

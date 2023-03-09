@@ -149,6 +149,44 @@ public final class JsonStringEncoder
     }
 
     /**
+     * Method that will quote text contents using JSON standard quoting,
+     * and append results to a supplied {@link StringBuilder}.
+     * Use this variant if you have e.g. a {@link StringBuilder} and want to avoid superfluous copying of it.
+     *
+     * @since 2.8
+     */
+    public void quoteAsString(CharSequence input, StringBuilder output)
+    {
+        final int[] escCodes = CharTypes.get7BitOutputEscapes();
+        final int escCodeCount = escCodes.length;
+        int inPtr = 0;
+        final int inputLen = input.length();
+
+        outer:
+        while (inPtr < inputLen) {
+            tight_loop:
+            while (true) {
+                char c = input.charAt(inPtr);
+                if (c < escCodeCount && escCodes[c] != 0) {
+                    break tight_loop;
+                }
+                output.append(c);
+                if (++inPtr >= inputLen) {
+                    break outer;
+                }
+            }
+            // something to escape; 2 or 6-char variant?
+            char d = input.charAt(inPtr++);
+            int escCode = escCodes[d];
+            int length = (escCode < 0)
+                    ? _appendNumeric(d, _qbuf)
+                    : _appendNamed(escCode, _qbuf);
+                    ;
+            output.append(_qbuf, 0, length);
+        }
+    }
+
+    /**
      * Will quote given JSON String value using standard quoting, encode
      * results as UTF-8, and return result as a byte array.
      */

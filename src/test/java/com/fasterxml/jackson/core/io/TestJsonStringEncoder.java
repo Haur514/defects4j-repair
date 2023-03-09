@@ -6,7 +6,6 @@ import java.util.Random;
 import static org.junit.Assert.*;
 
 import com.fasterxml.jackson.core.*;
-import com.fasterxml.jackson.core.io.JsonStringEncoder;
 
 public class TestJsonStringEncoder
     extends com.fasterxml.jackson.core.BaseTest
@@ -18,6 +17,21 @@ public class TestJsonStringEncoder
         assertArrayEquals("foobar".toCharArray(), result);
         result = encoder.quoteAsString("\"x\"");
         assertArrayEquals("\\\"x\\\"".toCharArray(), result);
+    }
+
+    public void testQuoteCharSequenceAsString() throws Exception
+    {
+        JsonStringEncoder encoder = new JsonStringEncoder();
+        StringBuilder output = new StringBuilder();
+        StringBuilder builder = new StringBuilder();
+        builder.append("foobar");
+        encoder.quoteAsString(builder, output);
+        assertEquals("foobar", output.toString());
+        builder.setLength(0);
+        output.setLength(0);
+        builder.append("\"x\"");
+        encoder.quoteAsString(builder, output);
+        assertEquals("\\\"x\\\"", output.toString());
     }
 
     // For [JACKSON-853]
@@ -37,7 +51,24 @@ public class TestJsonStringEncoder
         assertEquals(exp, new String(result));
         
     }
-    
+
+    public void testQuoteLongCharSequenceAsString() throws Exception
+    {
+        JsonStringEncoder encoder = new JsonStringEncoder();
+        StringBuilder output = new StringBuilder();
+        StringBuilder input = new StringBuilder();
+        StringBuilder sb2 = new StringBuilder();
+        for (int i = 0; i < 1111; ++i) {
+            input.append('"');
+            sb2.append("\\\"");
+        }
+        String exp = sb2.toString();
+        encoder.quoteAsString(input, output);
+        assertEquals(2*input.length(), output.length());
+        assertEquals(exp, output.toString());
+
+    }
+
     public void testQuoteAsUTF8() throws Exception
     {
         // In this case, let's actually use existing JsonGenerator to produce expected values
@@ -82,7 +113,18 @@ public class TestJsonStringEncoder
         char[] quoted = JsonStringEncoder.getInstance().quoteAsString(new String(input));
         assertEquals("\\u0000\\u0001\\u0002\\u0003\\u0004", new String(quoted));
     }
-    
+
+    // [JACKSON-884]
+    public void testCharSequenceWithCtrlChars() throws Exception
+    {
+        char[] input = new char[] { 0, 1, 2, 3, 4 };
+        StringBuilder builder = new StringBuilder();
+        builder.append(input);
+        StringBuilder output = new StringBuilder();
+        JsonStringEncoder.getInstance().quoteAsString(builder, output);
+        assertEquals("\\u0000\\u0001\\u0002\\u0003\\u0004", output.toString());
+    }
+
     /*
     /**********************************************************
     /* Helper methods
