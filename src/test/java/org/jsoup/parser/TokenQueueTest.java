@@ -31,10 +31,10 @@ public class TokenQueueTest {
     }
 
     @Test public void chompBalancedMatchesAsMuchAsPossible() {
-        TokenQueue tq = new TokenQueue("unbalanced(something(or another");
+        TokenQueue tq = new TokenQueue("unbalanced(something(or another)) else");
         tq.consumeTo("(");
         String match = tq.chompBalanced('(', ')');
-        assertEquals("something(or another", match);
+        assertEquals("something(or another)", match);
     }
     
     @Test public void unescape() {
@@ -58,4 +58,17 @@ public class TokenQueueTest {
         tq.addFirst("Three");
         assertEquals("Three Two", tq.remainder());
     }
+    
+    
+    @Test 
+    public void consumeToIgnoreSecondCallTest(){
+		String t = "<textarea>one < two </TEXTarea> third </TEXTarea>";
+		TokenQueue tq = new TokenQueue(t);
+		String data = tq.chompToIgnoreCase("</textarea>");
+		assertEquals("<textarea>one < two ", data);
+		
+		data = tq.chompToIgnoreCase("</textarea>");
+		assertEquals(" third ", data);
+    }
+    
 }
