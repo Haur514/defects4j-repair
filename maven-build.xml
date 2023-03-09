@@ -204,7 +204,7 @@
              linksource="false" 
              breakiterator="false" 
              maxmemory="1g" 
-             additionalparam="-hdf project.name &quot;Jackson-core 2.7.7-SNAPSHOT&quot;&#10;                  -d /tmp/initialize-revisions.pl_30279_1557252573/39f/target/site/apidocs">
+             additionalparam="-hdf project.name &quot;Jackson-core 2.7.7-SNAPSHOT&quot;&#10;                  -d /tmp/initialize-revisions.pl_30279_1557252573/40f/target/site/apidocs">
       <link href="http://docs.oracle.com/javase/6/docs/api/"/>
       <doclet name="com.google.doclava.Doclava" 
                path="${maven.repo.local}/com/google/doclava/doclava/1.0.3/doclava-1.0.3.jar"/>

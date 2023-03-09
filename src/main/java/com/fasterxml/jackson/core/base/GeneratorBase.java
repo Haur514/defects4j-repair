@@ -1,6 +1,7 @@
 package com.fasterxml.jackson.core.base;
 
 import java.io.*;
+import java.math.BigDecimal;
 
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.core.json.DupDetector;
@@ -41,6 +42,15 @@ public abstract class GeneratorBase extends JsonGenerator
     protected final static String WRITE_RAW = "write a raw (unencoded) value";
     protected final static String WRITE_STRING = "write a string";
 
+    /**
+     * This value is the limit of scale allowed for serializing {@link BigDecimal}
+     * in "plain" (non-engineering) notation; intent is to prevent asymmetric
+     * attack whereupon simple eng-notation with big scale is used to generate
+     * huge "plain" serialization. See [core#315] for details.
+     * 
+     * @since 2.7.7
+     */
+    
     /*
     /**********************************************************
     /* Configuration
@@ -412,6 +422,17 @@ public abstract class GeneratorBase extends JsonGenerator
      */
     protected PrettyPrinter _constructDefaultPrettyPrinter() {
         return new DefaultPrettyPrinter();
+    }
+
+    /**
+     * Helper method used to serialize a {@link java.math.BigDecimal} as a String,
+     * for serialization, taking into account configuration settings
+     *
+     * @since 2.7.7
+     */
+    protected String _asString(BigDecimal value) throws IOException {
+            // 24-Aug-2016, tatu: [core#315] prevent possible DoS vector
+        return value.toString();
     }
 
     /*

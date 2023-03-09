@@ -6,7 +6,7 @@ import java.io.StringWriter;
 import com.fasterxml.jackson.core.*;
 
 /**
- * Basic testing for scalar-array write methods added in 2.8.
+ * Basic testing for scalar-array write methods added in 2.8
  */
 public class ArrayGenerationTest extends BaseTest
 {
