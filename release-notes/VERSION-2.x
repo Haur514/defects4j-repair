@@ -17,6 +17,7 @@ JSON library.
 2.10.0 (not yet released)
 
 #433: Add Builder pattern for creating configured Stream factories
+#464: Add "maximum unescaped char" configuration option for `JsonFactory` via builder
 #467: Create `JsonReadFeature` to move JSON-specific `JsonParser.Feature`s to
 #480: `SerializableString` value can not directly render to Writer
  (requested by Philippe M)
@@ -26,8 +27,11 @@ JSON library.
 #495: Create `StreamReadFeature` to move non-json specific `JsonParser.Feature`s to
 #496: Create `StreamWriteFeature` to take over non-json-specific `JsonGenerator.Feature`s
 #502: Make `DefaultPrettyPrinter.createInstance()` to fail for sub-classes
+#506: Add missing type parameter for `TypeReference` in `ObjectCodec`
+#508: Add new exception type `InputCoercionException` to be used for failed coercions
+  like overflow for `int`
 
-2.9.8 (not yet released)
+2.9.8 (15-Dec-2018)
 
 #488: Fail earlier on coercions from "too big" `BigInteger` into
   fixed-size types (`int`, `long`, `short`)
