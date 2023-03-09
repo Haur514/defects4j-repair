@@ -9,7 +9,7 @@ import java.io.*;
  * of {@link JsonGenerator} work as expected.
  */
 public class TestGeneratorArray
-    extends com.fasterxml.jackson.core.BaseTest
+    extends com.fasterxml.jackson.test.BaseTest
 {
     public void testEmptyArrayWrite()
         throws Exception

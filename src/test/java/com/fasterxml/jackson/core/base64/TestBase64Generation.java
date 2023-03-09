@@ -5,7 +5,7 @@ import java.io.*;
 import com.fasterxml.jackson.core.*;
 
 public class TestBase64Generation
-    extends com.fasterxml.jackson.core.BaseTest
+    extends com.fasterxml.jackson.test.BaseTest
 {
     static class ThrottledInputStream extends FilterInputStream
     {

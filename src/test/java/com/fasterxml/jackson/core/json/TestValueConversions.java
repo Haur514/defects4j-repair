@@ -5,7 +5,7 @@ import com.fasterxml.jackson.core.JsonToken;
 
 @SuppressWarnings("resource")
 public class TestValueConversions
-    extends com.fasterxml.jackson.core.BaseTest
+    extends com.fasterxml.jackson.test.BaseTest
 {
     public void testAsInt() throws Exception
     {

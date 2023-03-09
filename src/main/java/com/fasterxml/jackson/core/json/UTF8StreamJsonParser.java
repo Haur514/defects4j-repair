@@ -1189,17 +1189,17 @@ public class UTF8StreamJsonParser
     protected JsonToken _parsePosNumber(int c) throws IOException
     {
         char[] outBuf = _textBuffer.emptyAndGetCurrentSegment();
-        int outPtr = 0;
         // One special case: if first char is 0, must not be followed by a digit
         if (c == INT_0) {
             c = _verifyNoLeadingZeroes();
         }
         // Ok: we can first just add digit we saw first:
-        outBuf[outPtr++] = (char) c;
+        outBuf[0] = (char) c;
         int intLen = 1;
+        int outPtr = 1;
         // And then figure out how far we can read without further checks
         // for either input or output
-        int end = _inputPtr + outBuf.length;
+        int end = _inputPtr + outBuf.length - 1; // 1 == outPtr
         if (end > _inputEnd) {
             end = _inputEnd;
         }
@@ -1256,7 +1256,7 @@ public class UTF8StreamJsonParser
 
         // And then figure out how far we can read without further checks
         // for either input or output
-        int end = _inputPtr + outBuf.length;
+        int end = _inputPtr + outBuf.length - outPtr;
         if (end > _inputEnd) {
             end = _inputEnd;
         }
@@ -1956,7 +1956,7 @@ public class UTF8StreamJsonParser
             if (qlen >= quads.length) {
                 _quadBuffer = quads = growArrayBy(quads, quads.length);
             }
-            quads[qlen++] = pad(currQuad, currQuadBytes);
+            quads[qlen++] = currQuad;
         }
         Name name = _symbols.findName(quads, qlen);
         if (name == null) {
@@ -1974,7 +1974,6 @@ public class UTF8StreamJsonParser
     private final Name findName(int q1, int lastQuadBytes)
         throws JsonParseException
     {
-        q1 = pad(q1, lastQuadBytes);
         // Usually we'll find it from the canonical symbol table already
         Name name = _symbols.findName(q1);
         if (name != null) {
@@ -1988,7 +1987,6 @@ public class UTF8StreamJsonParser
     private final Name findName(int q1, int q2, int lastQuadBytes)
         throws JsonParseException
     {
-        q2 = pad(q2, lastQuadBytes);
         // Usually we'll find it from the canonical symbol table already
         Name name = _symbols.findName(q1, q2);
         if (name != null) {
@@ -2006,7 +2004,7 @@ public class UTF8StreamJsonParser
         if (qlen >= quads.length) {
             _quadBuffer = quads = growArrayBy(quads, quads.length);
         }
-        quads[qlen++] = pad(lastQuad, lastQuadBytes);
+        quads[qlen++] = lastQuad;
         Name name = _symbols.findName(quads, qlen);
         if (name == null) {
             return addName(quads, qlen, lastQuadBytes);
@@ -3242,7 +3240,7 @@ public class UTF8StreamJsonParser
 
     /*
     /**********************************************************
-    /* Internal methods, binary access
+    /* Binary access
     /**********************************************************
      */
 
@@ -3356,18 +3354,5 @@ public class UTF8StreamJsonParser
             decodedData = (decodedData << 6) | bits;
             builder.appendThreeBytes(decodedData);
         }
-    }
-
-    /*
-    /**********************************************************
-    /* Internal methods, other
-    /**********************************************************
-     */
-
-    /**
-     * Helper method needed to fix [Issue#148], masking of 0x00 character
-     */
-    private final static int pad(int q, int bytes) {
-        return (bytes == 4) ? q : (q | (-1 << (bytes << 3)));
     }
 }

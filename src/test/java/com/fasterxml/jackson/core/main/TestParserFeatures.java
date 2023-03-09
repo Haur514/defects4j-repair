@@ -7,7 +7,7 @@ import com.fasterxml.jackson.core.*;
  * settings work as expected.
  */
 public class TestParserFeatures
-    extends com.fasterxml.jackson.core.BaseTest
+    extends com.fasterxml.jackson.test.BaseTest
 {
     public void testDefaultSettings()
     {

@@ -7,7 +7,7 @@ import java.io.*;
 import com.fasterxml.jackson.core.*;
 
 public class TestBase64Parsing
-    extends com.fasterxml.jackson.core.BaseTest
+    extends com.fasterxml.jackson.test.BaseTest
 {
     public void testBase64UsingInputStream() throws Exception
     {
