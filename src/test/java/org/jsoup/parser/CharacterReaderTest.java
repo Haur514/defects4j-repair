@@ -2,7 +2,12 @@ package org.jsoup.parser;
 
 import org.junit.Test;
 
-import static org.junit.Assert.*;
+import java.io.BufferedReader;
+import java.io.StringReader;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Test suite for character reader.
@@ -10,6 +15,7 @@ import static org.junit.Assert.*;
  * @author Jonathan Hedley, jonathan@hedley.net
  */
 public class CharacterReaderTest {
+    public final static int maxBufferLen = CharacterReader.maxBufferLen;
 
     @Test public void consume() {
         CharacterReader r = new CharacterReader("one");
@@ -95,6 +101,11 @@ public class CharacterReaderTest {
         assertEquals(-1, r.nextIndexOf("Two"));
     }
 
+    @Test public void nextIndexOfUnmatched() {
+        CharacterReader r = new CharacterReader("<[[one]]");
+        assertEquals(-1, r.nextIndexOf("]]>"));
+    }
+
     @Test public void consumeToChar() {
         CharacterReader r = new CharacterReader("One Two Three");
         assertEquals("One ", r.consumeTo('T'));
@@ -160,6 +171,7 @@ public class CharacterReaderTest {
         assertFalse(r.matches("ne Two Three Four"));
         assertEquals("ne Two Three", r.consumeToEnd());
         assertFalse(r.matches("ne"));
+        assertTrue(r.isEmpty());
     }
 
     @Test
@@ -198,5 +210,102 @@ public class CharacterReaderTest {
         assertEquals('\n', r.consume());
         assertFalse(r.matchesAny(scan));
     }
+
+    @Test public void cachesStrings() {
+        CharacterReader r = new CharacterReader("Check\tCheck\tCheck\tCHOKE\tA string that is longer than 16 chars");
+        String one = r.consumeTo('\t');
+        r.consume();
+        String two = r.consumeTo('\t');
+        r.consume();
+        String three = r.consumeTo('\t');
+        r.consume();
+        String four = r.consumeTo('\t');
+        r.consume();
+        String five = r.consumeTo('\t');
+
+        assertEquals("Check", one);
+        assertEquals("Check", two);
+        assertEquals("Check", three);
+        assertEquals("CHOKE", four);
+        assertTrue(one == two);
+        assertTrue(two == three);
+        assertTrue(three != four);
+        assertTrue(four != five);
+        assertEquals(five, "A string that is longer than 16 chars");
+    }
+
+    @Test
+    public void rangeEquals() {
+        CharacterReader r = new CharacterReader("Check\tCheck\tCheck\tCHOKE");
+        assertTrue(r.rangeEquals(0, 5, "Check"));
+        assertFalse(r.rangeEquals(0, 5, "CHOKE"));
+        assertFalse(r.rangeEquals(0, 5, "Chec"));
+
+        assertTrue(r.rangeEquals(6, 5, "Check"));
+        assertFalse(r.rangeEquals(6, 5, "Chuck"));
+
+        assertTrue(r.rangeEquals(12, 5, "Check"));
+        assertFalse(r.rangeEquals(12, 5, "Cheeky"));
+
+        assertTrue(r.rangeEquals(18, 5, "CHOKE"));
+        assertFalse(r.rangeEquals(18, 5, "CHIKE"));
+    }
+
+    @Test
+    public void empty() {
+        CharacterReader r = new CharacterReader("One");
+        assertTrue(r.matchConsume("One"));
+        assertTrue(r.isEmpty());
+
+        r = new CharacterReader("Two");
+        String two = r.consumeToEnd();
+        assertEquals("Two", two);
+    }
+
+    @Test
+    public void consumeToNonexistentEndWhenAtAnd() {
+        CharacterReader r = new CharacterReader("<!");
+        assertTrue(r.matchConsume("<!"));
+        assertTrue(r.isEmpty());
+
+        String after = r.consumeTo('>');
+        assertEquals("", after);
+
+        assertTrue(r.isEmpty());
+    }
+
+    @Test
+    public void notEmptyAtBufferSplitPoint() {
+        CharacterReader r = new CharacterReader(new StringReader("How about now"), 3);
+        assertEquals("How", r.consumeTo(' '));
+        assertFalse("Should not be empty", r.isEmpty());
+
+        assertEquals(' ', r.consume());
+        assertFalse(r.isEmpty());
+    }
+
+    @Test public void bufferUp() {
+        String note = "HelloThere"; // + ! = 11 chars
+        int loopCount = 64;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < loopCount; i++) {
+            sb.append(note);
+            sb.append("!");
+        }
+
+        String s = sb.toString();
+        BufferedReader br = new BufferedReader(new StringReader(s));
+
+        CharacterReader r = new CharacterReader(br);
+        for (int i = 0; i < loopCount; i++) {
+            String pull = r.consumeTo('!');
+            assertEquals(note, pull);
+            assertEquals('!', r.current());
+            r.advance();
+        }
+
+        assertTrue(r.isEmpty());
+    }
+
 
 }
