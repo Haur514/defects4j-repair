@@ -131,10 +131,11 @@ class Tokeniser {
                 return (char) charval;
             }
         } else { // named
-            // get as many letters as possible, and look for matching entities. unconsume backwards till a match is found
+            // get as many letters as possible, and look for matching entities.
             String nameRef = reader.consumeLetterThenDigitSequence();
-            String origNameRef = new String(nameRef); // for error reporting. nameRef gets chomped looking for matches
+            String origNameRef = new String(nameRef);
             boolean looksLegit = reader.matches(';');
+            // found if a base named entity without a ;, or an extended entity with the ;.
             boolean found = false;
             while (nameRef.length() > 0 && !found) {
                 if (Entities.isNamedEntity(nameRef))
@@ -144,10 +145,11 @@ class Tokeniser {
                     reader.unconsume();
                 }
             }
+
             if (!found) {
+                reader.rewindToMark();
                 if (looksLegit) // named with semicolon
                     characterReferenceError(String.format("invalid named referenece '%s'", origNameRef));
-                reader.rewindToMark();
                 return null;
             }
             if (inAttribute && (reader.matchesLetter() || reader.matchesDigit() || reader.matchesAny('=', '-', '_'))) {
@@ -227,4 +229,10 @@ class Tokeniser {
         // Element currentNode = currentNode();
         // return currentNode != null && currentNode.namespace().equals("HTML");
     }
+
+    /**
+     * Utility method to consume reader and unescape entities found within.
+     * @param inAttribute
+     * @return unescaped string from reader
+     */
 }
