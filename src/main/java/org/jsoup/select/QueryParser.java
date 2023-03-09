@@ -35,8 +35,8 @@ public class QueryParser {
      * @return Evaluator
      */
     public static Evaluator parse(String query) {
-        QueryParser p = new QueryParser(query);
-        return p.parse();
+            QueryParser p = new QueryParser(query);
+            return p.parse();
     }
 
     /**
