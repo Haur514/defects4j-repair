@@ -1,16 +1,36 @@
 jsoup changelog
 
 *** Release 1.10.1 [PENDING]
+ * New feature: added the option to preserve case for tags and/or attributes, with ParseSettings. By default, the HTML
+   parser will continue to normalize tag names and attribute names to lower case, and the XML parser will now preserve
+   case, according to the relevant spec. The CSS selectors for tags and attributes remain case insensitive, per the CSS
+   spec.
+
+ * Improved support for extended HTML entities, including supplemental characters and multiple character references.
+   Also reduced memory consumption of the entity tables.
+   <https://github.com/jhy/jsoup/issues/602>
+   <https://github.com/jhy/jsoup/issues/603>
+
  * Added support for *|E wildcard namespace selectors.
    <https://github.com/jhy/jsoup/pull/724>
 
  * Added support for setting multiple connection headers at once with Connection.headers(Map)
    <https://github.com/jhy/jsoup/pull/725>
 
+ * Added support for setting/overriding the response character set in Connection.Response, for cases where the charset
+   is not defined by the server, or is defined incorrectly.
+   <https://github.com/jhy/jsoup/issues/743>
+
  * Fixed an issue when converting to the W3CDom XML, where valid (but ugly) HTML attribute names containing characters
    like '"' could not be converted into valid XML attribute names. These attribute names are now normalized if possible,
    or not added to the XML DOM.
    <https://github.com/jhy/jsoup/issues/721>
+
+ * Fixed an OOB exception when loading an empty-body URL and parsing with the XML parser.
+   <https://github.com/jhy/jsoup/issues/727>
+
+ * Fixed an issue where attribute names starting with a slash would be parsed incorrectly.
+   <https://github.com/jhy/jsoup/pull/748>
 
 *** Release 1.9.2 [2016-May-17]
  * Fixed an issue where tag names that contained non-ascii characters but started with an ascii character
