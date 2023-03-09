@@ -3,6 +3,7 @@ package org.jsoup.nodes;
 import org.jsoup.Jsoup;
 import org.jsoup.TextUtil;
 import org.junit.Test;
+import org.junit.Ignore;
 
 import static org.junit.Assert.*;
 
@@ -32,6 +33,9 @@ public class DocumentTest {
         withTitle.title("Hello");
         assertEquals("Hello", withTitle.title());
         assertEquals("Hello", withTitle.select("title").first().text());
+
+        Document normaliseTitle = Jsoup.parse("<title>   Hello\nthere   \n   now   \n");
+        assertEquals("Hello there now", normaliseTitle.title());
     }
 
     @Test public void testOutputEncoding() {
@@ -42,7 +46,7 @@ public class DocumentTest {
 
         doc.outputSettings().charset("ascii");
         assertEquals(Entities.EscapeMode.base, doc.outputSettings().escapeMode());
-        assertEquals("<p title=\"&#960;\">&#960; &amp; &lt; &gt; </p>", doc.body().html());
+        assertEquals("<p title=\"&#x3c0;\">&#x3c0; &amp; &lt; &gt; </p>", doc.body().html());
 
         doc.outputSettings().escapeMode(Entities.EscapeMode.extended);
         assertEquals("<p title=\"&pi;\">&pi; &amp; &lt; &gt; </p>", doc.body().html());
@@ -79,4 +83,16 @@ public class DocumentTest {
                 TextUtil.stripNewlines(clone.html()));
     }
 
+    // Ignored since this test can take awhile to run.
+    @Ignore
+    @Test public void testOverflowClone() {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < 100000; i++) {
+            builder.insert(0, "<i>");
+            builder.append("</i>");
+        }
+
+        Document doc = Jsoup.parse(builder.toString());
+        doc.clone();
+    }
 }

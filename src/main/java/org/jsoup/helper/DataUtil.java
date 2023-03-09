@@ -80,7 +80,14 @@ public class DataUtil {
             doc = parser.parseInput(docData, baseUri);
             Element meta = doc.select("meta[http-equiv=content-type], meta[charset]").first();
             if (meta != null) { // if not found, will keep utf-8 as best attempt
-                String foundCharset = meta.hasAttr("http-equiv") ? getCharsetFromContentType(meta.attr("content")) : meta.attr("charset");
+
+                String foundCharset;
+                if (meta.hasAttr("http-equiv")) {
+                    foundCharset = getCharsetFromContentType(meta.attr("content"));
+                } else {
+                    foundCharset = meta.attr("charset");
+                }
+
                 if (foundCharset != null && foundCharset.length() != 0 && !foundCharset.equals(defaultCharset)) { // need to re-decode
                     charsetName = foundCharset;
                     byteData.rewind();
@@ -96,7 +103,7 @@ public class DataUtil {
             // there are times where there is a spurious byte-order-mark at the start of the text. Shouldn't be present
             // in utf-8. If after decoding, there is a BOM, strip it; otherwise will cause the parser to go straight
             // into head mode
-            if (docData.charAt(0) == 65279)
+            if (docData.length() > 0 && docData.charAt(0) == 65279)
                 docData = docData.substring(1);
 
             doc = parser.parseInput(docData, baseUri);
@@ -105,21 +112,44 @@ public class DataUtil {
         return doc;
     }
 
-    static ByteBuffer readToByteBuffer(InputStream inStream) throws IOException {
+    /**
+     * Read the input stream into a byte buffer.
+     * @param inStream the input stream to read from
+     * @param maxSize the maximum size in bytes to read from the stream. Set to 0 to be unlimited.
+     * @return the filled byte buffer
+     * @throws IOException if an exception occurs whilst reading from the input stream.
+     */
+    static ByteBuffer readToByteBuffer(InputStream inStream, int maxSize) throws IOException {
+        Validate.isTrue(maxSize >= 0, "maxSize must be 0 (unlimited) or larger");
+        final boolean capped = maxSize > 0;
         byte[] buffer = new byte[bufferSize];
         ByteArrayOutputStream outStream = new ByteArrayOutputStream(bufferSize);
         int read;
-        while(true) {
-            read  = inStream.read(buffer);
+        int remaining = maxSize;
+
+        while (true) {
+            read = inStream.read(buffer);
             if (read == -1) break;
+            if (capped) {
+                if (read > remaining) {
+                    outStream.write(buffer, 0, remaining);
+                    break;
+                }
+                remaining -= read;
+            }
             outStream.write(buffer, 0, read);
         }
         ByteBuffer byteData = ByteBuffer.wrap(outStream.toByteArray());
         return byteData;
     }
 
+    static ByteBuffer readToByteBuffer(InputStream inStream) throws IOException {
+        return readToByteBuffer(inStream, 0);
+    }
+
     /**
-     * Parse out a charset from a content type header.
+     * Parse out a charset from a content type header. If the charset is not supported, returns null (so the default
+     * will kick in.)
      * @param contentType e.g. "text/html; charset=EUC-JP"
      * @return "EUC-JP", or null if not found. Charset is trimmed and uppercased.
      */
@@ -127,7 +157,11 @@ public class DataUtil {
         if (contentType == null) return null;
         Matcher m = charsetPattern.matcher(contentType);
         if (m.find()) {
-            return m.group(1).trim().toUpperCase(Locale.ENGLISH);
+            String charset = m.group(1).trim();
+                if (Charset.isSupported(charset)) return charset;
+                charset = charset.toUpperCase(Locale.ENGLISH);
+                if (Charset.isSupported(charset)) return charset;
+                // if our advanced charset matching fails.... we just take the default
         }
         return null;
     }

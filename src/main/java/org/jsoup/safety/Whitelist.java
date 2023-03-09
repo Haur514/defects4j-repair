@@ -154,6 +154,7 @@ public class Whitelist {
 
                 .addProtocols("a", "href", "ftp", "http", "https", "mailto")
                 .addProtocols("blockquote", "cite", "http", "https")
+                .addProtocols("cite", "cite", "http", "https")
                 .addProtocols("img", "src", "http", "https")
                 .addProtocols("q", "cite", "http", "https")
                 ;
@@ -319,10 +320,22 @@ public class Whitelist {
         return this;
     }
 
-    boolean isSafeTag(String tag) {
+    /**
+     * Test if the supplied tag is allowed by this whitelist
+     * @param tag test tag
+     * @return true if allowed
+     */
+    protected boolean isSafeTag(String tag) {
         return tagNames.contains(TagName.valueOf(tag));
     }
 
+    /**
+     * Test if the supplied attribute is allowed by this whitelist for this tag
+     * @param tagName tag to consider allowing the attribute in
+     * @param el element under test, to confirm protocol
+     * @param attr attribute under test
+     * @return true if allowed
+     */
     boolean isSafeAttribute(String tagName, Element el, Attribute attr) {
         TagName tag = TagName.valueOf(tagName);
         AttributeKey key = AttributeKey.valueOf(attr.getKey());
