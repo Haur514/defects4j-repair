@@ -311,6 +311,45 @@ public abstract class BaseTest
 
     /*
     /**********************************************************
+    /* Helper read/write methods
+    /**********************************************************
+     */
+    
+    protected void writeJsonDoc(JsonFactory f, String doc, Writer w) throws IOException
+    {
+        writeJsonDoc(f, doc, f.createGenerator(w));
+    }
+
+    protected void writeJsonDoc(JsonFactory f, String doc, JsonGenerator g) throws IOException
+    {
+        JsonParser p = f.createParser(aposToQuotes(doc));
+        
+        while (p.nextToken() != null) {
+            g.copyCurrentStructure(p);
+        }
+        p.close();
+        g.close();
+    }
+
+    protected String readAndWrite(JsonFactory f, JsonParser p) throws IOException
+    {
+        StringWriter sw = new StringWriter(100);
+        JsonGenerator g = f.createGenerator(sw);
+        try {
+            while (p.nextToken() != null) {
+                g.copyCurrentEvent(p);
+            }
+        } catch (IOException e) {
+            g.flush();
+            fail("Unexpected problem during `readAndWrite`. Output so far: '"+sw+"'; problem: "+e);
+        }
+        p.close();
+        g.close();
+        return sw.toString();
+    }
+
+    /*
+    /**********************************************************
     /* Additional assertion methods
     /**********************************************************
      */

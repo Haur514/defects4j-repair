@@ -14,18 +14,43 @@ JSON library.
 === Releases ===
 ------------------------------------------------------------------------
 
-2.6.0 (not yet released)
+2.6.1 (not yet released)
 
+#207: `ArrayIndexOutOfBoundsException` in `ByteQuadsCanonicalizer`
+ (reported by Florian S, fschopp@github)
+
+2.6.0 (17-Jul-2015)
+
+#137: Allow filtering content read via `JsonParser` by specifying `JsonPointer`;
+  uses new class `com.fasterxml.jackson.core.filter.FilteringParserDelegate`
+  (and related, `TokenFilter`)
 #177: Add a check so `JsonGenerator.writeString()` won't work if `writeFieldName()` expected.
 #182: Inconsistent TextBuffer#getTextBuffer behavior
  (contributed by Masaru H)
+#185: Allow filtering content written via `JsonGenerator` by specifying `JsonPointer`;
+  uses new class `com.fasterxml.jackson.core.filter.FilteringGeneratorDelegate`
+  (and related, `TokenFilter`)
 #188: `JsonParser.getValueAsString()` should return field name for `JsonToken.FIELD_NAME`, not `null`
+#189: Add `JsonFactory.Feature.USE_THREAD_LOCAL_FOR_BUFFER_RECYCLING` (default: true), which may
+  be disabled to prevent use of ThreadLocal-based buffer recyling.
+ (suggested by soldierkam@github)
+#195: Add `JsonGenerator.getOutputBuffered()` to find out amount of content buffered,
+  not yet flushed.
+ (requested by Ruediger M)
+#196: Add support for `FormatFeature` extension, for format-specifc Enum-backed
+  parser/generator options
 - Minor improvement to construction of "default PrettyPrinter": now overridable by data format
   modules
 - Implement a new yet more optimized symbol table for byte-backed parsers
 - Add `JsonParser.Feature.IGNORE_UNDEFINED`, useful for data formats like protobuf
+- Optimize writing of String names (remove intermediate copy; with JDK7 no speed benefit)
 
-2.5.2 (not yet released)
+2.5.3 (24-Apr-2015)
+
+#191: Longest collision chain in symbol table now exceeds maximum -- suspect a DoS attack
+ (reported by Paul D)
+
+2.5.2 (29-Mar-2015)
 
 #181: Failure parsing -Infinity on buffer boundary
  (reported by brharrington@github)

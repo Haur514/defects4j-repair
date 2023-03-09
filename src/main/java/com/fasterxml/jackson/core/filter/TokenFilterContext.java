@@ -1,10 +1,14 @@
 package com.fasterxml.jackson.core.filter;
 
+import java.io.IOException;
+
 import com.fasterxml.jackson.core.*;
 
 /**
  * Alternative variant of {@link JsonStreamContext}, used when filtering
  * content being read or written (based on {@link TokenFilter}).
+ * 
+ * @since 2.6
  */
 public class TokenFilterContext extends JsonStreamContext
 {
@@ -35,7 +39,25 @@ public class TokenFilterContext extends JsonStreamContext
      */
     protected String _currentName;
 
-    protected int _filterState;
+    /**
+     * Filter to use for items in this state (for properties of Objects,
+     * elements of Arrays, and root-level values of root context)
+     */
+    protected TokenFilter _filter;
+
+    /**
+     * Flag that indicates that start token has been read/written,
+     * so that matching close token needs to be read/written as well
+     * when context is getting closed.
+     */
+    protected boolean _startHandled;
+
+    /**
+     * Flag that indicates that the current name of this context
+     * still needs to be read/written, if path from root down to
+     * included leaf is to be exposed.
+     */
+    protected boolean _needToHandleName;
     
     /*
     /**********************************************************
@@ -43,74 +65,259 @@ public class TokenFilterContext extends JsonStreamContext
     /**********************************************************
      */
 
-    protected TokenFilterContext(int type, TokenFilterContext parent, int fstate) {
+    protected TokenFilterContext(int type, TokenFilterContext parent,
+            TokenFilter filter, boolean startHandled)
+    {
         super();
         _type = type;
         _parent = parent;
-        _filterState = fstate;
+        _filter = filter;
         _index = -1;
+        _startHandled = startHandled;
+        _needToHandleName = false;
     }
 
-    protected TokenFilterContext reset(int type, int fstate) {
+    protected TokenFilterContext reset(int type,
+            TokenFilter filter, boolean startWritten)
+    {
         _type = type;
-        _filterState = fstate;
+        _filter = filter;
         _index = -1;
         _currentName = null;
+        _startHandled = startWritten;
+        _needToHandleName = false;
         return this;
     }
 
-    @Override
-    public Object getCurrentValue() {
-        return null;
-    }
-
-    @Override
-    public void setCurrentValue(Object v) { }
-    
     /*
     /**********************************************************
     /* Factory methods
     /**********************************************************
      */
 
-    public static TokenFilterContext createRootContext(int fstate) {
-        return new TokenFilterContext(TYPE_ROOT, null, fstate);
+    public static TokenFilterContext createRootContext(TokenFilter filter) {
+        // true -> since we have no start/end marker, consider start handled
+        return new TokenFilterContext(TYPE_ROOT, null, filter, true);
     }
 
-    public TokenFilterContext createChildArrayContext(int fstate) {
+    public TokenFilterContext createChildArrayContext(TokenFilter filter, boolean writeStart) {
         TokenFilterContext ctxt = _child;
         if (ctxt == null) {
-            _child = ctxt = new TokenFilterContext(TYPE_ARRAY, this, fstate);
+            _child = ctxt = new TokenFilterContext(TYPE_ARRAY, this, filter, writeStart);
             return ctxt;
         }
-        return ctxt.reset(TYPE_ARRAY, fstate);
+        return ctxt.reset(TYPE_ARRAY, filter, writeStart);
     }
 
-    public TokenFilterContext createChildObjectContext(int fstate) {
+    public TokenFilterContext createChildObjectContext(TokenFilter filter, boolean writeStart) {
         TokenFilterContext ctxt = _child;
         if (ctxt == null) {
-            _child = ctxt = new TokenFilterContext(TYPE_OBJECT, this, fstate);
+            _child = ctxt = new TokenFilterContext(TYPE_OBJECT, this, filter, writeStart);
             return ctxt;
         }
-        return ctxt.reset(TYPE_OBJECT, fstate);
+        return ctxt.reset(TYPE_OBJECT, filter, writeStart);
     }
+
+    /*
+    /**********************************************************
+    /* State changes
+    /**********************************************************
+     */
+    
+    public TokenFilter setFieldName(String name) throws JsonProcessingException {
+        _currentName = name;
+        _needToHandleName = true;
+        return _filter;
+    }
+
+    /**
+     * Method called to check whether value is to be included at current output
+     * position, either as Object property, Array element, or root value.
+     */
+    public TokenFilter checkValue(TokenFilter filter) {
+        // First, checks for Object properties have been made earlier:
+        if (_type == TYPE_OBJECT) {
+            return filter;
+        }
+        // We increase it first because at the beginning of array, value is -1
+        int ix = ++_index;
+        if (_type == TYPE_ARRAY) {
+            return filter.includeElement(ix);
+        }
+        return filter.includeRootValue(ix);
+    }
+
+    /**
+     * Method called to ensure that parent path from root is written up to
+     * and including this node.
+     */
+    public void writePath(JsonGenerator gen) throws IOException
+    {
+        if ((_filter == null) || (_filter == TokenFilter.INCLUDE_ALL)) {
+            return;
+        }
+        if (_parent != null) {
+            _parent._writePath(gen);
+        }
+        if (_startHandled) {
+            // even if Object started, need to start leaf-level name
+            if (_needToHandleName) {
+                gen.writeFieldName(_currentName);
+            }
+        } else {
+            _startHandled = true;
+            if (_type == TYPE_OBJECT) {
+                gen.writeStartObject();
+                gen.writeFieldName(_currentName); // we know name must be written
+            } else if (_type == TYPE_ARRAY) {
+                gen.writeStartArray();
+            }
+        }
+    }
+
+    /**
+     * Variant of {@link #writePath(JsonGenerator)} called when all we
+     * need is immediately surrounding Object. Method typically called
+     * when including a single property but not including full path
+     * to root.
+     */
+    public void writeImmediatePath(JsonGenerator gen) throws IOException
+    {
+        if ((_filter == null) || (_filter == TokenFilter.INCLUDE_ALL)) {
+            return;
+        }
+        if (_startHandled) {
+            // even if Object started, need to start leaf-level name
+            if (_needToHandleName) {
+                gen.writeFieldName(_currentName);
+            }
+        } else {
+            _startHandled = true;
+            if (_type == TYPE_OBJECT) {
+                gen.writeStartObject();
+                if (_needToHandleName) {
+                    gen.writeFieldName(_currentName);
+                }
+            } else if (_type == TYPE_ARRAY) {
+                gen.writeStartArray();
+            }
+        }
+    }
+
+    private void _writePath(JsonGenerator gen) throws IOException
+    {
+        if ((_filter == null) || (_filter == TokenFilter.INCLUDE_ALL)) {
+            return;
+        }
+        if (_parent != null) {
+            _parent._writePath(gen);
+        }
+        if (_startHandled) {
+            // even if Object started, need to start leaf-level name
+            if (_needToHandleName) {
+                _needToHandleName = false; // at parent must explicitly clear
+                gen.writeFieldName(_currentName);
+            }
+        } else {
+            _startHandled = true;
+            if (_type == TYPE_OBJECT) {
+                gen.writeStartObject();
+                if (_needToHandleName) {
+                    _needToHandleName = false; // at parent must explicitly clear
+                    gen.writeFieldName(_currentName);
+                }
+            } else if (_type == TYPE_ARRAY) {
+                gen.writeStartArray();
+            }
+        }
+    }
+
+    public TokenFilterContext closeArray(JsonGenerator gen) throws IOException
+    {
+        if (_startHandled) {
+            gen.writeEndArray();
+        }
+        if ((_filter != null) && (_filter != TokenFilter.INCLUDE_ALL)) {
+            _filter.filterFinishArray();
+        }
+        return _parent;
+    }
+
+    public TokenFilterContext closeObject(JsonGenerator gen) throws IOException
+    {
+        if (_startHandled) {
+            gen.writeEndObject();
+        }
+        if ((_filter != null) && (_filter != TokenFilter.INCLUDE_ALL)) {
+            _filter.filterFinishObject();
+        }
+        return _parent;
+    }
+    
+    public void skipParentChecks() {
+        _filter = null;
+        for (TokenFilterContext ctxt = _parent; ctxt != null; ctxt = ctxt._parent) {
+            _parent._filter = null;
+        }
+    }
+
+    /*
+    /**********************************************************
+    /* Accessors, mutators
+    /**********************************************************
+     */
+
+    @Override
+    public Object getCurrentValue() { return null; }
+
+    @Override
+    public void setCurrentValue(Object v) { }
 
     @Override public final TokenFilterContext getParent() { return _parent; }
     @Override public final String getCurrentName() { return _currentName; }
 
-    public int getFilterState() { return _filterState; }
+    public TokenFilter getFilter() { return _filter; }
+    public boolean isStartHandled() { return _startHandled; }
 
-    public void writeFieldName(String name) throws JsonProcessingException {
-        _currentName = name;
+    public JsonToken nextTokenToRead() {
+        if (!_startHandled) {
+            _startHandled = true;
+            if (_type == TYPE_OBJECT) {
+                return JsonToken.START_OBJECT;
+            }
+            // Note: root should never be unhandled
+            return JsonToken.START_ARRAY;
+        }
+        // But otherwise at most might have FIELD_NAME
+        if (_needToHandleName && (_type == TYPE_OBJECT)) {
+            _needToHandleName = false;
+            return JsonToken.FIELD_NAME;
+        }
+        return null;
     }
 
-    public void writeValue() {
-        ++_index;
+    public TokenFilterContext findChildOf(TokenFilterContext parent) {
+        if (_parent == parent) {
+            return this;
+        }
+        TokenFilterContext curr = _parent;
+        while (curr != null) {
+            TokenFilterContext p = curr._parent;
+            if (p == parent) {
+                return curr;
+            }
+            curr = p;
+        }
+        // should never occur but...
+        return null;
     }
-
+    
     // // // Internally used abstract methods
 
     protected void appendDesc(StringBuilder sb) {
+        if (_parent != null) {
+            _parent.appendDesc(sb);
+        }
         if (_type == TYPE_OBJECT) {
             sb.append('{');
             if (_currentName != null) {

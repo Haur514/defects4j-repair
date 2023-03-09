@@ -49,7 +49,7 @@ public abstract class ParserMinimalBase extends JsonParser
     /* Minimal generally useful state
     /**********************************************************
      */
-    
+
     /**
      * Last token retrieved via {@link #nextToken}, if any.
      * Null before the first call to <code>nextToken()</code>,
@@ -97,7 +97,7 @@ public abstract class ParserMinimalBase extends JsonParser
     @Override public abstract JsonToken nextToken() throws IOException;
     @Override public JsonToken getCurrentToken() { return _currToken; }
 
-    @Override public final int getCurrentTokenId() {
+    @Override public int getCurrentTokenId() {
         final JsonToken t = _currToken;
         return (t == null) ? JsonTokenId.ID_NO_TOKEN : t.id();
     }
@@ -111,7 +111,7 @@ public abstract class ParserMinimalBase extends JsonParser
         return t.id() == id;
     }
 
-    @Override public final boolean hasToken(JsonToken t) {
+    @Override public boolean hasToken(JsonToken t) {
         return (_currToken == t);
     }
     
@@ -389,6 +389,9 @@ public abstract class ParserMinimalBase extends JsonParser
         if (_currToken == JsonToken.VALUE_STRING) {
             return getText();
         }
+        if (_currToken == JsonToken.FIELD_NAME) {
+            return getCurrentName();
+        }
         return getValueAsString(null);
     }
     
@@ -396,6 +399,9 @@ public abstract class ParserMinimalBase extends JsonParser
     public String getValueAsString(String defaultValue) throws IOException {
         if (_currToken == JsonToken.VALUE_STRING) {
             return getText();
+        }
+        if (_currToken == JsonToken.FIELD_NAME) {
+            return getCurrentName();
         }
         if (_currToken == null || _currToken == JsonToken.VALUE_NULL || !_currToken.isScalarValue()) {
             return defaultValue;
@@ -421,42 +427,6 @@ public abstract class ParserMinimalBase extends JsonParser
         } catch (IllegalArgumentException e) {
             _reportError(e.getMessage());
         }
-    }
-
-    /**
-     * @param bindex Relative index within base64 character unit; between 0
-     *   and 3 (as unit has exactly 4 characters)
-     *   
-     * @deprecated in 2.2.3; should migrate away
-     */
-    @Deprecated
-    protected void _reportInvalidBase64(Base64Variant b64variant, char ch, int bindex, String msg)
-        throws JsonParseException
-    {
-        String base;
-        if (ch <= INT_SPACE) {
-            base = "Illegal white space character (code 0x"+Integer.toHexString(ch)+") as character #"+(bindex+1)+" of 4-char base64 unit: can only used between units";
-        } else if (b64variant.usesPaddingChar(ch)) {
-            base = "Unexpected padding character ('"+b64variant.getPaddingChar()+"') as character #"+(bindex+1)+" of 4-char base64 unit: padding only legal as 3rd or 4th character";
-        } else if (!Character.isDefined(ch) || Character.isISOControl(ch)) {
-            // Not sure if we can really get here... ? (most illegal xml chars are caught at lower level)
-            base = "Illegal character (code 0x"+Integer.toHexString(ch)+") in base64 content";
-        } else {
-            base = "Illegal character '"+ch+"' (code 0x"+Integer.toHexString(ch)+") in base64 content";
-        }
-        if (msg != null) {
-            base = base + ": " + msg;
-        }
-        throw _constructError(base);
-    }
-
-    /**
-     *   
-     * @deprecated in 2.2.3; should migrate away
-     */
-    @Deprecated
-    protected void _reportBase64EOF() throws JsonParseException {
-        throw _constructError("Unexpected end-of-String in base64 content");
     }
 
     /*

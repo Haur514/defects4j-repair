@@ -47,13 +47,13 @@ public class UTF8StreamJsonParser
      * Symbol table that contains field names encountered so far
      */
     final protected ByteQuadsCanonicalizer _symbols;
-    
+
     /*
     /**********************************************************
     /* Parsing state
     /**********************************************************
      */
-    
+
     /**
      * Temporary buffer used for name parsing.
      */
@@ -70,13 +70,13 @@ public class UTF8StreamJsonParser
      * Temporary storage for partially parsed name bytes.
      */
     private int _quad1;
-    
+
     /*
     /**********************************************************
     /* Input buffering (from former 'StreamBasedParserBase')
     /**********************************************************
      */
-    
+
     protected InputStream _inputStream;
 
     /*
@@ -302,6 +302,9 @@ public class UTF8StreamJsonParser
             }
             return _textBuffer.contentsAsString();
         }
+        if (_currToken == JsonToken.FIELD_NAME) {
+            return getCurrentName();
+        }
         return super.getValueAsString(null);
     }
     
@@ -315,6 +318,9 @@ public class UTF8StreamJsonParser
                 return _finishAndReturnString(); // only strings can be incomplete
             }
             return _textBuffer.contentsAsString();
+        }
+        if (_currToken == JsonToken.FIELD_NAME) {
+            return getCurrentName();
         }
         return super.getValueAsString(defValue);
     }
@@ -1013,11 +1019,6 @@ public class UTF8StreamJsonParser
         case '-':
             t = _parseNegNumber();
             break;
-
-            /* Should we have separate handling for plus? Although
-             * it is not allowed per se, it may be erroneously used,
-             * and could be indicate by a more specific error message.
-             */
         case '0':
         case '1':
         case '2':
@@ -1305,16 +1306,16 @@ public class UTF8StreamJsonParser
             return null;
         }
 
-        switch (nextToken().id()) {
-        case ID_TRUE:
+        JsonToken t = nextToken();
+        if (t == JsonToken.VALUE_TRUE) {
             return Boolean.TRUE;
-        case ID_FALSE:
-            return Boolean.FALSE;
-        default:
-            return null;
         }
+        if (t == JsonToken.VALUE_FALSE) {
+            return Boolean.FALSE;
+        }
+        return null;
     }
-    
+
     /*
     /**********************************************************
     /* Internal methods, number parsing

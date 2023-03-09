@@ -1,7 +1,6 @@
 package com.fasterxml.jackson.core.sym;
 
 import java.util.Arrays;
-import java.util.BitSet;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.core.JsonFactory;
@@ -133,7 +132,7 @@ public final class ByteQuadsCanonicalizer
     
     /**
      * Constant that determines size of buckets for tertiary entries:
-     * <code>1 << _tertiaryShift</code> is the size, and shift value
+     * <code>1 &lt;&lt; _tertiaryShift</code> is the size, and shift value
      * is also used for translating from primary offset into
      * tertiary bucket (shift right by <code>4 + _tertiaryShift</code>).
      *<p>
@@ -151,7 +150,7 @@ public final class ByteQuadsCanonicalizer
      * Array that contains <code>String</code> instances matching
      * entries in {@link #_hashArea}.
      * Contains nulls for unused entries. Note that this size is twice
-     * that o
+     * that of {@link #_hashArea}
      */
     protected String[] _names;
 
@@ -205,22 +204,6 @@ public final class ByteQuadsCanonicalizer
      */
     private boolean _hashShared;
 
-    /*
-    /**********************************************************
-    /* Bit of DoS detection goodness
-    /**********************************************************
-     */
-
-    /**
-     * Lazily constructed structure that is used to keep track of
-     * collision buckets that have overflowed once: this is used
-     * to detect likely attempts at denial-of-service attacks that
-     * uses hash collisions.
-     * 
-     * @since 2.4
-     */
-    protected BitSet _overflows;
-    
     /*
     /**********************************************************
     /* Life-cycle: constructors
@@ -282,7 +265,7 @@ public final class ByteQuadsCanonicalizer
 
         _spilloverEnd = state.spilloverEnd;
         _longNameOffset = state.longNameOffset;
-        
+
         // and then set other state to reflect sharing status
         _needRehash = false;
         _hashShared = true;
@@ -874,12 +857,11 @@ public final class ByteQuadsCanonicalizer
         _verifyNeedForRehash();
         return name;
     }
-    
+
     private void _verifyNeedForRehash() {
         // Yes if above 80%, or above 50% AND have ~1% spill-overs
         if (_count > (_hashSize >> 1)) { // over 50%
             int spillCount = (_spilloverEnd - _spilloverStart()) >> 2;
-            
             if ((spillCount > (1 + _count >> 7))
                     || (_count > (_hashSize * 0.80))) {
                 _needRehash = true;
@@ -908,11 +890,13 @@ public final class ByteQuadsCanonicalizer
         int offset = _calcOffset(hash);
         final int[] hashArea = _hashArea;
         if (hashArea[offset+3] == 0) {
+//System.err.printf(" PRImary slot #%d, hash %X\n", (offset>>2), hash & 0x7F);
             return offset;
         }
         // then secondary
         int offset2 = _secondaryStart + ((offset >> 3) << 2);
         if (hashArea[offset2+3] == 0) {
+//System.err.printf(" SECondary slot #%d (start x%X), hash %X\n",(offset >> 3), _secondaryStart, (hash & 0x7F));
             return offset2;
         }
         // if not, tertiary?
@@ -921,6 +905,7 @@ public final class ByteQuadsCanonicalizer
         final int bucketSize = (1 << _tertiaryShift);
         for (int end = offset2 + bucketSize; offset2 < end; offset2 += 4) {
             if (hashArea[offset2+3] == 0) {
+//System.err.printf(" TERtiary slot x%X (from x%X, start x%X), hash %X.\n", offset2, ((offset >> (_tertiaryShift + 2)) << _tertiaryShift), _tertiaryStart, (hash & 0x7F));
                 return offset2;
             }
         }
@@ -929,9 +914,14 @@ public final class ByteQuadsCanonicalizer
         offset = _spilloverEnd;
         _spilloverEnd += 4;
 
+//System.err.printf(" SPIll-over at x%X; start x%X; end x%X, hash %X\n", offset, _spilloverStart(), _hashArea.length, (hash & 0x7F));
+        
         // one caveat: in the unlikely event if spill-over filling up,
         // check if that could be considered a DoS attack; handle appropriately
         // (NOTE: approximate for now; we could verify details if that becomes necessary)
+        /* 31-Jul-2015, tatu: Note that spillover area does NOT end at end of array,
+         *   since "long names" area follows. Instead, need to calculate from hash size.
+         */
         if (_spilloverEnd >= hashArea.length) {
             if (_failOnDoS) {
                 _reportTooManyCollisions();
@@ -991,7 +981,7 @@ public final class ByteQuadsCanonicalizer
          *    to work it out, but this is the simplest, fast and seems to do ok.
          */
         hash += (hash >>> 16); // to xor hi- and low- 16-bits
-        hash ^= (hash >>> 12); // as well as lowest 2 bytes
+        hash ^= (hash >>> 12);
         return hash;
     }
 
@@ -1266,7 +1256,7 @@ public final class ByteQuadsCanonicalizer
                     0, // count
                     tertShift,
                     new int[hashAreaSize], // mainHash, 2x slots, 4 ints per slot
-                    new String[sz << 1], // 2x slots
+                    new String[sz << 1], // names == 2x slots
                     hashAreaSize - sz, // at 7/8 of the total area
                     hashAreaSize // longNameOffset, immediately after main hashes
             );

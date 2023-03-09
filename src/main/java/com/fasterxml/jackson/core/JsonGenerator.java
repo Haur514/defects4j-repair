@@ -4,19 +4,7 @@
  */
 package com.fasterxml.jackson.core;
 
-import static com.fasterxml.jackson.core.JsonTokenId.ID_EMBEDDED_OBJECT;
-import static com.fasterxml.jackson.core.JsonTokenId.ID_END_ARRAY;
-import static com.fasterxml.jackson.core.JsonTokenId.ID_END_OBJECT;
-import static com.fasterxml.jackson.core.JsonTokenId.ID_FALSE;
-import static com.fasterxml.jackson.core.JsonTokenId.ID_FIELD_NAME;
-import static com.fasterxml.jackson.core.JsonTokenId.ID_NOT_AVAILABLE;
-import static com.fasterxml.jackson.core.JsonTokenId.ID_NULL;
-import static com.fasterxml.jackson.core.JsonTokenId.ID_NUMBER_FLOAT;
-import static com.fasterxml.jackson.core.JsonTokenId.ID_NUMBER_INT;
-import static com.fasterxml.jackson.core.JsonTokenId.ID_START_ARRAY;
-import static com.fasterxml.jackson.core.JsonTokenId.ID_START_OBJECT;
-import static com.fasterxml.jackson.core.JsonTokenId.ID_STRING;
-import static com.fasterxml.jackson.core.JsonTokenId.ID_TRUE;
+import static com.fasterxml.jackson.core.JsonTokenId.*;
 
 import java.io.*;
 import java.math.BigDecimal;
@@ -43,6 +31,8 @@ public abstract class JsonGenerator
      * Enumeration that defines all togglable features for generators.
      */
     public enum Feature {
+        // // Low-level I/O / content features
+        
         /**
          * Feature that determines whether generator will automatically
          * close underlying output target that is NOT owned by the
@@ -70,6 +60,21 @@ public abstract class JsonGenerator
          */
         AUTO_CLOSE_JSON_CONTENT(true),
 
+        /**
+         * Feature that specifies that calls to {@link #flush} will cause
+         * matching <code>flush()</code> to underlying {@link OutputStream}
+         * or {@link Writer}; if disabled this will not be done.
+         * Main reason to disable this feature is to prevent flushing at
+         * generator level, if it is not possible to prevent method being
+         * called by other code (like <code>ObjectMapper</code> or third
+         * party libraries).
+         *<p>
+         * Feature is enabled by default.
+         */
+        FLUSH_PASSED_TO_STREAM(true),
+
+        // // Quoting-related features
+        
         /**
          * Feature that determines whether JSON Object field names are
          * quoted using double-quotes, as specified by JSON specification
@@ -125,19 +130,6 @@ public abstract class JsonGenerator
         WRITE_BIGDECIMAL_AS_PLAIN(false),
         
         /**
-         * Feature that specifies that calls to {@link #flush} will cause
-         * matching <code>flush()</code> to underlying {@link OutputStream}
-         * or {@link Writer}; if disabled this will not be done.
-         * Main reason to disable this feature is to prevent flushing at
-         * generator level, if it is not possible to prevent method being
-         * called by other code (like <code>ObjectMapper</code> or third
-         * party libraries).
-         *<p>
-         * Feature is enabled by default.
-         */
-        FLUSH_PASSED_TO_STREAM(true),
-        
-        /**
          * Feature that specifies that all characters beyond 7-bit ASCII
          * range (i.e. code points of 128 and above) need to be output
          * using format-specific escapes (for JSON, backslash escapes),
@@ -153,6 +145,8 @@ public abstract class JsonGenerator
          * Feature is disabled by default.
          */
         ESCAPE_NON_ASCII(false),
+
+        // // Schema/Validity support features
 
         /**
          * Feature that determines whether {@link JsonGenerator} will explicitly
@@ -170,7 +164,7 @@ public abstract class JsonGenerator
          * @since 2.3
          */
         STRICT_DUPLICATE_DETECTION(false),
-
+        
         /**
          * Feature that determines what to do if the underlying data format requires knowledge
          * of all properties to output, and if no definition is found for a property that
@@ -270,53 +264,6 @@ public abstract class JsonGenerator
     @Override
     public abstract Version version();
 
-    /**
-     * Method that can be used to get access to object that is used
-     * as target for generated output; this is usually either
-     * {@link OutputStream} or {@link Writer}, depending on what
-     * generator was constructed with.
-     * Note that returned value may be null in some cases; including
-     * case where implementation does not want to exposed raw
-     * source to caller.
-     * In cases where output has been decorated, object returned here
-     * is the decorated version; this allows some level of interaction
-     * between users of generator and decorator object.
-     *<p>
-     * In general use of this accessor should be considered as
-     * "last effort", i.e. only used if no other mechanism is applicable.
-     */
-    public Object getOutputTarget() {
-        return null;
-    }
-
-    /**
-     * Helper method, usually equivalent to:
-     *<code>
-     *   getOutputContext().getCurrentValue();
-     *</code>
-     * 
-     * @since 2.5
-     */
-    public Object getCurrentValue() {
-        JsonStreamContext ctxt = getOutputContext();
-        return (ctxt == null) ? null : ctxt.getCurrentValue();
-    }
-
-    /**
-     * Helper method, usually equivalent to:
-     *<code>
-     *   getOutputContext().setCurrentValue(v);
-     *</code>
-     * 
-     * @since 2.5
-     */
-    public void setCurrentValue(Object v) {
-        JsonStreamContext ctxt = getOutputContext();
-        if (ctxt != null) {
-            ctxt.setCurrentValue(v);
-        }
-    }
-
     /*
     /**********************************************************
     /* Public API, Feature configuration
@@ -358,9 +305,10 @@ public abstract class JsonGenerator
 
 
     /**
-     * Bulk access method for getting state of all standard {@link Feature}s.
+     * Bulk access method for getting state of all standard (non-dataformat-specific)
+     * {@link JsonGenerator.Feature}s.
      * 
-     * @return Bit mask that defines current states of all standard {@link Feature}s.
+     * @return Bit mask that defines current states of all standard {@link JsonGenerator.Feature}s.
      * 
      * @since 2.3
      */
@@ -378,6 +326,60 @@ public abstract class JsonGenerator
      */
     public abstract JsonGenerator setFeatureMask(int values);
 
+    /**
+     * Bulk set method for (re)setting states of features specified by <code>mask</code>.
+     * Functionally equivalent to
+     *<code>
+     *    int oldState = getFeatureMask();
+     *    int newState = (oldState &amp; ~mask) | (values &amp; mask);
+     *    setFeatureMask(newState);
+     *</code>
+     * 
+     * @param values Bit mask of set/clear state for features to change
+     * @param mask Bit mask of features to change
+     * 
+     * @since 2.6
+     */
+    public JsonGenerator overrideStdFeatures(int values, int mask) {
+        int oldState = getFeatureMask();
+        int newState = (oldState & ~mask) | (values & mask);
+        return setFeatureMask(newState);
+    }
+
+    /**
+     * Bulk access method for getting state of all {@link FormatFeature}s, format-specific
+     * on/off configuration settings.
+     * 
+     * @return Bit mask that defines current states of all standard {@link FormatFeature}s.
+     * 
+     * @since 2.6
+     */
+    public int getFormatFeatures() {
+        return 0;
+    }
+    
+    /**
+     * Bulk set method for (re)setting states of {@link FormatFeature}s,
+     * by specifying values (set / clear) along with a mask, to determine
+     * which features to change, if any.
+     *<p>
+     * Default implementation will simply throw an exception to indicate that
+     * the generator implementation does not support any {@link FormatFeature}s.
+     * 
+     * @param values Bit mask of set/clear state for features to change
+     * @param mask Bit mask of features to change
+     * 
+     * @since 2.6
+     */
+    public JsonGenerator overrideFormatFeatures(int values, int mask) {
+        throw new IllegalArgumentException("No FormatFeatures defined for generator of type "+getClass().getName());
+        /*
+        int oldState = getFeatureMask();
+        int newState = (oldState & ~mask) | (values & mask);
+        return setFeatureMask(newState);
+        */
+    }
+    
     /*
     /**********************************************************
     /* Public API, Schema configuration
@@ -519,6 +521,81 @@ public abstract class JsonGenerator
         throw new UnsupportedOperationException();
     }
 
+    /*
+    /**********************************************************
+    /* Public API, output state access
+    /**********************************************************
+     */
+    
+    /**
+     * Method that can be used to get access to object that is used
+     * as target for generated output; this is usually either
+     * {@link OutputStream} or {@link Writer}, depending on what
+     * generator was constructed with.
+     * Note that returned value may be null in some cases; including
+     * case where implementation does not want to exposed raw
+     * source to caller.
+     * In cases where output has been decorated, object returned here
+     * is the decorated version; this allows some level of interaction
+     * between users of generator and decorator object.
+     *<p>
+     * In general use of this accessor should be considered as
+     * "last effort", i.e. only used if no other mechanism is applicable.
+     */
+    public Object getOutputTarget() {
+        return null;
+    }
+
+    /**
+     * Method for verifying amount of content that is buffered by generator
+     * but not yet flushed to the underlying target (stream, writer),
+     * in units (byte, char) that the generator implementation uses for buffering;
+     * or -1 if this information is not available.
+     * Unit used is often the same as the unit of underlying target (that is,
+     * `byte` for {@link java.io.OutputStream}, `char` for {@link java.io.Writer}),
+     * but may differ if buffering is done before encoding.
+     * Default JSON-backed implementations do use matching units.
+     *<p>
+     * Note: non-JSON implementations will be retrofitted for 2.6 and beyond;
+     * please report if you see -1 (missing override)
+     *
+     * @return Amount of content buffered in internal units, if amount known and
+     *    accessible; -1 if not accessible.
+     *
+     * @since 2.6
+     */
+    public int getOutputBuffered() {
+        return -1;
+    }
+
+    /**
+     * Helper method, usually equivalent to:
+     *<code>
+     *   getOutputContext().getCurrentValue();
+     *</code>
+     * 
+     * @since 2.5
+     */
+    public Object getCurrentValue() {
+        JsonStreamContext ctxt = getOutputContext();
+        return (ctxt == null) ? null : ctxt.getCurrentValue();
+    }
+
+    /**
+     * Helper method, usually equivalent to:
+     *<code>
+     *   getOutputContext().setCurrentValue(v);
+     *</code>
+     * 
+     * @since 2.5
+     */
+    public void setCurrentValue(Object v) {
+        JsonStreamContext ctxt = getOutputContext();
+        if (ctxt != null) {
+            ctxt.setCurrentValue(v);
+        }
+    }
+    
     /*
     /**********************************************************
     /* Public API, capability introspection methods
