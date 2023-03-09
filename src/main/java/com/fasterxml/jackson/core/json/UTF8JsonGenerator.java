@@ -113,6 +113,7 @@ public class UTF8JsonGenerator
     /**********************************************************
      */
 
+    @SuppressWarnings("deprecation")
     public UTF8JsonGenerator(IOContext ctxt, int features, ObjectCodec codec,
             OutputStream out)
     {
@@ -135,7 +136,7 @@ public class UTF8JsonGenerator
             setHighestNonEscapedChar(127);
         }
     }
-    
+
     public UTF8JsonGenerator(IOContext ctxt, int features, ObjectCodec codec,
             OutputStream out,
             byte[] outputBuffer, int outputOffset, boolean bufferRecyclable)
@@ -424,7 +425,12 @@ public class UTF8JsonGenerator
             }
             _outputBuffer[_outputTail++] = _quoteChar;
         }
-        _writeBytes(name.asQuotedUTF8());
+        int len = name.appendQuotedUTF8(_outputBuffer, _outputTail);
+        if (len < 0) {
+            _writeBytes(name.asQuotedUTF8());
+        } else {
+            _outputTail += len;
+        }
         if (addQuotes) {
             if (_outputTail >= _outputEnd) {
                 _flushBuffer();
@@ -651,9 +657,11 @@ public class UTF8JsonGenerator
     @Override
     public void writeRaw(SerializableString text) throws IOException
     {
-        byte[] raw = text.asUnquotedUTF8();
-        if (raw.length > 0) {
-            _writeBytes(raw);
+        int len = text.appendUnquotedUTF8(_outputBuffer, _outputTail);
+        if (len < 0) {
+            _writeBytes(text.asUnquotedUTF8());
+        } else {
+            _outputTail += len;
         }
     }
 
@@ -661,9 +669,11 @@ public class UTF8JsonGenerator
     @Override
     public void writeRawValue(SerializableString text) throws IOException {
         _verifyValueWrite(WRITE_RAW);
-        byte[] raw = text.asUnquotedUTF8();
-        if (raw.length > 0) {
-            _writeBytes(raw);
+        int len = text.appendUnquotedUTF8(_outputBuffer, _outputTail);
+        if (len < 0) {
+            _writeBytes(text.asUnquotedUTF8());
+        } else {
+            _outputTail += len;
         }
     }
 
@@ -953,13 +963,13 @@ public class UTF8JsonGenerator
         }
     }
 
-    
+    @SuppressWarnings("deprecation")
     @Override
     public void writeNumber(double d) throws IOException
     {
         if (_cfgNumbersAsStrings ||
-            (((Double.isNaN(d) || Double.isInfinite(d))
-                && Feature.QUOTE_NON_NUMERIC_NUMBERS.enabledIn(_features)))) {
+            (NumberOutput.notFinite(d)
+                && Feature.QUOTE_NON_NUMERIC_NUMBERS.enabledIn(_features))) {
             writeString(String.valueOf(d));
             return;
         }
@@ -968,13 +978,13 @@ public class UTF8JsonGenerator
         writeRaw(String.valueOf(d));
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public void writeNumber(float f) throws IOException
     {
         if (_cfgNumbersAsStrings ||
-            // [JACKSON-139]
-            (((Float.isNaN(f) || Float.isInfinite(f))
-                && Feature.QUOTE_NON_NUMERIC_NUMBERS.enabledIn(_features)))) {
+            (NumberOutput.notFinite(f)
+                && Feature.QUOTE_NON_NUMERIC_NUMBERS.enabledIn(_features))) {
             writeString(String.valueOf(f));
             return;
         }
@@ -1307,10 +1317,8 @@ public class UTF8JsonGenerator
         }
         _outputTail = outputPtr;
         if (offset < len) {
-            // [JACKSON-106]
             if (_characterEscapes != null) {
                 _writeCustomStringSegment2(cbuf, offset, len);
-            // [JACKSON-102]
             } else if (_maximumNonEscapedChar == 0) {
                 _writeStringSegment2(cbuf, offset, len);
             } else {

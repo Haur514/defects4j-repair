@@ -3,6 +3,7 @@ package com.fasterxml.jackson.core.read;
 import java.io.*;
 
 import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 
 /**
  * Unit tests for verifying that support for (non-standard) comments
@@ -72,8 +73,9 @@ public class CommentParsingTest
     }
 
     public void testYAMLCommentsBytes() throws Exception {
-        JsonFactory f = new JsonFactory();
-        f.configure(JsonParser.Feature.ALLOW_YAML_COMMENTS, true);
+        final JsonFactory f = JsonFactory.builder()
+                .enable(JsonReadFeature.ALLOW_YAML_COMMENTS)
+                .build();
 
         _testYAMLComments(f, MODE_INPUT_STREAM);
         _testCommentsBeforePropValue(f, MODE_INPUT_STREAM, "# foo\n");
@@ -84,8 +86,9 @@ public class CommentParsingTest
     }
 
     public void testYAMLCommentsChars() throws Exception {
-        JsonFactory f = new JsonFactory();
-        f.configure(JsonParser.Feature.ALLOW_YAML_COMMENTS, true);
+        final JsonFactory f = JsonFactory.builder()
+                .enable(JsonReadFeature.ALLOW_YAML_COMMENTS)
+                .build();
         _testYAMLComments(f, MODE_READER);
         final String COMMENT = "# foo\n";
         _testCommentsBeforePropValue(f, MODE_READER, COMMENT);
@@ -93,8 +96,9 @@ public class CommentParsingTest
     }
 
     public void testCCommentsBytes() throws Exception {
-        JsonFactory f = new JsonFactory();
-        f.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
+        final JsonFactory f = JsonFactory.builder()
+                .enable(JsonReadFeature.ALLOW_JAVA_COMMENTS)
+                .build();
         final String COMMENT = "/* foo */\n";
         _testCommentsBeforePropValue(f, MODE_INPUT_STREAM, COMMENT);
         _testCommentsBeforePropValue(f, MODE_INPUT_STREAM_THROTTLED, COMMENT);
@@ -102,15 +106,17 @@ public class CommentParsingTest
     }
 
     public void testCCommentsChars() throws Exception {
-        JsonFactory f = new JsonFactory();
-        f.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
+        final JsonFactory f = JsonFactory.builder()
+                .enable(JsonReadFeature.ALLOW_JAVA_COMMENTS)
+                .build();
         final String COMMENT = "/* foo */\n";
         _testCommentsBeforePropValue(f, MODE_READER, COMMENT);
     }
 
     public void testCppCommentsBytes() throws Exception {
-        JsonFactory f = new JsonFactory();
-        f.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
+        final JsonFactory f = JsonFactory.builder()
+                .enable(JsonReadFeature.ALLOW_JAVA_COMMENTS)
+                .build();
         final String COMMENT = "// foo\n";
         _testCommentsBeforePropValue(f, MODE_INPUT_STREAM, COMMENT);
         _testCommentsBeforePropValue(f, MODE_INPUT_STREAM_THROTTLED, COMMENT);
@@ -118,8 +124,9 @@ public class CommentParsingTest
     }
 
     public void testCppCommentsChars() throws Exception {
-        JsonFactory f = new JsonFactory();
-        f.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
+        final JsonFactory f = JsonFactory.builder()
+                .enable(JsonReadFeature.ALLOW_JAVA_COMMENTS)
+                .build();
         final String COMMENT = "// foo \n";
         _testCommentsBeforePropValue(f, MODE_READER, COMMENT);
     }
@@ -277,8 +284,9 @@ public class CommentParsingTest
     private JsonParser _createParser(String doc, int mode, boolean enabled)
         throws IOException
     {
-        JsonFactory f = new JsonFactory();
-        f.configure(JsonParser.Feature.ALLOW_COMMENTS, enabled);
+        final JsonFactory f = JsonFactory.builder()
+                .configure(JsonReadFeature.ALLOW_JAVA_COMMENTS, enabled)
+                .build();
         JsonParser p = createParser(f, mode, doc);
         assertToken(JsonToken.START_ARRAY, p.nextToken());
         return p;

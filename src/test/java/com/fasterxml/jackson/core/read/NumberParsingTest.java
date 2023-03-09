@@ -7,6 +7,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.exc.InputCoercionException;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 
 /**
  * Set of basic unit tests for verifying that the basic parser
@@ -124,8 +126,10 @@ public class NumberParsingTest
         // Should get an exception if trying to convert to int 
         try {
             p.getIntValue();
-        } catch (JsonParseException pe) {
-            verifyException(pe, "out of range");
+        } catch (InputCoercionException e) {
+            verifyException(e, "out of range");
+            assertEquals(JsonToken.VALUE_NUMBER_INT, e.getInputType());
+            assertEquals(Integer.TYPE, e.getTargetType());
         }
         assertEquals((double) EXP_L, p.getDoubleValue());
         assertEquals(BigDecimal.valueOf((long) EXP_L), p.getDecimalValue());
@@ -428,8 +432,9 @@ public class NumberParsingTest
      */
     public void testParsingOfLongerSequencesWithNonNumeric() throws Exception
     {
-        JsonFactory f = new JsonFactory();
-        f.enable(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS);
+        JsonFactory f = JsonFactory.builder()
+                .enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS)
+                .build();
         _testParsingOfLongerSequencesWithNonNumeric(f, MODE_INPUT_STREAM);
         _testParsingOfLongerSequencesWithNonNumeric(f, MODE_INPUT_STREAM_THROTTLED);
         _testParsingOfLongerSequencesWithNonNumeric(f, MODE_READER);

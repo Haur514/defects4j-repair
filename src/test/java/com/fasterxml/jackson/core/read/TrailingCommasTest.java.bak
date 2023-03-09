@@ -4,8 +4,8 @@ import java.io.IOException;
 import java.util.*;
 
 import com.fasterxml.jackson.core.*;
-import com.fasterxml.jackson.core.JsonParser.Feature;
 import com.fasterxml.jackson.core.io.SerializedString;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.core.json.UTF8DataInputJsonParser;
 
 import org.junit.Test;
@@ -13,21 +13,21 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
+@SuppressWarnings("resource")
 public class TrailingCommasTest extends BaseTest {
 
   private final JsonFactory factory;
-  private final Set<JsonParser.Feature> features;
+  private final Set<JsonReadFeature> features;
   private final int mode;
 
-  public TrailingCommasTest(int mode, List<Feature> features) {
-    this.factory = new JsonFactory();
-    this.features = new HashSet<JsonParser.Feature>(features);
-
-    for (JsonParser.Feature feature : features) {
-      factory.enable(feature);
-    }
-
-    this.mode = mode;
+  public TrailingCommasTest(int mode, List<JsonReadFeature> features) {
+      this.features = new HashSet<JsonReadFeature>(features);
+      JsonFactoryBuilder b = (JsonFactoryBuilder) JsonFactory.builder();
+      for (JsonReadFeature feature : features) {
+          b = b.enable(feature);
+      }
+      factory = b.build();
+      this.mode = mode;
   }
 
   @Parameterized.Parameters(name = "Mode {0}, Features {1}")
@@ -36,15 +36,15 @@ public class TrailingCommasTest extends BaseTest {
 
     for (int mode : ALL_MODES) {
       cases.add(new Object[]{mode, Collections.emptyList()});
-      cases.add(new Object[]{mode, Arrays.asList(Feature.ALLOW_MISSING_VALUES)});
-      cases.add(new Object[]{mode, Arrays.asList(Feature.ALLOW_TRAILING_COMMA)});
-      cases.add(new Object[]{mode, Arrays.asList(Feature.ALLOW_MISSING_VALUES, Feature.ALLOW_TRAILING_COMMA)});
+      cases.add(new Object[]{mode, Arrays.asList(JsonReadFeature.ALLOW_MISSING_VALUES)});
+      cases.add(new Object[]{mode, Arrays.asList(JsonReadFeature.ALLOW_TRAILING_COMMA)});
+      cases.add(new Object[]{mode, Arrays.asList(JsonReadFeature.ALLOW_MISSING_VALUES,
+              JsonReadFeature.ALLOW_TRAILING_COMMA)});
     }
 
     return cases;
   }
 
-  @SuppressWarnings("resource")
   @Test
   public void testArrayBasic() throws Exception {
     String json = "[\"a\", \"b\"]";
@@ -63,7 +63,6 @@ public class TrailingCommasTest extends BaseTest {
     assertEnd(p);
   }
 
-  @SuppressWarnings("resource")
   @Test
   public void testArrayInnerComma() throws Exception {
     String json = "[\"a\",, \"b\"]";
@@ -75,9 +74,9 @@ public class TrailingCommasTest extends BaseTest {
     assertToken(JsonToken.VALUE_STRING, p.nextToken());
     assertEquals("a", p.getText());
 
-    if (!features.contains(Feature.ALLOW_MISSING_VALUES)) {
-      assertUnexpected(p, ',');
-      return;
+    if (!features.contains(JsonReadFeature.ALLOW_MISSING_VALUES)) {
+        assertUnexpected(p, ',');
+        return;
     }
 
     assertToken(JsonToken.VALUE_NULL, p.nextToken());
@@ -89,7 +88,6 @@ public class TrailingCommasTest extends BaseTest {
     assertEnd(p);
   }
 
-  @SuppressWarnings("resource")
   @Test
   public void testArrayLeadingComma() throws Exception {
     String json = "[,\"a\", \"b\"]";
@@ -98,7 +96,7 @@ public class TrailingCommasTest extends BaseTest {
 
     assertEquals(JsonToken.START_ARRAY, p.nextToken());
 
-    if (!features.contains(Feature.ALLOW_MISSING_VALUES)) {
+    if (!features.contains(JsonReadFeature.ALLOW_MISSING_VALUES)) {
       assertUnexpected(p, ',');
       return;
     }
@@ -131,10 +129,10 @@ public class TrailingCommasTest extends BaseTest {
     assertEquals("b", p.getText());
 
     // ALLOW_TRAILING_COMMA takes priority over ALLOW_MISSING_VALUES
-    if (features.contains(Feature.ALLOW_TRAILING_COMMA)) {
+    if (features.contains(JsonReadFeature.ALLOW_TRAILING_COMMA)) {
       assertToken(JsonToken.END_ARRAY, p.nextToken());
       assertEnd(p);
-    } else if (features.contains(Feature.ALLOW_MISSING_VALUES)) {
+    } else if (features.contains(JsonReadFeature.ALLOW_MISSING_VALUES)) {
       assertToken(JsonToken.VALUE_NULL, p.nextToken());
       assertToken(JsonToken.END_ARRAY, p.nextToken());
       assertEnd(p);
@@ -159,12 +157,12 @@ public class TrailingCommasTest extends BaseTest {
     assertEquals("b", p.getText());
 
     // ALLOW_TRAILING_COMMA takes priority over ALLOW_MISSING_VALUES
-    if (features.contains(Feature.ALLOW_MISSING_VALUES) &&
-        features.contains(Feature.ALLOW_TRAILING_COMMA)) {
+    if (features.contains(JsonReadFeature.ALLOW_MISSING_VALUES) &&
+        features.contains(JsonReadFeature.ALLOW_TRAILING_COMMA)) {
       assertToken(JsonToken.VALUE_NULL, p.nextToken());
       assertToken(JsonToken.END_ARRAY, p.nextToken());
       assertEnd(p);
-    } else if (features.contains(Feature.ALLOW_MISSING_VALUES)) {
+    } else if (features.contains(JsonReadFeature.ALLOW_MISSING_VALUES)) {
       assertToken(JsonToken.VALUE_NULL, p.nextToken());
       assertToken(JsonToken.VALUE_NULL, p.nextToken());
       assertToken(JsonToken.END_ARRAY, p.nextToken());
@@ -190,13 +188,13 @@ public class TrailingCommasTest extends BaseTest {
     assertEquals("b", p.getText());
 
     // ALLOW_TRAILING_COMMA takes priority over ALLOW_MISSING_VALUES
-    if (features.contains(Feature.ALLOW_MISSING_VALUES) &&
-        features.contains(Feature.ALLOW_TRAILING_COMMA)) {
+    if (features.contains(JsonReadFeature.ALLOW_MISSING_VALUES) &&
+        features.contains(JsonReadFeature.ALLOW_TRAILING_COMMA)) {
       assertToken(JsonToken.VALUE_NULL, p.nextToken());
       assertToken(JsonToken.VALUE_NULL, p.nextToken());
       assertToken(JsonToken.END_ARRAY, p.nextToken());
       assertEnd(p);
-    } else if (features.contains(Feature.ALLOW_MISSING_VALUES)) {
+    } else if (features.contains(JsonReadFeature.ALLOW_MISSING_VALUES)) {
       assertToken(JsonToken.VALUE_NULL, p.nextToken());
       assertToken(JsonToken.VALUE_NULL, p.nextToken());
       assertToken(JsonToken.VALUE_NULL, p.nextToken());
@@ -273,7 +271,7 @@ public class TrailingCommasTest extends BaseTest {
     assertEquals("b", p.getText());
     assertToken(JsonToken.VALUE_FALSE, p.nextToken());
 
-    if (features.contains(Feature.ALLOW_TRAILING_COMMA)) {
+    if (features.contains(JsonReadFeature.ALLOW_TRAILING_COMMA)) {
       assertToken(JsonToken.END_OBJECT, p.nextToken());
       assertEnd(p);
     } else {
@@ -295,7 +293,7 @@ public class TrailingCommasTest extends BaseTest {
     assertEquals("b", p.nextFieldName());
     assertToken(JsonToken.VALUE_FALSE, p.nextToken());
 
-    if (features.contains(Feature.ALLOW_TRAILING_COMMA)) {
+    if (features.contains(JsonReadFeature.ALLOW_TRAILING_COMMA)) {
       assertEquals(null, p.nextFieldName());
       assertToken(JsonToken.END_OBJECT, p.currentToken());
       assertEnd(p);
@@ -324,7 +322,7 @@ public class TrailingCommasTest extends BaseTest {
     assertTrue(p.nextFieldName(new SerializedString("b")));
     assertToken(JsonToken.VALUE_FALSE, p.nextToken());
 
-    if (features.contains(Feature.ALLOW_TRAILING_COMMA)) {
+    if (features.contains(JsonReadFeature.ALLOW_TRAILING_COMMA)) {
       assertFalse(p.nextFieldName(new SerializedString("c")));
       assertToken(JsonToken.END_OBJECT, p.currentToken());
       assertEnd(p);

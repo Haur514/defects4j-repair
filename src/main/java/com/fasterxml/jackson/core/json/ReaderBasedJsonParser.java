@@ -19,7 +19,22 @@ import static com.fasterxml.jackson.core.JsonTokenId.*;
 public class ReaderBasedJsonParser // final in 2.3, earlier
     extends ParserBase
 {
-    protected final static int FEAT_MASK_TRAILING_COMMA = Feature.ALLOW_TRAILING_COMMA.getMask();
+    @SuppressWarnings("deprecation")
+    private final static int FEAT_MASK_TRAILING_COMMA = Feature.ALLOW_TRAILING_COMMA.getMask();
+
+    @SuppressWarnings("deprecation")
+    private final static int FEAT_MASK_LEADING_ZEROS = Feature.ALLOW_NUMERIC_LEADING_ZEROS.getMask();
+
+    @SuppressWarnings("deprecation")
+    private final static int FEAT_MASK_NON_NUM_NUMBERS = Feature.ALLOW_NON_NUMERIC_NUMBERS.getMask();
+
+    @SuppressWarnings("deprecation")
+    private final static int FEAT_MASK_ALLOW_MISSING = Feature.ALLOW_MISSING_VALUES.getMask();
+    private final static int FEAT_MASK_ALLOW_SINGLE_QUOTES = Feature.ALLOW_SINGLE_QUOTES.getMask();
+    private final static int FEAT_MASK_ALLOW_UNQUOTED_NAMES = Feature.ALLOW_UNQUOTED_FIELD_NAMES.getMask();
+
+    private final static int FEAT_MASK_ALLOW_JAVA_COMMENTS = Feature.ALLOW_COMMENTS.getMask();
+    private final static int FEAT_MASK_ALLOW_YAML_COMMENTS = Feature.ALLOW_YAML_COMMENTS.getMask();
 
     // Latin1 encoding is not supported, but we do use 8-bit subset for
     // pre-processing task, to simplify first pass, keep it fast.
@@ -1125,14 +1140,13 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
          */
         case ',':
         case ']':
-        	if(isEnabled(Feature.ALLOW_MISSING_VALUES)) {
-        		_inputPtr--;
-        		return (_currToken = JsonToken.VALUE_NULL);  
-        	}    
+            if ((_features & FEAT_MASK_ALLOW_MISSING) != 0) {
+                --_inputPtr;
+                return (_currToken = JsonToken.VALUE_NULL);  
+            }
         }
         return (_currToken = _handleOddValue(i));
     }
-
     // note: identical to one in UTF8StreamJsonParser
     @Override
     public final String nextTextValue() throws IOException
@@ -1585,7 +1599,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         if (ch < '0' || ch > '9') {
             return '0';
         }
-        if (!isEnabled(Feature.ALLOW_NUMERIC_LEADING_ZEROS)) {
+        if ((_features & FEAT_MASK_LEADING_ZEROS) == 0) {
             reportInvalidNumber("Leading zeroes not allowed");
         }
         // if so, just need to skip either all zeroes (if followed by number); or all but one (if non-number)
@@ -1621,14 +1635,14 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             if (ch == 'N') {
                 String match = negative ? "-INF" :"+INF";
                 _matchToken(match, 3);
-                if (isEnabled(Feature.ALLOW_NON_NUMERIC_NUMBERS)) {
+                if ((_features & FEAT_MASK_NON_NUM_NUMBERS) != 0) {
                     return resetAsNaN(match, negative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
                 }
                 _reportError("Non-standard token '"+match+"': enable JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS to allow");
             } else if (ch == 'n') {
                 String match = negative ? "-Infinity" :"+Infinity";
                 _matchToken(match, 3);
-                if (isEnabled(Feature.ALLOW_NON_NUMERIC_NUMBERS)) {
+                if ((_features & FEAT_MASK_NON_NUM_NUMBERS) != 0) {
                     return resetAsNaN(match, negative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
                 }
                 _reportError("Non-standard token '"+match+"': enable JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS to allow");
@@ -1759,11 +1773,11 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     protected String _handleOddName(int i) throws IOException
     {
         // [JACKSON-173]: allow single quotes
-        if (i == '\'' && isEnabled(Feature.ALLOW_SINGLE_QUOTES)) {
+        if (i == '\'' && (_features & FEAT_MASK_ALLOW_SINGLE_QUOTES) != 0) {
             return _parseAposName();
         }
         // [JACKSON-69]: allow unquoted names if feature enabled:
-        if (!isEnabled(Feature.ALLOW_UNQUOTED_FIELD_NAMES)) {
+        if ((_features & FEAT_MASK_ALLOW_UNQUOTED_NAMES) == 0) {
             _reportUnexpectedChar(i, "was expecting double-quote to start field name");
         }
         final int[] codes = CharTypes.getInputCodeLatin1JsNames();
@@ -1853,7 +1867,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
              * Also, no separation to fast/slow parsing; we'll just do
              * one regular (~= slowish) parsing, to keep code simple
              */
-            if (isEnabled(Feature.ALLOW_SINGLE_QUOTES)) {
+            if ((_features & FEAT_MASK_ALLOW_SINGLE_QUOTES) != 0) {
                 return _handleApos();
             }
             break;
@@ -1867,21 +1881,21 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             }
             // fall through
         case ',':
-            if (isEnabled(Feature.ALLOW_MISSING_VALUES)) {
+            if ((_features & FEAT_MASK_ALLOW_MISSING) != 0) {
                 --_inputPtr;
                 return JsonToken.VALUE_NULL;
             }
             break;
         case 'N':
             _matchToken("NaN", 1);
-            if (isEnabled(Feature.ALLOW_NON_NUMERIC_NUMBERS)) {
+            if ((_features & FEAT_MASK_NON_NUM_NUMBERS) != 0) {
                 return resetAsNaN("NaN", Double.NaN);
             }
             _reportError("Non-standard token 'NaN': enable JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS to allow");
             break;
         case 'I':
             _matchToken("Infinity", 1);
-            if (isEnabled(Feature.ALLOW_NON_NUMERIC_NUMBERS)) {
+            if ((_features & FEAT_MASK_NON_NUM_NUMBERS) != 0) {
                 return resetAsNaN("Infinity", Double.POSITIVE_INFINITY);
             }
             _reportError("Non-standard token 'Infinity': enable JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS to allow");
@@ -1960,7 +1974,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             }
             char c = _inputBuffer[_inputPtr];
             int i = (int) c;
-            if (i <= maxCode) {
+            if (i < maxCode) {
                 if (codes[i] != 0) {
                     break;
                 }
@@ -2417,7 +2431,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
     private void _skipComment() throws IOException
     {
-        if (!isEnabled(Feature.ALLOW_COMMENTS)) {
+        if ((_features & FEAT_MASK_ALLOW_JAVA_COMMENTS) == 0) {
             _reportUnexpectedChar('/', "maybe a (non-standard) comment? (not recognized as one since Feature 'ALLOW_COMMENTS' not enabled for parser)");
         }
         // First: check which comment (if either) it is:
@@ -2467,7 +2481,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
     private boolean _skipYAMLComment() throws IOException
     {
-        if (!isEnabled(Feature.ALLOW_YAML_COMMENTS)) {
+        if ((_features & FEAT_MASK_ALLOW_YAML_COMMENTS) == 0) {
             return false;
         }
         _skipLine();

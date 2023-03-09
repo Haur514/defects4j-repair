@@ -193,29 +193,37 @@ public class WriterBasedJsonGenerator
             _outputBuffer[_outputTail++] = ',';
         }
         // Alternate mode, in which quoting of field names disabled?
-        final char[] quoted = name.asQuotedChars();
         if (_cfgUnqNames) {
-            writeRaw(quoted, 0, quoted.length);
+            final char[] ch = name.asQuotedChars();
+            writeRaw(ch, 0, ch.length);
             return;
         }
         // we know there's room for at least one more char
         _outputBuffer[_outputTail++] = _quoteChar;
         // The beef:
-        final int qlen = quoted.length;
-        if ((_outputTail + qlen + 1) >= _outputEnd) {
-            writeRaw(quoted, 0, qlen);
-            // and closing quotes; need room for one more char:
-            if (_outputTail >= _outputEnd) {
-                _flushBuffer();
-            }
-            _outputBuffer[_outputTail++] = _quoteChar;
-        } else {
-            System.arraycopy(quoted, 0, _outputBuffer, _outputTail, qlen);
-            _outputTail += qlen;
-            _outputBuffer[_outputTail++] = _quoteChar;
+        
+        int len = name.appendQuoted(_outputBuffer, _outputTail);
+        if (len < 0) {
+            _writeFieldNameTail(name);
+            return;
         }
+        _outputTail += len;
+        if (_outputTail >= _outputEnd) {
+            _flushBuffer();
+        }
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
-    
+
+    private final void _writeFieldNameTail(SerializableString name) throws IOException
+    {
+        final char[] quoted = name.asQuotedChars();
+        writeRaw(quoted, 0, quoted.length);
+        if (_outputTail >= _outputEnd) {
+            _flushBuffer();
+        }
+        _outputBuffer[_outputTail++] = _quoteChar;
+    }
+
     /*
     /**********************************************************
     /* Output method implementations, structural
@@ -339,7 +347,6 @@ public class WriterBasedJsonGenerator
         } else {
             _cfgPrettyPrinter.beforeObjectEntries(this);
         }
-    
         final char[] quoted = name.asQuotedChars();
         if (_cfgUnqNames) {// non-standard, omit quotes
             writeRaw(quoted, 0, quoted.length);
@@ -446,10 +453,23 @@ public class WriterBasedJsonGenerator
             _flushBuffer();
         }
         _outputBuffer[_outputTail++] = _quoteChar;
+        int len = sstr.appendQuoted(_outputBuffer, _outputTail);
+        if (len < 0) {
+            _writeString2(sstr);
+            return;
+        }
+        _outputTail += len;
+        if (_outputTail >= _outputEnd) {
+            _flushBuffer();
+        }
+        _outputBuffer[_outputTail++] = _quoteChar;
+    }
+
+    private void _writeString2(SerializableString sstr) throws IOException
+    {
         // Note: copied from writeRaw:
         char[] text = sstr.asQuotedChars();
         final int len = text.length;
-        // Only worth buffering if it's a short write?
         if (len < SHORT_WRITE) {
             int room = _outputEnd - _outputTail;
             if (len > room) {
@@ -458,7 +478,6 @@ public class WriterBasedJsonGenerator
             System.arraycopy(text, 0, _outputBuffer, _outputTail, len);
             _outputTail += len;
         } else {
-            // Otherwise, better just pass through:
             _flushBuffer();
             _writer.write(text, 0, len);
         }
@@ -467,7 +486,7 @@ public class WriterBasedJsonGenerator
         }
         _outputBuffer[_outputTail++] = _quoteChar;
     }
-
+    
     @Override
     public void writeRawUTF8String(byte[] text, int offset, int length) throws IOException {
         // could add support for buffering if we really want it...
@@ -528,7 +547,12 @@ public class WriterBasedJsonGenerator
     // @since 2.1
     @Override
     public void writeRaw(SerializableString text) throws IOException {
-        writeRaw(text.getValue());
+        int len = text.appendUnquoted(_outputBuffer, _outputTail);
+        if (len < 0) {
+            writeRaw(text.getValue());
+            return;
+        }
+        _outputTail += len;
     }
 
     @Override
@@ -734,13 +758,12 @@ public class WriterBasedJsonGenerator
         }
     }
 
-    
+    @SuppressWarnings("deprecation")
     @Override
     public void writeNumber(double d) throws IOException
     {
         if (_cfgNumbersAsStrings ||
-            // [JACKSON-139]
-                (isEnabled(Feature.QUOTE_NON_NUMERIC_NUMBERS) && ((Double.isNaN(d) || Double.isInfinite(d))))) {
+                (NumberOutput.notFinite(d) && isEnabled(Feature.QUOTE_NON_NUMERIC_NUMBERS))) {
             writeString(String.valueOf(d));
             return;
         }
@@ -749,12 +772,12 @@ public class WriterBasedJsonGenerator
         writeRaw(String.valueOf(d));
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public void writeNumber(float f) throws IOException
     {
         if (_cfgNumbersAsStrings ||
-            // [JACKSON-139]
-                (isEnabled(Feature.QUOTE_NON_NUMERIC_NUMBERS) && ((Float.isNaN(f) || Float.isInfinite(f))))) {
+                (NumberOutput.notFinite(f) && isEnabled(Feature.QUOTE_NON_NUMERIC_NUMBERS))) {
             writeString(String.valueOf(f));
             return;
         }

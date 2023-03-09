@@ -34,7 +34,7 @@ public abstract class JsonGenerator
      */
     public enum Feature {
         // // Low-level I/O / content features
-        
+
         /**
          * Feature that determines whether generator will automatically
          * close underlying output target that is NOT owned by the
@@ -85,7 +85,10 @@ public abstract class JsonGenerator
          * occurs when used straight from Javascript.
          *<p>
          * Feature is enabled by default (since it is required by JSON specification).
+         *
+         * @deprecated Since 2.10 use {@link com.fasterxml.jackson.core.json.JsonWriteFeature#QUOTE_FIELD_NAMES} instead
          */
+        @Deprecated
         QUOTE_FIELD_NAMES(true),
 
         /**
@@ -99,15 +102,45 @@ public abstract class JsonGenerator
          * output.
          *<p>
          * Feature is enabled by default.
+         *
+         * @deprecated Since 2.10 use {@link com.fasterxml.jackson.core.json.JsonWriteFeature#WRITE_NAN_AS_STRINGS} instead
          */
+         @Deprecated
         QUOTE_NON_NUMERIC_NUMBERS(true),
 
+        // // Character escaping features
+
         /**
-         * Feature that forces all Java numbers to be written as JSON strings.
+         * Feature that specifies that all characters beyond 7-bit ASCII
+         * range (i.e. code points of 128 and above) need to be output
+         * using format-specific escapes (for JSON, backslash escapes),
+         * if format uses escaping mechanisms (which is generally true
+         * for textual formats but not for binary formats).
+         *<p>
+         * Note that this setting may not necessarily make sense for all
+         * data formats (for example, binary formats typically do not use
+         * any escaping mechanisms; and some textual formats do not have
+         * general-purpose escaping); if so, settings is simply ignored.
+         * Put another way, effects of this feature are data-format specific.
+         *<p>
+         * Feature is disabled by default.
+         *
+         * @deprecated Since 2.10 use {@link com.fasterxml.jackson.core.json.JsonWriteFeature#ESCAPE_NON_ASCII} instead
+         */
+        @Deprecated
+        ESCAPE_NON_ASCII(false),
+
+        // // Datatype coercion features
+
+        /**
+         * Feature that forces all Java numbers to be written as Strings,
+         * even if the underlying data format has non-textual representation
+         * (which is the case for JSON as well as all binary formats).
          * Default state is 'false', meaning that Java numbers are to
          * be serialized using basic numeric serialization (as JSON
-         * numbers, integral or floating point). If enabled, all such
-         * numeric values are instead written out as JSON Strings.
+         * numbers, integral or floating point, for example).
+         * If enabled, all such numeric values are instead written out as
+         * textual values (which for JSON means quoted in double-quotes).
          *<p>
          * One use case is to avoid problems with Javascript limitations:
          * since Javascript standard specifies that all number handling
@@ -124,54 +157,17 @@ public abstract class JsonGenerator
          * serialized using {@link java.math.BigDecimal#toPlainString()} to prevent
          * values to be written using scientific notation.
          *<p>
+         * NOTE: only affects generators that serialize {@link java.math.BigDecimal}s
+         * using textual representation (textual formats but potentially some binary
+         * formats).
+         *<p>
          * Feature is disabled by default, so default output mode is used; this generally
          * depends on how {@link BigDecimal} has been created.
          * 
          * @since 2.3
          */
         WRITE_BIGDECIMAL_AS_PLAIN(false),
-        
-        /**
-         * Feature that specifies that all characters beyond 7-bit ASCII
-         * range (i.e. code points of 128 and above) need to be output
-         * using format-specific escapes (for JSON, backslash escapes),
-         * if format uses escaping mechanisms (which is generally true
-         * for textual formats but not for binary formats).
-         *<p>
-         * Note that this setting may not necessarily make sense for all
-         * data formats (for example, binary formats typically do not use
-         * any escaping mechanisms; and some textual formats do not have
-         * general-purpose escaping); if so, settings is simply ignored.
-         * Put another way, effects of this feature are data-format specific.
-         *<p>
-         * Feature is disabled by default.
-         */
-        ESCAPE_NON_ASCII(false),
 
-// 23-Nov-2015, tatu: for [core#223], if and when it gets implemented
-        /**
-         * Feature that specifies handling of UTF-8 content that contains
-         * characters beyond BMP (Basic Multilingual Plane), which are
-         * represented in UCS-2 (Java internal character encoding) as two
-         * "surrogate" characters. If feature is enabled, these surrogate
-         * pairs are separately escaped using backslash escapes; if disabled,
-         * native output (4-byte UTF-8 sequence, or, with char-backed output
-         * targets, writing of surrogates as is which is typically converted
-         * by {@link java.io.Writer} into 4-byte UTF-8 sequence eventually)
-         * is used.
-         *<p>
-         * Note that the original JSON specification suggests use of escaping;
-         * but that this is not correct from standard UTF-8 handling perspective.
-         * Because of two competing goals, this feature was added to allow either
-         * behavior to be used, but defaulting to UTF-8 specification compliant
-         * mode.
-         *<p>
-         * Feature is disabled by default.
-         *
-         * @since Xxx
-         */
-//        ESCAPE_UTF8_SURROGATES(false),
-        
         // // Schema/Validity support features
 
         /**
@@ -401,12 +397,10 @@ public abstract class JsonGenerator
      * @since 2.6
      */
     public JsonGenerator overrideFormatFeatures(int values, int mask) {
-        throw new IllegalArgumentException("No FormatFeatures defined for generator of type "+getClass().getName());
-        /*
-        int oldState = getFeatureMask();
-        int newState = (oldState & ~mask) | (values & mask);
-        return setFeatureMask(newState);
-        */
+        // 08-Oct-2018, tatu: For 2.10 we actually do get `JsonWriteFeature`s, although they
+        //    are (for 2.x only, not for 3.x) mapper to legacy settings. So do not freak out:
+//        throw new IllegalArgumentException("No FormatFeatures defined for generator of type "+getClass().getName());
+        return this;
     }
     
     /*
@@ -517,7 +511,7 @@ public abstract class JsonGenerator
      * simply return 0.
      * 
      * @return Currently active limitation for highest non-escaped character,
-     *   if defined; or -1 to indicate no additional escaping is performed.
+     *   if defined; or 0 to indicate no additional escaping is performed.
      */
     public int getHighestEscapedChar() { return 0; }
 
@@ -1091,6 +1085,7 @@ public abstract class JsonGenerator
      * 
      * @since 2.1
      */
+//    public abstract void writeRaw(SerializableString raw) throws IOException;
     public void writeRaw(SerializableString raw) throws IOException {
         writeRaw(raw.getValue());
     }

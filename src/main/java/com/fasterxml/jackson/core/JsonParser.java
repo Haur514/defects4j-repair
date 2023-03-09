@@ -43,9 +43,8 @@ public abstract class JsonParser
      * Enumeration that defines all on/off features for parsers.
      */
     public enum Feature {
-        
         // // // Low-level I/O handling features:
-        
+
         /**
          * Feature that determines whether parser will automatically
          * close underlying input source that is NOT owned by the
@@ -73,6 +72,9 @@ public abstract class JsonParser
          * this is extensively used. As such, feature is
          * <b>disabled by default</b> for parsers and must be
          * explicitly enabled.
+         *<p>
+         * NOTE: while not technically deprecated, since 2.10 recommended to use
+         * {@link com.fasterxml.jackson.core.json.JsonReadFeature#ALLOW_JAVA_COMMENTS} instead.
          */
         ALLOW_COMMENTS(false),
 
@@ -87,9 +89,12 @@ public abstract class JsonParser
          * this is a non-standard feature. As such, feature is
          * <b>disabled by default</b> for parsers and must be
          * explicitly enabled.
+         *<p>
+         * NOTE: while not technically deprecated, since 2.10 recommended to use
+         * {@link com.fasterxml.jackson.core.json.JsonReadFeature#ALLOW_YAML_COMMENTS} instead.
          */
         ALLOW_YAML_COMMENTS(false),
-        
+
         /**
          * Feature that determines whether parser will allow use
          * of unquoted field names (which is allowed by Javascript,
@@ -98,6 +103,9 @@ public abstract class JsonParser
          * Since JSON specification requires use of double quotes for
          * field names,
          * this is a non-standard feature, and as such disabled by default.
+         *<p>
+         * NOTE: while not technically deprecated, since 2.10 recommended to use
+         * {@link com.fasterxml.jackson.core.json.JsonReadFeature#ALLOW_UNQUOTED_FIELD_NAMES} instead.
          */
         ALLOW_UNQUOTED_FIELD_NAMES(false),
 
@@ -111,6 +119,9 @@ public abstract class JsonParser
          * Since JSON specification requires use of double quotes for
          * field names,
          * this is a non-standard feature, and as such disabled by default.
+         *<p>
+         * NOTE: while not technically deprecated, since 2.10 recommended to use
+         * {@link com.fasterxml.jackson.core.json.JsonReadFeature#ALLOW_SINGLE_QUOTES} instead.
          */
         ALLOW_SINGLE_QUOTES(false),
 
@@ -124,7 +135,10 @@ public abstract class JsonParser
          *<p>
          * Since JSON specification requires quoting for all control characters,
          * this is a non-standard feature, and as such disabled by default.
+         *
+         * @deprecated Since 2.10 use {@link com.fasterxml.jackson.core.json.JsonReadFeature#ALLOW_UNESCAPED_CONTROL_CHARS} instead
          */
+        @Deprecated
         ALLOW_UNQUOTED_CONTROL_CHARS(false),
 
         /**
@@ -135,7 +149,10 @@ public abstract class JsonParser
          *<p>
          * Since JSON specification requires quoting for all control characters,
          * this is a non-standard feature, and as such disabled by default.
+         *
+         * @deprecated Since 2.10 use {@link com.fasterxml.jackson.core.json.JsonReadFeature#ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER} instead
          */
+        @Deprecated
         ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER(false),
 
         /**
@@ -147,7 +164,10 @@ public abstract class JsonParser
          *<p>
          * Since JSON specification does not allow leading zeroes,
          * this is a non-standard feature, and as such disabled by default.
+         *
+         * @deprecated Since 2.10 use {@link com.fasterxml.jackson.core.json.JsonReadFeature#ALLOW_LEADING_ZEROS_FOR_NUMBERS} instead
          */
+         @Deprecated
         ALLOW_NUMERIC_LEADING_ZEROS(false),
         
         /**
@@ -167,7 +187,10 @@ public abstract class JsonParser
          *<p>
          * Since JSON specification does not allow use of such values,
          * this is a non-standard feature, and as such disabled by default.
-         */
+          *
+          * @deprecated Since 2.10 use {@link com.fasterxml.jackson.core.json.JsonReadFeature#ALLOW_NON_NUMERIC_NUMBERS} instead
+          */
+         @Deprecated
          ALLOW_NON_NUMERIC_NUMBERS(false),
 
          /**
@@ -185,7 +208,10 @@ public abstract class JsonParser
           * feature and is disabled by default.
           * 
           * @since 2.8
+          *
+          * @deprecated Since 2.10 use {@link com.fasterxml.jackson.core.json.JsonReadFeature#ALLOW_MISSING_VALUES} instead
           */
+         @Deprecated
          ALLOW_MISSING_VALUES(false),
 
          /**
@@ -208,7 +234,10 @@ public abstract class JsonParser
           * feature, and as such disabled by default.
           *
           * @since 2.9
+          *
+          * @deprecated Since 2.10 use {@link com.fasterxml.jackson.core.json.JsonReadFeature#ALLOW_TRAILING_COMMA} instead
           */
+         @Deprecated
          ALLOW_TRAILING_COMMA(false),
 
          // // // Validity checks
@@ -277,7 +306,7 @@ public abstract class JsonParser
           * @since 2.9
           */
          INCLUDE_SOURCE_IN_LOCATION(true),
-         
+
          ;
 
         /**
@@ -754,10 +783,10 @@ public abstract class JsonParser
      * @since 2.6
      */
     public JsonParser overrideFormatFeatures(int values, int mask) {
-        throw new IllegalArgumentException("No FormatFeatures defined for parser of type "+getClass().getName());
-        /*
-        _formatFeatures = (_formatFeatures & ~mask) | (values & mask);
-        */
+        // 08-Oct-2018, tatu: For 2.10 we actually do get `JsonReadFeature`s, although they
+        //    are (for 2.x only, not for 3.x) mapper to legacy settings. So do not freak out:
+//        throw new IllegalArgumentException("No FormatFeatures defined for parser of type "+getClass().getName());
+        return this;
     }
 
     /*
@@ -1764,7 +1793,7 @@ public abstract class JsonParser
      * Method for reading sequence of Objects from parser stream,
      * all with same specified value type.
      */
-    public <T> Iterator<T> readValuesAs(TypeReference<?> valueTypeRef) throws IOException {
+    public <T> Iterator<T> readValuesAs(TypeReference<T> valueTypeRef) throws IOException {
         return _codec().readValues(this, valueTypeRef);
     }
     

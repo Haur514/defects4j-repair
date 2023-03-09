@@ -11,7 +11,7 @@ import com.fasterxml.jackson.core.util.VersionUtil;
  */
 public final class PackageVersion implements Versioned {
     public final static Version VERSION = VersionUtil.parseVersion(
-        "2.9.9-SNAPSHOT", "com.fasterxml.jackson.core", "jackson-core");
+        "2.10.0-SNAPSHOT", "com.fasterxml.jackson.core", "jackson-core");
 
     @Override
     public Version version() {

@@ -15,6 +15,17 @@ public class NonBlockingJsonParser
     extends NonBlockingJsonParserBase
     implements ByteArrayFeeder
 {
+    @SuppressWarnings("deprecation")
+    private final static int FEAT_MASK_TRAILING_COMMA = Feature.ALLOW_TRAILING_COMMA.getMask();
+    @SuppressWarnings("deprecation")
+    private final static int FEAT_MASK_LEADING_ZEROS = Feature.ALLOW_NUMERIC_LEADING_ZEROS.getMask();
+    @SuppressWarnings("deprecation")
+    private final static int FEAT_MASK_ALLOW_MISSING = Feature.ALLOW_MISSING_VALUES.getMask();
+    private final static int FEAT_MASK_ALLOW_SINGLE_QUOTES = Feature.ALLOW_SINGLE_QUOTES.getMask();
+    private final static int FEAT_MASK_ALLOW_UNQUOTED_NAMES = Feature.ALLOW_UNQUOTED_FIELD_NAMES.getMask();
+    private final static int FEAT_MASK_ALLOW_JAVA_COMMENTS = Feature.ALLOW_COMMENTS.getMask();
+    private final static int FEAT_MASK_ALLOW_YAML_COMMENTS = Feature.ALLOW_YAML_COMMENTS.getMask();
+
     // This is the main input-code lookup table, fetched eagerly
     private final static int[] _icUTF8 = CharTypes.getInputCodeUtf8();
 
@@ -552,7 +563,7 @@ public class NonBlockingJsonParser
         _updateTokenLocation();
         if (ch != INT_QUOTE) {
             if (ch == INT_RCURLY) {
-                if (JsonParser.Feature.ALLOW_TRAILING_COMMA.enabledIn(_features)) {
+                if ((_features & FEAT_MASK_TRAILING_COMMA) != 0) {
                     return _closeObjectScope();
                 }
             }
@@ -712,7 +723,7 @@ public class NonBlockingJsonParser
             return _startArrayScope();
         case ']':
             // Was that a trailing comma?
-            if (isEnabled(Feature.ALLOW_TRAILING_COMMA)) {
+            if ((_features & FEAT_MASK_TRAILING_COMMA) != 0) {
                 return _closeArrayScope();
             }
             break;
@@ -720,7 +731,7 @@ public class NonBlockingJsonParser
             return _startObjectScope();
         case '}':
             // Was that a trailing comma?
-            if (isEnabled(Feature.ALLOW_TRAILING_COMMA)) {
+            if ((_features & FEAT_MASK_TRAILING_COMMA) != 0) {
                 return _closeObjectScope();
             }
             break;
@@ -856,7 +867,7 @@ public class NonBlockingJsonParser
             return _startArrayScope();
         case ']':
             // Was that a trailing comma?
-            if (isEnabled(Feature.ALLOW_TRAILING_COMMA)) {
+            if ((_features & FEAT_MASK_TRAILING_COMMA) != 0) {
                 return _closeArrayScope();
             }
             break;
@@ -864,7 +875,7 @@ public class NonBlockingJsonParser
             return _startObjectScope();
         case '}':
             // Was that a trailing comma?
-            if (isEnabled(Feature.ALLOW_TRAILING_COMMA)) {
+            if ((_features & FEAT_MASK_TRAILING_COMMA) != 0) {
                 return _closeObjectScope();
             }
             break;
@@ -885,7 +896,7 @@ public class NonBlockingJsonParser
             // 28-Mar-2016: [core#116]: If Feature.ALLOW_MISSING_VALUES is enabled
             //   we may allow "missing values", that is, encountering a trailing
             //   comma or closing marker where value would be expected
-            if (isEnabled(Feature.ALLOW_MISSING_VALUES)) {
+            if ((_features & FEAT_MASK_ALLOW_MISSING) != 0) {
                 --_inputPtr;
                 return _valueComplete(JsonToken.VALUE_NULL);
             }
@@ -895,7 +906,7 @@ public class NonBlockingJsonParser
             // been handled earlier
             break;
         case '\'':
-            if (isEnabled(Feature.ALLOW_SINGLE_QUOTES)) {
+            if ((_features & FEAT_MASK_ALLOW_SINGLE_QUOTES) != 0) {
                 return _startAposString();
             }
             break;
@@ -942,7 +953,7 @@ public class NonBlockingJsonParser
 
     private final JsonToken _startSlashComment(int fromMinorState) throws IOException
     {
-        if (!JsonParser.Feature.ALLOW_COMMENTS.enabledIn(_features)) {
+        if ((_features & FEAT_MASK_ALLOW_JAVA_COMMENTS) == 0) {
             _reportUnexpectedChar('/', "maybe a (non-standard) comment? (not recognized as one since Feature 'ALLOW_COMMENTS' not enabled for parser)");
         }
 
@@ -966,7 +977,7 @@ public class NonBlockingJsonParser
     private final JsonToken _finishHashComment(int fromMinorState) throws IOException
     {
         // Could by-pass this check by refactoring, but for now simplest way...
-        if (!JsonParser.Feature.ALLOW_YAML_COMMENTS.enabledIn(_features)) {
+        if ((_features & FEAT_MASK_ALLOW_YAML_COMMENTS) == 0) {
             _reportUnexpectedChar('#', "maybe a (non-standard) comment? (not recognized as one since Feature 'ALLOW_YAML_COMMENTS' not enabled for parser)");
         }
         while (true) {
@@ -1476,7 +1487,7 @@ public class NonBlockingJsonParser
             } else { // Number between 0 and 9
                 // although not guaranteed, seems likely valid separator (white space,
                 // comma, end bracket/curly); next time token needed will verify
-                if (!isEnabled(Feature.ALLOW_NUMERIC_LEADING_ZEROS)) {
+                if ((_features & FEAT_MASK_LEADING_ZEROS) == 0) {
                     reportInvalidNumber("Leading zeroes not allowed");
                 }
                 if (ch == INT_0) { // coalesce multiple leading zeroes into just one
@@ -1529,7 +1540,7 @@ public class NonBlockingJsonParser
             } else { // Number between 1 and 9; go integral
                 // although not guaranteed, seems likely valid separator (white space,
                 // comma, end bracket/curly); next time token needed will verify
-                if (!isEnabled(Feature.ALLOW_NUMERIC_LEADING_ZEROS)) {
+                if ((_features & FEAT_MASK_LEADING_ZEROS) == 0) {
                     reportInvalidNumber("Leading zeroes not allowed");
                 }
                 if (ch == INT_0) { // coalesce multiple leading zeroes into just one
@@ -2048,14 +2059,14 @@ public class NonBlockingJsonParser
         case '#':
             // Careful, since this may alternatively be leading char of
             // unquoted name...
-            if (JsonParser.Feature.ALLOW_YAML_COMMENTS.enabledIn(_features)) {
+            if ((_features & FEAT_MASK_ALLOW_YAML_COMMENTS) != 0) {
                 return _finishHashComment(MINOR_FIELD_LEADING_WS);
             }
             break;
         case '/':
             return _startSlashComment(MINOR_FIELD_LEADING_WS);
         case '\'':
-            if (isEnabled(Feature.ALLOW_SINGLE_QUOTES)) {
+            if ((_features & FEAT_MASK_ALLOW_SINGLE_QUOTES) != 0) {
                 return _finishAposName(0, 0, 0);
             }
             break;
@@ -2063,7 +2074,7 @@ public class NonBlockingJsonParser
             return _closeArrayScope();
         }
         // allow unquoted names if feature enabled:
-        if (!isEnabled(Feature.ALLOW_UNQUOTED_FIELD_NAMES)) {
+        if ((_features & FEAT_MASK_ALLOW_UNQUOTED_NAMES) == 0) {
          // !!! TODO: Decode UTF-8 characters properly...
 //            char c = (char) _decodeCharForError(ch);
             char c = (char) ch;
