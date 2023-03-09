@@ -2,48 +2,50 @@ package org.jsoup.select;
 
 import org.jsoup.helper.Validate;
 import org.jsoup.nodes.Element;
+import org.jsoup.nodes.FormElement;
 import org.jsoup.nodes.Node;
 
 import java.util.*;
 
 /**
- A list of {@link Element Elements}, with methods that act on every element in the list.
- <p/>
- To get an Elements object, use the {@link Element#select(String)} method.
+ A list of {@link Element}s, with methods that act on every element in the list.
+ <p>
+ To get an {@code Elements} object, use the {@link Element#select(String)} method.
+ </p>
 
  @author Jonathan Hedley, jonathan@hedley.net */
-public class Elements implements List<Element>, Cloneable {
-    private List<Element> contents;
-
+public class Elements extends ArrayList<Element> {
     public Elements() {
-        contents = new ArrayList<Element>();
     }
 
     public Elements(int initialCapacity) {
-        contents = new ArrayList<Element>(initialCapacity);
+        super(initialCapacity);
     }
 
     public Elements(Collection<Element> elements) {
-        contents = new ArrayList<Element>(elements);
+        super(elements);
     }
     
     public Elements(List<Element> elements) {
-        contents = elements;
+        super(elements);
     }
     
     public Elements(Element... elements) {
-        this(Arrays.asList(elements));
+    	super(Arrays.asList(elements));
     }
-    
+
+    /**
+     * Creates a deep copy of these elements.
+     * @return a deep copy
+     */
     @Override
 	public Elements clone() {
-    	List<Element> elements = new ArrayList<Element>();
+        Elements clone = new Elements(size());
+
+        for(Element e : this)
+    		clone.add(e.clone());
     	
-    	for(Element e : contents)
-    		elements.add(e.clone());
-		
-    	
-    	return new Elements(elements);
+    	return clone;
 	}
 
 	// attribute methods
@@ -55,7 +57,7 @@ public class Elements implements List<Element>, Cloneable {
      @see #hasAttr(String)
      */
     public String attr(String attributeKey) {
-        for (Element element : contents) {
+        for (Element element : this) {
             if (element.hasAttr(attributeKey))
                 return element.attr(attributeKey);
         }
@@ -68,7 +70,7 @@ public class Elements implements List<Element>, Cloneable {
      @return true if any of the elements have the attribute; false if none do.
      */
     public boolean hasAttr(String attributeKey) {
-        for (Element element : contents) {
+        for (Element element : this) {
             if (element.hasAttr(attributeKey))
                 return true;
         }
@@ -82,7 +84,7 @@ public class Elements implements List<Element>, Cloneable {
      * @return this
      */
     public Elements attr(String attributeKey, String attributeValue) {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.attr(attributeKey, attributeValue);
         }
         return this;
@@ -94,7 +96,7 @@ public class Elements implements List<Element>, Cloneable {
      * @return this (for chaining)
      */
     public Elements removeAttr(String attributeKey) {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.removeAttr(attributeKey);
         }
         return this;
@@ -106,7 +108,7 @@ public class Elements implements List<Element>, Cloneable {
      @return this
      */
     public Elements addClass(String className) {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.addClass(className);
         }
         return this;
@@ -118,7 +120,7 @@ public class Elements implements List<Element>, Cloneable {
      @return this
      */
     public Elements removeClass(String className) {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.removeClass(className);
         }
         return this;
@@ -130,7 +132,7 @@ public class Elements implements List<Element>, Cloneable {
      @return this
      */
     public Elements toggleClass(String className) {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.toggleClass(className);
         }
         return this;
@@ -142,7 +144,7 @@ public class Elements implements List<Element>, Cloneable {
      @return true if any do, false if none do
      */
     public boolean hasClass(String className) {
-        for (Element element : contents) {
+        for (Element element : this) {
             if (element.hasClass(className))
                 return true;
         }
@@ -167,7 +169,7 @@ public class Elements implements List<Element>, Cloneable {
      * @return this (for chaining)
      */
     public Elements val(String value) {
-        for (Element element : contents)
+        for (Element element : this)
             element.val(value);
         return this;
     }
@@ -182,7 +184,7 @@ public class Elements implements List<Element>, Cloneable {
      */
     public String text() {
         StringBuilder sb = new StringBuilder();
-        for (Element element : contents) {
+        for (Element element : this) {
             if (sb.length() != 0)
                 sb.append(" ");
             sb.append(element.text());
@@ -191,7 +193,7 @@ public class Elements implements List<Element>, Cloneable {
     }
 
     public boolean hasText() {
-        for (Element element: contents) {
+        for (Element element: this) {
             if (element.hasText())
                 return true;
         }
@@ -206,7 +208,7 @@ public class Elements implements List<Element>, Cloneable {
      */
     public String html() {
         StringBuilder sb = new StringBuilder();
-        for (Element element : contents) {
+        for (Element element : this) {
             if (sb.length() != 0)
                 sb.append("\n");
             sb.append(element.html());
@@ -222,7 +224,7 @@ public class Elements implements List<Element>, Cloneable {
      */
     public String outerHtml() {
         StringBuilder sb = new StringBuilder();
-        for (Element element : contents) {
+        for (Element element : this) {
             if (sb.length() != 0)
                 sb.append("\n");
             sb.append(element.outerHtml());
@@ -236,6 +238,7 @@ public class Elements implements List<Element>, Cloneable {
      * @see #text()
      * @see #html()
      */
+    @Override
     public String toString() {
         return outerHtml();
     }
@@ -248,7 +251,7 @@ public class Elements implements List<Element>, Cloneable {
      * @see Element#tagName(String)
      */
     public Elements tagName(String tagName) {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.tagName(tagName);
         }
         return this;
@@ -261,7 +264,7 @@ public class Elements implements List<Element>, Cloneable {
      * @see Element#html(String)
      */
     public Elements html(String html) {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.html(html);
         }
         return this;
@@ -274,7 +277,7 @@ public class Elements implements List<Element>, Cloneable {
      * @see Element#prepend(String)
      */
     public Elements prepend(String html) {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.prepend(html);
         }
         return this;
@@ -287,7 +290,7 @@ public class Elements implements List<Element>, Cloneable {
      * @see Element#append(String)
      */
     public Elements append(String html) {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.append(html);
         }
         return this;
@@ -300,7 +303,7 @@ public class Elements implements List<Element>, Cloneable {
      * @see Element#before(String)
      */
     public Elements before(String html) {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.before(html);
         }
         return this;
@@ -313,7 +316,7 @@ public class Elements implements List<Element>, Cloneable {
      * @see Element#after(String)
      */
     public Elements after(String html) {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.after(html);
         }
         return this;
@@ -330,7 +333,7 @@ public class Elements implements List<Element>, Cloneable {
      */
     public Elements wrap(String html) {
         Validate.notEmpty(html);
-        for (Element element : contents) {
+        for (Element element : this) {
             element.wrap(html);
         }
         return this;
@@ -339,18 +342,19 @@ public class Elements implements List<Element>, Cloneable {
     /**
      * Removes the matched elements from the DOM, and moves their children up into their parents. This has the effect of
      * dropping the elements but keeping their children.
-     * <p/>
+     * <p>
      * This is useful for e.g removing unwanted formatting elements but keeping their contents.
-     * <p/>
-     * E.g. with HTML: {@code <div><font>One</font> <font><a href="/">Two</a></font></div>}<br/>
-     * {@code doc.select("font").unwrap();}<br/>
-     * HTML = {@code <div>One <a href="/">Two</a></div>}
+     * </p>
+     * 
+     * E.g. with HTML: <p>{@code <div><font>One</font> <font><a href="/">Two</a></font></div>}</p>
+     * <p>{@code doc.select("font").unwrap();}</p>
+     * <p>HTML = {@code <div>One <a href="/">Two</a></div>}</p>
      *
      * @return this (for chaining)
      * @see Node#unwrap
      */
     public Elements unwrap() {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.unwrap();
         }
         return this;
@@ -368,7 +372,7 @@ public class Elements implements List<Element>, Cloneable {
      * @see #remove()
      */
     public Elements empty() {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.empty();
         }
         return this;
@@ -387,7 +391,7 @@ public class Elements implements List<Element>, Cloneable {
      * @see #empty()
      */
     public Elements remove() {
-        for (Element element : contents) {
+        for (Element element : this) {
             element.remove();
         }
         return this;
@@ -427,7 +431,7 @@ public class Elements implements List<Element>, Cloneable {
      * @return Elements containing only the specified element, or, if that element did not exist, an empty list.
      */
     public Elements eq(int index) {
-        return contents.size() > index ? new Elements(get(index)) : new Elements();
+        return size() > index ? new Elements(get(index)) : new Elements();
     }
     
     /**
@@ -446,7 +450,7 @@ public class Elements implements List<Element>, Cloneable {
      */
     public Elements parents() {
         HashSet<Element> combo = new LinkedHashSet<Element>();
-        for (Element e: contents) {
+        for (Element e: this) {
             combo.addAll(e.parents());
         }
         return new Elements(combo);
@@ -455,10 +459,10 @@ public class Elements implements List<Element>, Cloneable {
     // list-like methods
     /**
      Get the first matched element.
-     @return The first matched element, or <code>null</code> if contents is empty;
+     @return The first matched element, or <code>null</code> if contents is empty.
      */
     public Element first() {
-        return contents.isEmpty() ? null : contents.get(0);
+        return isEmpty() ? null : get(0);
     }
 
     /**
@@ -466,7 +470,7 @@ public class Elements implements List<Element>, Cloneable {
      @return The last matched element, or <code>null</code> if contents is empty.
      */
     public Element last() {
-        return contents.isEmpty() ? null : contents.get(contents.size() - 1);
+        return isEmpty() ? null : get(size() - 1);
     }
 
     /**
@@ -477,60 +481,23 @@ public class Elements implements List<Element>, Cloneable {
     public Elements traverse(NodeVisitor nodeVisitor) {
         Validate.notNull(nodeVisitor);
         NodeTraversor traversor = new NodeTraversor(nodeVisitor);
-        for (Element el: contents) {
+        for (Element el: this) {
             traversor.traverse(el);
         }
         return this;
     }
 
-    // implements List<Element> delegates:
-    public int size() {return contents.size();}
+    /**
+     * Get the {@link FormElement} forms from the selected elements, if any.
+     * @return a list of {@link FormElement}s pulled from the matched elements. The list will be empty if the elements contain
+     * no forms.
+     */
+    public List<FormElement> forms() {
+        ArrayList<FormElement> forms = new ArrayList<FormElement>();
+        for (Element el: this)
+            if (el instanceof FormElement)
+                forms.add((FormElement) el);
+        return forms;
+    }
 
-    public boolean isEmpty() {return contents.isEmpty();}
-
-    public boolean contains(Object o) {return contents.contains(o);}
-
-    public Iterator<Element> iterator() {return contents.iterator();}
-
-    public Object[] toArray() {return contents.toArray();}
-
-    public <T> T[] toArray(T[] a) {return contents.toArray(a);}
-
-    public boolean add(Element element) {return contents.add(element);}
-
-    public boolean remove(Object o) {return contents.remove(o);}
-
-    public boolean containsAll(Collection<?> c) {return contents.containsAll(c);}
-
-    public boolean addAll(Collection<? extends Element> c) {return contents.addAll(c);}
-
-    public boolean addAll(int index, Collection<? extends Element> c) {return contents.addAll(index, c);}
-
-    public boolean removeAll(Collection<?> c) {return contents.removeAll(c);}
-
-    public boolean retainAll(Collection<?> c) {return contents.retainAll(c);}
-
-    public void clear() {contents.clear();}
-
-    public boolean equals(Object o) {return contents.equals(o);}
-
-    public int hashCode() {return contents.hashCode();}
-
-    public Element get(int index) {return contents.get(index);}
-
-    public Element set(int index, Element element) {return contents.set(index, element);}
-
-    public void add(int index, Element element) {contents.add(index, element);}
-
-    public Element remove(int index) {return contents.remove(index);}
-
-    public int indexOf(Object o) {return contents.indexOf(o);}
-
-    public int lastIndexOf(Object o) {return contents.lastIndexOf(o);}
-
-    public ListIterator<Element> listIterator() {return contents.listIterator();}
-
-    public ListIterator<Element> listIterator(int index) {return contents.listIterator(index);}
-
-    public List<Element> subList(int fromIndex, int toIndex) {return contents.subList(fromIndex, toIndex);}
 }

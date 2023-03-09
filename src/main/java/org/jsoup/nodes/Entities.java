@@ -1,11 +1,12 @@
 package org.jsoup.nodes;
 
+import org.jsoup.helper.StringUtil;
+import org.jsoup.parser.Parser;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.CharsetEncoder;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * HTML entities, and escape routines.
@@ -14,7 +15,7 @@ import java.util.regex.Pattern;
  */
 public class Entities {
     public enum EscapeMode {
-        /** Restricted entities suitable for XHTML output: lt, gt, amp, apos, and quot only. */
+        /** Restricted entities suitable for XHTML output: lt, gt, amp, and quot only. */
         xhtml(xhtmlByVal),
         /** Default HTML output entities. */
         base(baseByVal),
@@ -34,16 +35,15 @@ public class Entities {
 
     private static final Map<String, Character> full;
     private static final Map<Character, String> xhtmlByVal;
+    private static final Map<String, Character> base;
     private static final Map<Character, String> baseByVal;
     private static final Map<Character, String> fullByVal;
-    private static final Pattern unescapePattern = Pattern.compile("&(#(x|X)?([0-9a-fA-F]+)|[a-zA-Z]+\\d*);?");
-    private static final Pattern strictUnescapePattern = Pattern.compile("&(#(x|X)?([0-9a-fA-F]+)|[a-zA-Z]+\\d*);");
 
     private Entities() {}
 
     /**
      * Check if the input is a known named entity
-     * @param name the possible entity name (e.g. "lt" or "amp"
+     * @param name the possible entity name (e.g. "lt" or "amp")
      * @return true if a known named entity
      */
     public static boolean isNamedEntity(String name) {
@@ -51,33 +51,107 @@ public class Entities {
     }
 
     /**
+     * Check if the input is a known named entity in the base entity set.
+     * @param name the possible entity name (e.g. "lt" or "amp")
+     * @return true if a known named entity in the base set
+     * @see #isNamedEntity(String)
+     */
+    public static boolean isBaseNamedEntity(String name) {
+        return base.containsKey(name);
+    }
+
+    /**
      * Get the Character value of the named entity
      * @param name named entity (e.g. "lt" or "amp")
-     * @return the Character value of the named entity (e.g. '<' or '&')
+     * @return the Character value of the named entity (e.g. '{@literal <}' or '{@literal &}')
      */
     public static Character getCharacterByName(String name) {
         return full.get(name);
     }
     
     static String escape(String string, Document.OutputSettings out) {
-        return escape(string, out.encoder(), out.escapeMode());
+        StringBuilder accum = new StringBuilder(string.length() * 2);
+        escape(accum, string, out, false, false, false);
+        return accum.toString();
     }
 
-    static String escape(String string, CharsetEncoder encoder, EscapeMode escapeMode) {
-        StringBuilder accum = new StringBuilder(string.length() * 2);
-        Map<Character, String> map = escapeMode.getMap();
+    // this method is ugly, and does a lot. but other breakups cause rescanning and stringbuilder generations
+    static void escape(StringBuilder accum, String string, Document.OutputSettings out,
+                       boolean inAttribute, boolean normaliseWhite, boolean stripLeadingWhite) {
 
-        for (int pos = 0; pos < string.length(); pos++) {
-            Character c = string.charAt(pos);
-            if (map.containsKey(c))
-                accum.append('&').append(map.get(c)).append(';');
-            else if (encoder.canEncode(c))
-                accum.append(c.charValue());
-            else
-                accum.append("&#").append((int) c).append(';');
+        boolean lastWasWhite = false;
+        boolean reachedNonWhite = false;
+        final EscapeMode escapeMode = out.escapeMode();
+        final CharsetEncoder encoder = out.encoder();
+        final CoreCharset coreCharset = CoreCharset.byName(encoder.charset().name());
+        final Map<Character, String> map = escapeMode.getMap();
+        final int length = string.length();
+
+        int codePoint;
+        for (int offset = 0; offset < length; offset += Character.charCount(codePoint)) {
+            codePoint = string.codePointAt(offset);
+
+            if (normaliseWhite) {
+                if (StringUtil.isWhitespace(codePoint)) {
+                    if ((stripLeadingWhite && !reachedNonWhite) || lastWasWhite)
+                        continue;
+                    accum.append(' ');
+                    lastWasWhite = true;
+                    continue;
+                } else {
+                    lastWasWhite = false;
+                    reachedNonWhite = true;
+                }
+            }
+            // surrogate pairs, split implementation for efficiency on single char common case (saves creating strings, char[]):
+            if (codePoint < Character.MIN_SUPPLEMENTARY_CODE_POINT) {
+                final char c = (char) codePoint;
+                // html specific and required escapes:
+                switch (c) {
+                    case '&':
+                        accum.append("&amp;");
+                        break;
+                    case 0xA0:
+                        if (escapeMode != EscapeMode.xhtml)
+                            accum.append("&nbsp;");
+                        else
+                            accum.append("&#xa0;");
+                        break;
+                    case '<':
+                        // escape when in character data or when in a xml attribue val; not needed in html attr val
+                        if (!inAttribute)
+                            accum.append("&lt;");
+                        else
+                            accum.append(c);
+                        break;
+                    case '>':
+                        if (!inAttribute)
+                            accum.append("&gt;");
+                        else
+                            accum.append(c);
+                        break;
+                    case '"':
+                        if (inAttribute)
+                            accum.append("&quot;");
+                        else
+                            accum.append(c);
+                        break;
+                    default:
+                        if (canEncode(coreCharset, c, encoder))
+                            accum.append(c);
+                        else if (map.containsKey(c))
+                            accum.append('&').append(map.get(c)).append(';');
+                        else
+                            accum.append("&#x").append(Integer.toHexString(codePoint)).append(';');
+                }
+            } else {
+                final String c = new String(Character.toChars(codePoint));
+                if (encoder.canEncode(c)) // uses fallback encoder for simplicity
+                    accum.append(c);
+                else
+                    accum.append("&#x").append(Integer.toHexString(codePoint)).append(';');
+            }
         }
-
-        return accum.toString();
     }
 
     static String unescape(String string) {
@@ -86,57 +160,65 @@ public class Entities {
 
     /**
      * Unescape the input string.
-     * @param string
+     * @param string to un-HTML-escape
      * @param strict if "strict" (that is, requires trailing ';' char, otherwise that's optional)
-     * @return
+     * @return unescaped string
      */
     static String unescape(String string, boolean strict) {
-        // todo: change this method to use Tokeniser.consumeCharacterReference
-        if (!string.contains("&"))
-            return string;
-
-        Matcher m = strict? strictUnescapePattern.matcher(string) : unescapePattern.matcher(string); // &(#(x|X)?([0-9a-fA-F]+)|[a-zA-Z]\\d*);?
-        StringBuffer accum = new StringBuffer(string.length()); // pity matcher can't use stringbuilder, avoid syncs
-        // todo: replace m.appendReplacement with own impl, so StringBuilder and quoteReplacement not required
-
-        while (m.find()) {
-            int charval = -1;
-            String num = m.group(3);
-            if (num != null) {
-                try {
-                    int base = m.group(2) != null ? 16 : 10; // 2 is hex indicator
-                    charval = Integer.valueOf(num, base);
-                } catch (NumberFormatException e) {
-                } // skip
-            } else {
-                String name = m.group(1);
-                if (full.containsKey(name))
-                    charval = full.get(name);
-            }
-
-            if (charval != -1 || charval > 0xFFFF) { // out of range
-                String c = Character.toString((char) charval);
-                m.appendReplacement(accum, Matcher.quoteReplacement(c));
-            } else {
-                m.appendReplacement(accum, Matcher.quoteReplacement(m.group(0))); // replace with original string
-            }
-        }
-        m.appendTail(accum);
-        return accum.toString();
+        return Parser.unescapeEntities(string, strict);
     }
+
+    /*
+     * Provides a fast-path for Encoder.canEncode, which drastically improves performance on Android post JellyBean.
+     * After KitKat, the implementation of canEncode degrades to the point of being useless. For non ASCII or UTF,
+     * performance may be bad. We can add more encoders for common character sets that are impacted by performance
+     * issues on Android if required.
+     *
+     * Benchmarks:     *
+     * OLD toHtml() impl v New (fastpath) in millis
+     * Wiki: 1895, 16
+     * CNN: 6378, 55
+     * Alterslash: 3013, 28
+     * Jsoup: 167, 2
+     */
+
+    private static boolean canEncode(final CoreCharset charset, final char c, final CharsetEncoder fallback) {
+        // todo add more charset tests if impacted by Android's bad perf in canEncode
+        switch (charset) {
+            case ascii:
+                return c < 0x80;
+            case utf:
+                return true; // real is:!(Character.isLowSurrogate(c) || Character.isHighSurrogate(c)); - but already check above
+            default:
+                return fallback.canEncode(c);
+        }
+    }
+
+    private enum CoreCharset {
+        ascii, utf, fallback;
+
+        private static CoreCharset byName(String name) {
+            if (name.equals("US-ASCII"))
+                return ascii;
+            if (name.startsWith("UTF-")) // covers UTF-8, UTF-16, et al
+                return utf;
+            return fallback;
+        }
+    }
+
 
     // xhtml has restricted entities
     private static final Object[][] xhtmlArray = {
             {"quot", 0x00022},
             {"amp", 0x00026},
-            {"apos", 0x00027},
             {"lt", 0x0003C},
             {"gt", 0x0003E}
     };
 
     static {
         xhtmlByVal = new HashMap<Character, String>();
-        baseByVal = toCharacterKey(loadEntities("entities-base.properties")); // most common / default
+        base = loadEntities("entities-base.properties");  // most common / default
+        baseByVal = toCharacterKey(base);
         full = loadEntities("entities-full.properties"); // extended and overblown.
         fullByVal = toCharacterKey(full);
 
