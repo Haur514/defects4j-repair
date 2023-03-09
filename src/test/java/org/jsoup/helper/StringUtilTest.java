@@ -1,5 +1,6 @@
 package org.jsoup.helper;
 
+import org.jsoup.Jsoup;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -11,9 +12,9 @@ import static org.junit.Assert.assertTrue;
 public class StringUtilTest {
 
     @Test public void join() {
-        assertEquals("", StringUtil.join(Arrays.<String>asList(""), " "));
-        assertEquals("one", StringUtil.join(Arrays.<String>asList("one"), " "));
-        assertEquals("one two three", StringUtil.join(Arrays.<String>asList("one", "two", "three"), " "));
+        assertEquals("", StringUtil.join(Arrays.asList(""), " "));
+        assertEquals("one", StringUtil.join(Arrays.asList("one"), " "));
+        assertEquals("one two three", StringUtil.join(Arrays.asList("one", "two", "three"), " "));
     }
 
     @Test public void padding() {
@@ -63,14 +64,12 @@ public class StringUtilTest {
         assertEquals("hello there", StringUtil.normaliseWhitespace("hello\nthere"));
     }
 
-    @Test public void normaliseWhiteSpaceModified() {
-        String check1 = "Hello there";
-        String check2 = "Hello\nthere";
-        String check3 = "Hello  there";
+    @Test public void normaliseWhiteSpaceHandlesHighSurrogates() {
+        String test71540chars = "\ud869\udeb2\u304b\u309a  1";
+        String test71540charsExpectedSingleWhitespace = "\ud869\udeb2\u304b\u309a 1";
 
-        // does not create new string no mods done
-        assertTrue(check1 == StringUtil.normaliseWhitespace(check1));
-        assertTrue(check2 != StringUtil.normaliseWhitespace(check2));
-        assertTrue(check3 != StringUtil.normaliseWhitespace(check3));
+        assertEquals(test71540charsExpectedSingleWhitespace, StringUtil.normaliseWhitespace(test71540chars));
+        String extractedText = Jsoup.parse(test71540chars).text();
+        assertEquals(test71540charsExpectedSingleWhitespace, extractedText);
     }
 }
