@@ -3,9 +3,16 @@ package org.jsoup.select;
 import org.jsoup.Jsoup;
 import org.jsoup.TextUtil;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.FormElement;
 import org.jsoup.nodes.Node;
 import org.junit.Test;
-import static org.junit.Assert.*;
+
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 /**
  Tests for ElementList.
@@ -48,7 +55,7 @@ public class ElementsTest {
     }
 
     @Test public void hasAbsAttr() {
-        Document doc = Jsoup.parse("<a id=1 href='/foo'>One</a> <a id=2 href='http://jsoup.org'>Two</a>");
+        Document doc = Jsoup.parse("<a id=1 href='/foo'>One</a> <a id=2 href='https://jsoup.org'>Two</a>");
         Elements one = doc.select("#1");
         Elements two = doc.select("#2");
         Elements both = doc.select("a");
@@ -64,14 +71,14 @@ public class ElementsTest {
     }
 
     @Test public void absAttr() {
-        Document doc = Jsoup.parse("<a id=1 href='/foo'>One</a> <a id=2 href='http://jsoup.org'>Two</a>");
+        Document doc = Jsoup.parse("<a id=1 href='/foo'>One</a> <a id=2 href='https://jsoup.org'>Two</a>");
         Elements one = doc.select("#1");
         Elements two = doc.select("#2");
         Elements both = doc.select("a");
 
         assertEquals("", one.attr("abs:href"));
-        assertEquals("http://jsoup.org", two.attr("abs:href"));
-        assertEquals("http://jsoup.org", both.attr("abs:href"));
+        assertEquals("https://jsoup.org", two.attr("abs:href"));
+        assertEquals("https://jsoup.org", both.attr("abs:href"));
     }
 
     @Test public void classes() {
@@ -86,6 +93,22 @@ public class ElementsTest {
 
         assertEquals("blue", els.get(0).className());
         assertEquals("red green blue mellow", els.get(1).className());
+    }
+
+    @Test public void hasClassCaseInsensitive() {
+        Elements els = Jsoup.parse("<p Class=One>One <p class=Two>Two <p CLASS=THREE>THREE").select("p");
+        Element one = els.get(0);
+        Element two = els.get(1);
+        Element thr = els.get(2);
+
+        assertTrue(one.hasClass("One"));
+        assertTrue(one.hasClass("ONE"));
+
+        assertTrue(two.hasClass("TWO"));
+        assertTrue(two.hasClass("Two"));
+
+        assertTrue(thr.hasClass("ThreE"));
+        assertTrue(thr.hasClass("three"));
     }
     
     @Test public void text() {
@@ -156,11 +179,33 @@ public class ElementsTest {
         assertEquals("<p><i><b>This</b></i> is <i><b>jsoup</b></i></p>", doc.body().html());
     }
 
+    @Test public void wrapDiv() {
+        String h = "<p><b>This</b> is <b>jsoup</b>.</p> <p>How do you like it?</p>";
+        Document doc = Jsoup.parse(h);
+        doc.select("p").wrap("<div></div>");
+        assertEquals("<div><p><b>This</b> is <b>jsoup</b>.</p></div> <div><p>How do you like it?</p></div>",
+                TextUtil.stripNewlines(doc.body().html()));
+    }
+
     @Test public void unwrap() {
         String h = "<div><font>One</font> <font><a href=\"/\">Two</a></font></div";
         Document doc = Jsoup.parse(h);
         doc.select("font").unwrap();
         assertEquals("<div>One <a href=\"/\">Two</a></div>", TextUtil.stripNewlines(doc.body().html()));
+    }
+
+    @Test public void unwrapP() {
+        String h = "<p><a>One</a> Two</p> Three <i>Four</i> <p>Fix <i>Six</i></p>";
+        Document doc = Jsoup.parse(h);
+        doc.select("p").unwrap();
+        assertEquals("<a>One</a> Two Three <i>Four</i> Fix <i>Six</i>", TextUtil.stripNewlines(doc.body().html()));
+    }
+
+    @Test public void unwrapKeepsSpace() {
+        String h = "<p>One <span>two</span> <span>three</span> four</p>";
+        Document doc = Jsoup.parse(h);
+        doc.select("span").unwrap();
+        assertEquals("<p>One two three four</p>", doc.body().html());
     }
 
     @Test public void empty() {
@@ -236,5 +281,108 @@ public class ElementsTest {
             }
         });
         assertEquals("<div><p><#text></#text></p></div><div><#text></#text></div>", accum.toString());
+    }
+
+    @Test public void forms() {
+        Document doc = Jsoup.parse("<form id=1><input name=q></form><div /><form id=2><input name=f></form>");
+        Elements els = doc.select("*");
+        assertEquals(9, els.size());
+
+        List<FormElement> forms = els.forms();
+        assertEquals(2, forms.size());
+        assertTrue(forms.get(0) != null);
+        assertTrue(forms.get(1) != null);
+        assertEquals("1", forms.get(0).id());
+        assertEquals("2", forms.get(1).id());
+    }
+
+    @Test public void classWithHyphen() {
+        Document doc = Jsoup.parse("<p class='tab-nav'>Check</p>");
+        Elements els = doc.getElementsByClass("tab-nav");
+        assertEquals(1, els.size());
+        assertEquals("Check", els.text());
+    }
+
+    @Test public void siblings() {
+        Document doc = Jsoup.parse("<div><p>1<p>2<p>3<p>4<p>5<p>6</div><div><p>7<p>8<p>9<p>10<p>11<p>12</div>");
+
+        Elements els = doc.select("p:eq(3)"); // gets p4 and p10
+        assertEquals(2, els.size());
+
+        Elements next = els.next();
+        assertEquals(2, next.size());
+        assertEquals("5", next.first().text());
+        assertEquals("11", next.last().text());
+
+        assertEquals(0, els.next("p:contains(6)").size());
+        final Elements nextF = els.next("p:contains(5)");
+        assertEquals(1, nextF.size());
+        assertEquals("5", nextF.first().text());
+
+        Elements nextA = els.nextAll();
+        assertEquals(4, nextA.size());
+        assertEquals("5", nextA.first().text());
+        assertEquals("12", nextA.last().text());
+
+        Elements nextAF = els.nextAll("p:contains(6)");
+        assertEquals(1, nextAF.size());
+        assertEquals("6", nextAF.first().text());
+
+        Elements prev = els.prev();
+        assertEquals(2, prev.size());
+        assertEquals("3", prev.first().text());
+        assertEquals("9", prev.last().text());
+
+        assertEquals(0, els.prev("p:contains(1)").size());
+        final Elements prevF = els.prev("p:contains(3)");
+        assertEquals(1, prevF.size());
+        assertEquals("3", prevF.first().text());
+
+        Elements prevA = els.prevAll();
+        assertEquals(6, prevA.size());
+        assertEquals("3", prevA.first().text());
+        assertEquals("7", prevA.last().text());
+
+        Elements prevAF = els.prevAll("p:contains(1)");
+        assertEquals(1, prevAF.size());
+        assertEquals("1", prevAF.first().text());
+    }
+
+    @Test public void eachText() {
+        Document doc = Jsoup.parse("<div><p>1<p>2<p>3<p>4<p>5<p>6</div><div><p>7<p>8<p>9<p>10<p>11<p>12<p></p></div>");
+        List<String> divText = doc.select("div").eachText();
+        assertEquals(2, divText.size());
+        assertEquals("1 2 3 4 5 6", divText.get(0));
+        assertEquals("7 8 9 10 11 12", divText.get(1));
+
+        List<String> pText = doc.select("p").eachText();
+        Elements ps = doc.select("p");
+        assertEquals(13, ps.size());
+        assertEquals(12, pText.size()); // not 13, as last doesn't have text
+        assertEquals("1", pText.get(0));
+        assertEquals("2", pText.get(1));
+        assertEquals("5", pText.get(4));
+        assertEquals("7", pText.get(6));
+        assertEquals("12", pText.get(11));
+    }
+
+    @Test public void eachAttr() {
+        Document doc = Jsoup.parse(
+            "<div><a href='/foo'>1</a><a href='http://example.com/bar'>2</a><a href=''>3</a><a>4</a>",
+            "http://example.com");
+
+        List<String> hrefAttrs = doc.select("a").eachAttr("href");
+        assertEquals(3, hrefAttrs.size());
+        assertEquals("/foo", hrefAttrs.get(0));
+        assertEquals("http://example.com/bar", hrefAttrs.get(1));
+        assertEquals("", hrefAttrs.get(2));
+        assertEquals(4, doc.select("a").size());
+
+        List<String> absAttrs = doc.select("a").eachAttr("abs:href");
+        assertEquals(3, absAttrs.size());
+        assertEquals(3, absAttrs.size());
+        assertEquals("http://example.com/foo", absAttrs.get(0));
+        assertEquals("http://example.com/bar", absAttrs.get(1));
+        assertEquals("http://example.com", absAttrs.get(2));
     }
 }
