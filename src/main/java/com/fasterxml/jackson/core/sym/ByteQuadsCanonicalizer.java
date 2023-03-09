@@ -702,7 +702,9 @@ public final class ByteQuadsCanonicalizer
         for (int end = offset + bucketSize; offset < end; offset += 4) {
             int len = hashArea[offset+3];
             if ((hash == hashArea[offset]) && (qlen == len)) {
-                return _names[offset >> 2];
+                if (_verifyLongName(q, qlen, hashArea[offset+1])) {
+                    return _names[offset >> 2];
+                }
             }
             if (len == 0) {
                 return null;
@@ -875,12 +877,14 @@ public final class ByteQuadsCanonicalizer
             _hashArea = Arrays.copyOf(_hashArea, _hashArea.length);
             _names = Arrays.copyOf(_names, _names.length);
             _hashShared = false;
+            // 09-Sep-2015, tatu: As per [jackson-core#216], also need to ensure
+            //    we rehash as needed, as need-rehash flag is not copied from parent
         }
         if (_needRehash) {
             rehash();
         }
     }
-    
+
     /**
      * Method called to find the location within hash table to add a new symbol in.
      */
@@ -922,7 +926,8 @@ public final class ByteQuadsCanonicalizer
         /* 31-Jul-2015, tatu: Note that spillover area does NOT end at end of array,
          *   since "long names" area follows. Instead, need to calculate from hash size.
          */
-        if (_spilloverEnd >= hashArea.length) {
+        final int end = (_hashSize << 3);
+        if (_spilloverEnd >= end) {
             if (_failOnDoS) {
                 _reportTooManyCollisions();
             }
@@ -981,7 +986,8 @@ public final class ByteQuadsCanonicalizer
          *    to work it out, but this is the simplest, fast and seems to do ok.
          */
         hash += (hash >>> 16); // to xor hi- and low- 16-bits
-        hash ^= (hash >>> 12);
+        hash ^= (hash << 3); // shuffle back a bit
+        hash += (hash >>> 12); // and bit more
         return hash;
     }
 
