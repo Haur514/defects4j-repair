@@ -50,7 +50,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
      * buffer.
      */
     protected boolean _bufferRecyclable;
-    
+
     /*
     /**********************************************************
     /* Configuration
@@ -60,7 +60,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     protected ObjectCodec _objectCodec;
 
     final protected CharsToNameCanonicalizer _symbols;
-    
+
     final protected int _hashSeed;
 
     /*
@@ -68,13 +68,28 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     /* Parsing state
     /**********************************************************
      */
-    
+
     /**
      * Flag that indicates that the current token has not yet
      * been fully processed, and needs to be finished for
      * some access (or skipped to obtain the next token)
      */
     protected boolean _tokenIncomplete = false;
+
+    /**
+     * @since 2.7
+     */
+    protected long _nameInputTotal; 
+
+    /**
+     * @since 2.7
+     */
+    protected int _nameInputRow;
+
+    /**
+     * @since 2.7
+     */
+    protected int _nameInputCol;
 
     /*
     /**********************************************************
@@ -85,7 +100,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     /**
      * Method called when caller wants to provide input buffer directly,
      * and it may or may not be recyclable use standard recycle context.
-     * 
+     *
      * @since 2.4
      */
     public ReaderBasedJsonParser(IOContext ctxt, int features, Reader r,
@@ -130,7 +145,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
     @Override public ObjectCodec getCodec() { return _objectCodec; }
     @Override public void setCodec(ObjectCodec c) { _objectCodec = c; }
-    
+
     @Override
     public int releaseBuffered(Writer w) throws IOException {
         int count = _inputEnd - _inputPtr;
@@ -210,13 +225,13 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             }
         }
     }
-    
+
     /*
     /**********************************************************
     /* Public API, data access
     /**********************************************************
      */
-    
+
     /**
      * Method for accessing textual representation of the current event;
      * if no current event (before first call to {@link #nextToken}, or
@@ -238,7 +253,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     }
 
     // // // Let's override default impls for improved performance
-    
+
     // @since 2.1
     @Override
     public final String getValueAsString() throws IOException
@@ -255,7 +270,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         }
         return super.getValueAsString(null);
     }
-    
+
     // @since 2.1
     @Override
     public final String getValueAsString(String defValue) throws IOException {
@@ -308,7 +323,6 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                     _nameCopied = true;
                 }
                 return _nameCopyBuffer;
-    
             case ID_STRING:
                 if (_tokenIncomplete) {
                     _tokenIncomplete = false;
@@ -318,7 +332,6 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             case ID_NUMBER_INT:
             case ID_NUMBER_FLOAT:
                 return _textBuffer.getTextBuffer();
-                
             default:
                 return _currToken.asCharArray();
             }
@@ -331,7 +344,6 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     {
         if (_currToken != null) { // null only before/after document
             switch (_currToken.id()) {
-                
             case ID_FIELD_NAME:
                 return _parsingContext.getCurrentName().length();
             case ID_STRING:
@@ -343,7 +355,6 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             case ID_NUMBER_INT:
             case ID_NUMBER_FLOAT:
                 return _textBuffer.size();
-                
             default:
                 return _currToken.asCharArray().length;
             }
@@ -404,7 +415,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         }
         return _binaryValue;
     }
-    
+
     @Override
     public int readBinaryValue(Base64Variant b64variant, OutputStream out) throws IOException
     {
@@ -562,8 +573,6 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     @Override
     public final JsonToken nextToken() throws IOException
     {
-        _numTypesValid = NR_UNKNOWN;
-
         /* First: field names are special -- we will always tokenize
          * (part of) value along with field name to simplify
          * state handling. If so, can and need to use secondary token:
@@ -571,6 +580,9 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         if (_currToken == JsonToken.FIELD_NAME) {
             return _nextAfterName();
         }
+        // But if we didn't already have a name, and (partially?) decode number,
+        // need to ensure no numeric information is leaked
+        _numTypesValid = NR_UNKNOWN;
         if (_tokenIncomplete) {
             _skipString(); // only strings can be partial
         }
@@ -582,19 +594,12 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             close();
             return (_currToken = null);
         }
-
-        /* First, need to ensure we know the starting location of token
-         * after skipping leading white space
-         */
-        _tokenInputTotal = _currInputProcessed + _inputPtr - 1;
-        _tokenInputRow = _currInputRow;
-        _tokenInputCol = _inputPtr - _currInputRowStart - 1;
-
-        // finally: clear any data retained so far
+        // clear any data retained so far
         _binaryValue = null;
 
         // Closing scope?
         if (i == INT_RBRACKET) {
+            _updateLocation();
             if (!_parsingContext.inArray()) {
                 _reportMismatchedEndMarker(i, '}');
             }
@@ -602,6 +607,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             return (_currToken = JsonToken.END_ARRAY);
         }
         if (i == INT_RCURLY) {
+            _updateLocation();
             if (!_parsingContext.inObject()) {
                 _reportMismatchedEndMarker(i, ']');
             }
@@ -613,14 +619,14 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         if (_parsingContext.expectComma()) {
             i = _skipComma(i);
         }
+        _updateLocation();
 
-        /* And should we now have a name? Always true for
-         * Object contexts, since the intermediate 'expect-value'
-         * state is never retained.
+        /* And should we now have a name? Always true for Object contexts, since
+         * the intermediate 'expect-value' state is never retained.
          */
         boolean inObject = _parsingContext.inObject();
         if (inObject) {
-           // First, field name itself:
+            // First, field name itself:
             String name = (i == INT_QUOTE) ? _parseName() : _handleOddName(i);
             _parsingContext.setCurrentName(name);
             _currToken = JsonToken.FIELD_NAME;
@@ -703,6 +709,9 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         _nameCopied = false; // need to invalidate if it was copied
         JsonToken t = _nextToken;
         _nextToken = null;
+
+// !!! 16-Nov-2015, tatu: TODO: fix [databind#37], copy next location to current here
+        
         // Also: may need to start new context?
         if (t == JsonToken.START_ARRAY) {
             _parsingContext = _parsingContext.createChildArrayContext(_tokenInputRow, _tokenInputCol);
@@ -718,14 +727,85 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     /**********************************************************
      */
 
-    /*
+    // Implemented since 2.7
     @Override
-    public boolean nextFieldName(SerializableString str)
-        throws IOException
+    public boolean nextFieldName(SerializableString sstr) throws IOException
     {
-    
+        // // // Note: most of code below is copied from nextToken()
+
+        _numTypesValid = NR_UNKNOWN;
+        if (_currToken == JsonToken.FIELD_NAME) {
+            _nextAfterName();
+            return false;
+        }
+        if (_tokenIncomplete) {
+            _skipString();
+        }
+        int i = _skipWSOrEnd();
+        if (i < 0) {
+            close();
+            _currToken = null;
+            return false;
+        }
+        _binaryValue = null;
+
+        if (i == INT_RBRACKET) {
+            _updateLocation();
+            if (!_parsingContext.inArray()) {
+                _reportMismatchedEndMarker(i, '}');
+            }
+            _parsingContext = _parsingContext.getParent();
+            _currToken = JsonToken.END_ARRAY;
+            return false;
+        }
+        if (i == INT_RCURLY) {
+            _updateLocation();
+            if (!_parsingContext.inObject()) {
+                _reportMismatchedEndMarker(i, ']');
+            }
+            _parsingContext = _parsingContext.getParent();
+            _currToken = JsonToken.END_OBJECT;
+            return false;
+        }
+        if (_parsingContext.expectComma()) {
+            i = _skipComma(i);
+        }
+        _updateLocation();
+
+        if (!_parsingContext.inObject()) {
+            _nextTokenNotInObject(i);
+            return false;
+        }
+
+        if (i == INT_QUOTE) {
+            // when doing literal match, must consider escaping:
+            char[] nameChars = sstr.asQuotedChars();
+            final int len = nameChars.length;
+
+            // Require 4 more bytes for faster skipping of colon that follows name
+            if ((_inputPtr + len + 4) < _inputEnd) { // maybe...
+                // first check length match by
+                final int end = _inputPtr+len;
+                if (_inputBuffer[end] == '"') {
+                    int offset = 0;
+                    int ptr = _inputPtr;
+                    while (true) {
+                        if (ptr == end) { // yes, match!
+                            _parsingContext.setCurrentName(sstr.getValue());
+                            _isNextTokenNameYes(_skipColonFast(ptr+1));
+                            return true;
+                        }
+                        if (nameChars[offset] != _inputBuffer[ptr]) {
+                            break;
+                        }
+                        ++offset;
+                        ++ptr;
+                    }
+                }
+            }
+        }
+        return _isNextTokenNameMaybe(i, sstr.getValue());
     }
-    */
 
     @Override
     public String nextFieldName() throws IOException
@@ -746,11 +826,9 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             _currToken = null;
             return null;
         }
-        _tokenInputTotal = _currInputProcessed + _inputPtr - 1;
-        _tokenInputRow = _currInputRow;
-        _tokenInputCol = _inputPtr - _currInputRowStart - 1;
         _binaryValue = null;
         if (i == INT_RBRACKET) {
+            _updateLocation();
             if (!_parsingContext.inArray()) {
                 _reportMismatchedEndMarker(i, '}');
             }
@@ -759,6 +837,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             return null;
         }
         if (i == INT_RCURLY) {
+            _updateLocation();
             if (!_parsingContext.inObject()) {
                 _reportMismatchedEndMarker(i, ']');
             }
@@ -769,7 +848,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         if (_parsingContext.expectComma()) {
             i = _skipComma(i);
         }
-
+        _updateLocation();
         if (!_parsingContext.inObject()) {
             _nextTokenNotInObject(i);
             return null;
@@ -832,6 +911,108 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         return name;
     }
 
+    private final void _isNextTokenNameYes(int i) throws IOException
+    {
+        _currToken = JsonToken.FIELD_NAME;
+
+        switch (i) {
+        case '"':
+            _tokenIncomplete = true;
+            _nextToken = JsonToken.VALUE_STRING;
+            return;
+        case '[':
+            _nextToken = JsonToken.START_ARRAY;
+            return;
+        case '{':
+            _nextToken = JsonToken.START_OBJECT;
+            return;
+        case 't':
+            _matchToken("true", 1);
+            _nextToken = JsonToken.VALUE_TRUE;
+            return;
+        case 'f':
+            _matchToken("false", 1);
+            _nextToken = JsonToken.VALUE_FALSE;
+            return;
+        case 'n':
+            _matchToken("null", 1);
+            _nextToken = JsonToken.VALUE_NULL;
+            return;
+        case '-':
+            _nextToken = _parseNegNumber();
+            return;
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+            _nextToken = _parsePosNumber(i);
+            return;
+        }
+        _nextToken = _handleOddValue(i);
+    }
+
+    protected boolean _isNextTokenNameMaybe(int i, String nameToMatch) throws IOException
+    {
+        // // // and this is back to standard nextToken()
+        String name = (i == INT_QUOTE) ? _parseName() : _handleOddName(i);
+        _parsingContext.setCurrentName(name);
+        _currToken = JsonToken.FIELD_NAME;
+        i = _skipColon();
+        if (i == INT_QUOTE) {
+            _tokenIncomplete = true;
+            _nextToken = JsonToken.VALUE_STRING;
+            return nameToMatch.equals(name);
+        }
+        // Ok: we must have a value... what is it?
+        JsonToken t;
+        switch (i) {
+        case '-':
+            t = _parseNegNumber();
+            break;
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+            t = _parsePosNumber(i);
+            break;
+        case 'f':
+            _matchFalse();
+            t = JsonToken.VALUE_FALSE;
+            break;
+        case 'n':
+            _matchNull();
+            t = JsonToken.VALUE_NULL;
+            break;
+        case 't':
+            _matchTrue();
+            t = JsonToken.VALUE_TRUE;
+            break;
+        case '[':
+            t = JsonToken.START_ARRAY;
+            break;
+        case '{':
+            t = JsonToken.START_OBJECT;
+            break;
+        default:
+            t = _handleOddValue(i);
+            break;
+        }
+        _nextToken = t;
+        return nameToMatch.equals(name);
+    }
+
     private final JsonToken _nextTokenNotInObject(int i) throws IOException
     {
         if (i == INT_QUOTE) {
@@ -874,7 +1055,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         }
         return (_currToken = _handleOddValue(i));
     }
-    
+
     // note: identical to one in UTF8StreamJsonParser
     @Override
     public final String nextTextValue() throws IOException
@@ -1015,15 +1196,15 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         if (ch == INT_0) {
             return _parseNumber2(false, startPtr);
         }
-            
+
         /* First, let's see if the whole number is contained within
          * the input buffer unsplit. This should be the common case;
          * and to simplify processing, we will just reparse contents
          * in the alternative case (number split on buffer boundary)
          */
-        
+
         int intLen = 1; // already got one
-        
+
         // First let's get the obligatory integer part:
         int_loop:
         while (true) {
@@ -1137,7 +1318,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             return _parseNumber2(true, startPtr);
         }
         int intLen = 1; // already got one
-        
+
         // First let's get the obligatory integer part:
         int_loop:
         while (true) {
@@ -1312,7 +1493,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         // and offline the less common case
         return _verifyNLZ2();
     }
-        
+
     private char _verifyNLZ2() throws IOException
     {
         if (_inputPtr >= _inputEnd && !loadMore()) {
@@ -1334,7 +1515,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                     return '0';
                 }
                 ++_inputPtr; // skip previous zero
-                if (ch != '0') { // followed by other number; return 
+                if (ch != '0') { // followed by other number; return
                     break;
                 }
             }
@@ -1398,7 +1579,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         }
         _reportMissingRootWS(ch);
     }
-    
+
     /*
     /**********************************************************
     /* Internal methods, secondary parsing
@@ -1624,7 +1805,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         _reportUnexpectedChar(i, "expected a valid value (number, String, array, object, 'true', 'false' or 'null')");
         return null;
     }
-    
+
     protected JsonToken _handleApos() throws IOException
     {
         char[] outBuf = _textBuffer.emptyAndGetCurrentSegment();
@@ -1665,7 +1846,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         _textBuffer.setCurrentLength(outPtr);
         return JsonToken.VALUE_STRING;
     }
-    
+
     private String _handleOddName2(int startPtr, int hash, int[] codes) throws IOException
     {
         _textBuffer.resetWithShared(_inputBuffer, startPtr, (_inputPtr - startPtr));
@@ -1709,7 +1890,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             return _symbols.findSymbol(buf, start, len, hash);
         }
     }
-  
+
     @Override
     protected final void _finishString() throws IOException
     {
@@ -1839,7 +2020,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     /* Internal methods, other parsing
     /**********************************************************
      */
-    
+
     /**
      * We actually need to check the character value here
      * (to see if we have \n following \r).
@@ -1853,7 +2034,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         ++_currInputRow;
         _currInputRowStart = _inputPtr;
     }
-    
+
     private final int _skipColon() throws IOException
     {
         if ((_inputPtr + 4) >= _inputEnd) {
@@ -1875,7 +2056,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                     if (i == INT_SLASH || i == INT_HASH) {
                         return _skipColon2(true);
                     }
-                    ++_inputPtr;                    
+                    ++_inputPtr;
                     return i;
                 }
             }
@@ -1949,7 +2130,55 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             }
         }
     }
- 
+
+    // Variant called when we know there's at least 4 more bytes available
+    private final int _skipColonFast(int ptr) throws IOException
+    {
+        int i = (int) _inputBuffer[ptr++];
+        if (i == INT_COLON) { // common case, no leading space
+            i = _inputBuffer[ptr++];
+            if (i > INT_SPACE) { // nor trailing
+                if (i != INT_SLASH && i != INT_HASH) {
+                    _inputPtr = ptr;
+                    return i;
+                }
+            } else if (i == INT_SPACE || i == INT_TAB) {
+                i = (int) _inputBuffer[ptr++];
+                if (i > INT_SPACE) {
+                    if (i != INT_SLASH && i != INT_HASH) {
+                        _inputPtr = ptr;
+                        return i;
+                    }
+                }
+            }
+            _inputPtr = ptr-1;
+            return _skipColon2(true); // true -> skipped colon
+        }
+        if (i == INT_SPACE || i == INT_TAB) {
+            i = _inputBuffer[ptr++];
+        }
+        boolean gotColon = (i == INT_COLON);
+        if (gotColon) {
+            i = _inputBuffer[ptr++];
+            if (i > INT_SPACE) {
+                if (i != INT_SLASH && i != INT_HASH) {
+                    _inputPtr = ptr;
+                    return i;
+                }
+            } else if (i == INT_SPACE || i == INT_TAB) {
+                i = (int) _inputBuffer[ptr++];
+                if (i > INT_SPACE) {
+                    if (i != INT_SLASH && i != INT_HASH) {
+                        _inputPtr = ptr;
+                        return i;
+                    }
+                }
+            }
+        }
+        _inputPtr = ptr-1;
+        return _skipColon2(gotColon);
+    }
+
     // Primary loop: no reloading, comment handling
     private final int _skipComma(int i) throws IOException
     {
@@ -2008,7 +2237,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         }
         throw _constructError("Unexpected end-of-input within/between "+_parsingContext.getTypeDesc()+" entries");
     }
-    
+
     private final int _skipWSOrEnd() throws IOException
     {
         // Let's handle first character separately since it is likely that
@@ -2036,7 +2265,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                 _throwInvalidSpace(i);
             }
         }
-        
+
         while (_inputPtr < _inputEnd) {
             i = (int) _inputBuffer[_inputPtr++];
             if (i > INT_SPACE) {
@@ -2092,7 +2321,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             }
         }
     }
-    
+
     private void _skipComment() throws IOException
     {
         if (!isEnabled(Feature.ALLOW_COMMENTS)) {
@@ -2151,7 +2380,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         _skipLine();
         return true;
     }
-    
+
     private void _skipLine() throws IOException
     {
         // Ok: need to find EOF or linefeed
@@ -2225,7 +2454,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         }
         return (char) value;
     }
-    
+
     private final void _matchTrue() throws IOException {
         int ptr = _inputPtr;
         if ((ptr + 3) < _inputEnd) {
@@ -2346,9 +2575,9 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                 }
             }
             int decodedData = bits;
-            
+
             // then second base64 char; can't get padding yet, nor ws
-            
+
             if (_inputPtr >= _inputEnd) {
                 loadMoreGuaranteed();
             }
@@ -2358,7 +2587,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                 bits = _decodeBase64Escape(b64variant, ch, 1);
             }
             decodedData = (decodedData << 6) | bits;
-            
+
             // third base64 char; can be padding, but not ws
             if (_inputPtr >= _inputEnd) {
                 loadMoreGuaranteed();
@@ -2431,6 +2660,46 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
     /*
     /**********************************************************
+    /* Internal methods, location updating (refactored in 2.7)
+    /**********************************************************
+     */
+
+    @Override
+    public JsonLocation getTokenLocation()
+    {
+        final Object src = _ioContext.getSourceReference();
+        return new JsonLocation(src,
+                -1L, getTokenCharacterOffset(),
+                getTokenLineNr(),
+                getTokenColumnNr());
+    }
+
+    @Override
+    public JsonLocation getCurrentLocation() {
+        int col = _inputPtr - _currInputRowStart + 1; // 1-based
+        return new JsonLocation(_ioContext.getSourceReference(),
+                -1L, _currInputProcessed + _inputPtr,
+                _currInputRow, col);
+    }
+    
+    // @since 2.7
+    private final void _updateLocation()
+    {
+        _tokenInputTotal = _currInputProcessed + _inputPtr - 1;
+        _tokenInputRow = _currInputRow;
+        _tokenInputCol = _inputPtr - _currInputRowStart - 1;
+    }
+
+    // @since 2.7
+    private final void _updateNameLocation()
+    {
+        _nameInputTotal = _currInputProcessed + _inputPtr - 1;
+        _nameInputRow = _currInputRow;
+        _nameInputCol = _inputPtr - _currInputRowStart - 1;
+    }
+
+    /*
+    /**********************************************************
     /* Error reporting
     /**********************************************************
      */
@@ -2438,7 +2707,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     protected void _reportInvalidToken(String matchedPart) throws IOException {
         _reportInvalidToken(matchedPart, "'null', 'true', 'false' or NaN");
     }
-    
+
     protected void _reportInvalidToken(String matchedPart, String msg) throws IOException
     {
         StringBuilder sb = new StringBuilder(matchedPart);

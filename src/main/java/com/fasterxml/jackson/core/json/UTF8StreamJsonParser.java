@@ -71,6 +71,21 @@ public class UTF8StreamJsonParser
      */
     private int _quad1;
 
+    /**
+     * @since 2.7
+     */
+    protected long _nameInputTotal; 
+
+    /**
+     * @since 2.7
+     */
+    protected int _nameInputRow;
+
+    /**
+     * @since 2.7
+     */
+    protected int _nameInputCol;
+
     /*
     /**********************************************************
     /* Input buffering (from former 'StreamBasedParserBase')
@@ -645,26 +660,6 @@ public class UTF8StreamJsonParser
         return outputCount;
     }
 
-    // As per [Issue#108], must ensure we call the right method
-    @Override
-    public JsonLocation getTokenLocation()
-    {
-        return new JsonLocation(_ioContext.getSourceReference(),
-                getTokenCharacterOffset(), -1L, // bytes, chars
-                getTokenLineNr(),
-                getTokenColumnNr());
-    }
-
-    // As per [Issue#108], must ensure we call the right method
-    @Override
-    public JsonLocation getCurrentLocation()
-    {
-        int col = _inputPtr - _currInputRowStart + 1; // 1-based
-        return new JsonLocation(_ioContext.getSourceReference(),
-                _currInputProcessed + _inputPtr, -1L, // bytes, chars
-                _currInputRow, col);
-    }
-    
     /*
     /**********************************************************
     /* Public API, traversal, basic
@@ -678,7 +673,6 @@ public class UTF8StreamJsonParser
     @Override
     public JsonToken nextToken() throws IOException
     {
-        _numTypesValid = NR_UNKNOWN;
         /* First: field names are special -- we will always tokenize
          * (part of) value along with field name to simplify
          * state handling. If so, can and need to use secondary token:
@@ -686,6 +680,9 @@ public class UTF8StreamJsonParser
         if (_currToken == JsonToken.FIELD_NAME) {
             return _nextAfterName();
         }
+        // But if we didn't already have a name, and (partially?) decode number,
+        // need to ensure no numeric information is leaked
+        _numTypesValid = NR_UNKNOWN;
         if (_tokenIncomplete) {
             _skipString(); // only strings can be partial
         }
@@ -695,18 +692,12 @@ public class UTF8StreamJsonParser
             close();
             return (_currToken = null);
         }
-
-        // First, need to ensure we know the starting location of token
-        // after skipping leading white space
-        _tokenInputTotal = _currInputProcessed + _inputPtr - 1;
-        _tokenInputRow = _currInputRow;
-        _tokenInputCol = _inputPtr - _currInputRowStart - 1;
-
-        // finally: clear any data retained so far
+        // clear any data retained so far
         _binaryValue = null;
 
         // Closing scope?
         if (i == INT_RBRACKET) {
+            _updateLocation();
             if (!_parsingContext.inArray()) {
                 _reportMismatchedEndMarker(i, '}');
             }
@@ -714,6 +705,7 @@ public class UTF8StreamJsonParser
             return (_currToken = JsonToken.END_ARRAY);
         }
         if (i == INT_RCURLY) {
+            _updateLocation();
             if (!_parsingContext.inObject()) {
                 _reportMismatchedEndMarker(i, ']');
             }
@@ -734,14 +726,17 @@ public class UTF8StreamJsonParser
          * state is never retained.
          */
         if (!_parsingContext.inObject()) {
+            _updateLocation();
             return _nextTokenNotInObject(i);
         }
         // So first parse the field name itself:
+        _updateNameLocation();
         String n = _parseName(i);
         _parsingContext.setCurrentName(n);
         _currToken = JsonToken.FIELD_NAME;
 
         i = _skipColon();
+        _updateLocation();
 
         // Ok: we must have a value... what is it? Strings are very common, check first:
         if (i == INT_QUOTE) {
@@ -846,6 +841,9 @@ public class UTF8StreamJsonParser
         _nameCopied = false; // need to invalidate if it was copied
         JsonToken t = _nextToken;
         _nextToken = null;
+
+ // !!! 16-Nov-2015, tatu: TODO: fix [databind#37], copy next location to current here
+        
         // Also: may need to start new context?
         if (t == JsonToken.START_ARRAY) {
             _parsingContext = _parsingContext.createChildArrayContext(_tokenInputRow, _tokenInputCol);
@@ -865,7 +863,6 @@ public class UTF8StreamJsonParser
     public boolean nextFieldName(SerializableString str) throws IOException
     {
         // // // Note: most of code below is copied from nextToken()
-        
         _numTypesValid = NR_UNKNOWN;
         if (_currToken == JsonToken.FIELD_NAME) { // can't have name right after name
             _nextAfterName();
@@ -880,15 +877,11 @@ public class UTF8StreamJsonParser
             _currToken = null;
             return false;
         }
-        _tokenInputTotal = _currInputProcessed + _inputPtr - 1;
-        _tokenInputRow = _currInputRow;
-        _tokenInputCol = _inputPtr - _currInputRowStart - 1;
-
-        // finally: clear any data retained so far
         _binaryValue = null;
 
         // Closing scope?
         if (i == INT_RBRACKET) {
+            _updateLocation();
             if (!_parsingContext.inArray()) {
                 _reportMismatchedEndMarker(i, '}');
             }
@@ -897,6 +890,7 @@ public class UTF8StreamJsonParser
             return false;
         }
         if (i == INT_RCURLY) {
+            _updateLocation();
             if (!_parsingContext.inObject()) {
                 _reportMismatchedEndMarker(i, ']');
             }
@@ -914,11 +908,13 @@ public class UTF8StreamJsonParser
         }
 
         if (!_parsingContext.inObject()) {
+            _updateLocation();
             _nextTokenNotInObject(i);
             return false;
         }
         
         // // // This part differs, name parsing
+        _updateNameLocation();
         if (i == INT_QUOTE) {
             // when doing literal match, must consider escaping:
             byte[] nameBytes = str.asQuotedUTF8();
@@ -934,7 +930,8 @@ public class UTF8StreamJsonParser
                     while (true) {
                         if (ptr == end) { // yes, match!
                             _parsingContext.setCurrentName(str.getValue());
-                            _isNextTokenNameYes(_skipColonFast(ptr+1));
+                            i = _skipColonFast(ptr+1);
+                            _isNextTokenNameYes(i);
                             return true;
                         }
                         if (nameBytes[offset] != _inputBuffer[ptr]) {
@@ -968,13 +965,10 @@ public class UTF8StreamJsonParser
             _currToken = null;
             return null;
         }
-        _tokenInputTotal = _currInputProcessed + _inputPtr - 1;
-        _tokenInputRow = _currInputRow;
-        _tokenInputCol = _inputPtr - _currInputRowStart - 1;
-
         _binaryValue = null;
 
         if (i == INT_RBRACKET) {
+            _updateLocation();
             if (!_parsingContext.inArray()) {
                 _reportMismatchedEndMarker(i, '}');
             }
@@ -983,6 +977,7 @@ public class UTF8StreamJsonParser
             return null;
         }
         if (i == INT_RCURLY) {
+            _updateLocation();
             if (!_parsingContext.inObject()) {
                 _reportMismatchedEndMarker(i, ']');
             }
@@ -998,17 +993,19 @@ public class UTF8StreamJsonParser
             }
             i = _skipWS();
         }
-
         if (!_parsingContext.inObject()) {
+            _updateLocation();
             _nextTokenNotInObject(i);
             return null;
         }
 
+        _updateNameLocation();
         final String nameStr = _parseName(i);
         _parsingContext.setCurrentName(nameStr);
         _currToken = JsonToken.FIELD_NAME;
 
         i = _skipColon();
+        _updateLocation();
         if (i == INT_QUOTE) {
             _tokenIncomplete = true;
             _nextToken = JsonToken.VALUE_STRING;
@@ -1099,6 +1096,8 @@ public class UTF8StreamJsonParser
                     }
                 }
             }
+            _inputPtr = ptr-1;
+            return _skipColon2(true);
         }
         _inputPtr = ptr-1;
         return _skipColon2(false);
@@ -1107,6 +1106,7 @@ public class UTF8StreamJsonParser
     private final void _isNextTokenNameYes(int i) throws IOException
     {
         _currToken = JsonToken.FIELD_NAME;
+        _updateLocation();
 
         switch (i) {
         case '"':
@@ -1149,8 +1149,7 @@ public class UTF8StreamJsonParser
         }
         _nextToken = _handleUnexpectedValue(i);
     }
-    
-    
+
     private final boolean _isNextTokenNameMaybe(int i, SerializableString str) throws IOException
     {
         // // // and this is back to standard nextToken()
@@ -1160,6 +1159,7 @@ public class UTF8StreamJsonParser
         final boolean match = n.equals(str.getValue());
         _currToken = JsonToken.FIELD_NAME;
         i = _skipColon();
+        _updateLocation();
 
         // Ok: we must have a value... what is it? Strings are very common, check first:
         if (i == INT_QUOTE) {
@@ -1850,7 +1850,7 @@ public class UTF8StreamJsonParser
 
     /**
      * Method called when not even first 8 bytes are guaranteed
-     * to come consequtively. Happens rarely, so this is offlined;
+     * to come consecutively. Happens rarely, so this is offlined;
      * plus we'll also do full checks for escaping etc.
      */
     protected String slowParseName() throws IOException
@@ -1985,7 +1985,7 @@ public class UTF8StreamJsonParser
     /**
      * Method called when we see non-white space character other
      * than double quote, when expecting a field name.
-     * In standard mode will just throw an expection; but
+     * In standard mode will just throw an exception; but
      * in non-standard modes may be able to parse name.
      */
     protected String _handleOddName(int ch) throws IOException
@@ -2980,7 +2980,7 @@ public class UTF8StreamJsonParser
         }
         return _skipColon2(false);
     }
-    
+
     private final int _skipColon2(boolean gotColon) throws IOException
     {
         while (_inputPtr < _inputEnd || loadMore()) {
@@ -3601,6 +3601,52 @@ public class UTF8StreamJsonParser
             decodedData = (decodedData << 6) | bits;
             builder.appendThreeBytes(decodedData);
         }
+    }
+
+    /*
+    /**********************************************************
+    /* Improved location updating (refactored in 2.7)
+    /**********************************************************
+     */
+
+    // As per [core#108], must ensure we call the right method
+    @Override
+    public JsonLocation getTokenLocation()
+    {
+        final Object src = _ioContext.getSourceReference();
+        if (_currToken == JsonToken.FIELD_NAME) {
+            return new JsonLocation(src,
+                    _nameInputTotal, -1L, _nameInputRow, _tokenInputCol);
+        }
+        return new JsonLocation(src,
+                getTokenCharacterOffset(), -1L, getTokenLineNr(),
+                getTokenColumnNr());
+    }
+
+    // As per [core#108], must ensure we call the right method
+    @Override
+    public JsonLocation getCurrentLocation()
+    {
+        int col = _inputPtr - _currInputRowStart + 1; // 1-based
+        return new JsonLocation(_ioContext.getSourceReference(),
+                _currInputProcessed + _inputPtr, -1L, // bytes, chars
+                _currInputRow, col);
+    }
+
+    // @since 2.7
+    private final void _updateLocation()
+    {
+        _tokenInputTotal = _currInputProcessed + _inputPtr - 1;
+        _tokenInputRow = _currInputRow;
+        _tokenInputCol = _inputPtr - _currInputRowStart - 1;
+    }
+
+    // @since 2.7
+    private final void _updateNameLocation()
+    {
+        _nameInputTotal = _currInputProcessed + _inputPtr - 1;
+        _nameInputRow = _currInputRow;
+        _nameInputCol = _inputPtr - _currInputRowStart - 1;
     }
 
     /*

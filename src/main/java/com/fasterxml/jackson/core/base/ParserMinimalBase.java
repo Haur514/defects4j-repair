@@ -265,10 +265,7 @@ public abstract class ParserMinimalBase extends JsonParser
     public int getValueAsInt() throws IOException
     {
         JsonToken t = _currToken;
-        if (t == JsonToken.VALUE_NUMBER_INT) {
-            return getIntValue();
-        }
-        if (t == JsonToken.VALUE_NUMBER_FLOAT) {
+        if ((t == JsonToken.VALUE_NUMBER_INT) || (t == JsonToken.VALUE_NUMBER_FLOAT)) {
             return getIntValue();
         }
         return getValueAsInt(0);
@@ -278,10 +275,7 @@ public abstract class ParserMinimalBase extends JsonParser
     public int getValueAsInt(int defaultValue) throws IOException
     {
         JsonToken t = _currToken;
-        if (t == JsonToken.VALUE_NUMBER_INT) {
-            return getIntValue();
-        }
-        if (t == JsonToken.VALUE_NUMBER_FLOAT) {
+        if ((t == JsonToken.VALUE_NUMBER_INT) || (t == JsonToken.VALUE_NUMBER_FLOAT)) {
             return getIntValue();
         }
         if (t != null) {
@@ -312,10 +306,7 @@ public abstract class ParserMinimalBase extends JsonParser
     public long getValueAsLong() throws IOException
     {
         JsonToken t = _currToken;
-        if (t == JsonToken.VALUE_NUMBER_INT) {
-            return getLongValue();
-        }
-        if (t == JsonToken.VALUE_NUMBER_FLOAT) {
+        if ((t == JsonToken.VALUE_NUMBER_INT) || (t == JsonToken.VALUE_NUMBER_FLOAT)) {
             return getLongValue();
         }
         return getValueAsLong(0L);
@@ -325,10 +316,7 @@ public abstract class ParserMinimalBase extends JsonParser
     public long getValueAsLong(long defaultValue) throws IOException
     {
         JsonToken t = _currToken;
-        if (t == JsonToken.VALUE_NUMBER_INT) {
-            return getLongValue();
-        }
-        if (t == JsonToken.VALUE_NUMBER_FLOAT) {
+        if ((t == JsonToken.VALUE_NUMBER_INT) || (t == JsonToken.VALUE_NUMBER_FLOAT)) {
             return getLongValue();
         }
         if (t != null) {
@@ -542,7 +530,7 @@ public abstract class ParserMinimalBase extends JsonParser
     }
 
     protected final JsonParseException _constructError(String msg, Throwable t) {
-        return new JsonParseException(msg, getCurrentLocation(), t);
+        return new JsonParseException(this, msg, t);
     }
 
     protected static byte[] _asciiBytes(String str) {
@@ -552,7 +540,7 @@ public abstract class ParserMinimalBase extends JsonParser
         }
         return b;
     }
-    
+
     protected static String _ascii(byte[] b) {
         try {
             return new String(b, "US-ASCII");

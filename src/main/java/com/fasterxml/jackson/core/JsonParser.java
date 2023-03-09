@@ -103,7 +103,7 @@ public abstract class JsonParser
          * Feature that determines whether parser will allow use
          * of single quotes (apostrophe, character '\'') for
          * quoting Strings (names and String values). If so,
-         * this is in addition to other acceptabl markers.
+         * this is in addition to other acceptable markers.
          * but not by JSON specification).
          *<p>
          * Since JSON specification requires use of double quotes for
@@ -529,7 +529,10 @@ public abstract class JsonParser
      * @return This parser object, to allow chaining of calls
      * 
      * @since 2.3
+     * 
+     * @deprecated Since 2.7, use {@link #overrideStdFeatures(int, int)} instead
      */
+    @Deprecated
     public JsonParser setFeatureMask(int mask) {
         _features = mask;
         return this;
@@ -543,6 +546,7 @@ public abstract class JsonParser
      *    int newState = (oldState &amp; ~mask) | (values &amp; mask);
      *    setFeatureMask(newState);
      *</code>
+     * but preferred as this lets caller more efficiently specify actual changes made.
      * 
      * @param values Bit mask of set/clear state for features to change
      * @param mask Bit mask of features to change
@@ -550,8 +554,8 @@ public abstract class JsonParser
      * @since 2.6
      */
     public JsonParser overrideStdFeatures(int values, int mask) {
-        _features = (_features & ~mask) | (values & mask);
-        return this;
+        int newState = (_features & ~mask) | (values & mask);
+        return setFeatureMask(newState);
     }
 
     /**
@@ -1172,7 +1176,8 @@ public abstract class JsonParser
         JsonToken t = getCurrentToken();
         if (t == JsonToken.VALUE_TRUE) return true;
         if (t == JsonToken.VALUE_FALSE) return false;
-        throw new JsonParseException("Current token ("+t+") not of boolean type", getCurrentLocation());
+        throw new JsonParseException(this,
+                String.format("Current token (%s) not of boolean type", t));
     }
 
     /**
@@ -1578,7 +1583,7 @@ public abstract class JsonParser
      * based on current state of the parser
      */
     protected JsonParseException _constructError(String msg) {
-        return new JsonParseException(msg, getCurrentLocation());
+        return new JsonParseException(this, msg);
     }
 
     /**

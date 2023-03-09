@@ -146,6 +146,30 @@ public abstract class JsonGenerator
          */
         ESCAPE_NON_ASCII(false),
 
+// 23-Nov-2015, tatu: for [core#223], if and when it gets implemented
+        /**
+         * Feature that specifies handling of UTF-8 content that contains
+         * characters beyond BMP (Basic Multilingual Plane), which are
+         * represented in UCS-2 (Java internal character encoding) as two
+         * "surrogate" characters. If feature is enabled, these surrogate
+         * pairs are separately escaped using backslash escapes; if disabled,
+         * native output (4-byte UTF-8 sequence, or, with char-backed output
+         * targets, writing of surrogates as is which is typically converted
+         * by {@link java.io.Writer} into 4-byte UTF-8 sequence eventually)
+         * is used.
+         *<p>
+         * Note that the original JSON specification suggests use of escaping;
+         * but that this is not correct from standard UTF-8 handling perspective.
+         * Because of two competing goals, this feature was added to allow either
+         * behavior to be used, but defaulting to UTF-8 specification compliant
+         * mode.
+         *<p>
+         * Feature is disabled by default.
+         *
+         * @since 2.7
+         */
+//        ESCAPE_UTF8_SURROGATES(false),
+        
         // // Schema/Validity support features
 
         /**
@@ -303,7 +327,6 @@ public abstract class JsonGenerator
      */
     public abstract boolean isEnabled(Feature f);
 
-
     /**
      * Bulk access method for getting state of all standard (non-dataformat-specific)
      * {@link JsonGenerator.Feature}s.
@@ -323,7 +346,10 @@ public abstract class JsonGenerator
      *    and which disabled
      *
      * @return This parser object, to allow chaining of calls
+     *
+     * @deprecated Since 2.7, use {@link #overrideStdFeatures(int, int)} instead
      */
+    @Deprecated
     public abstract JsonGenerator setFeatureMask(int values);
 
     /**
@@ -334,6 +360,7 @@ public abstract class JsonGenerator
      *    int newState = (oldState &amp; ~mask) | (values &amp; mask);
      *    setFeatureMask(newState);
      *</code>
+     * but preferred as this lets caller more efficiently specify actual changes made.
      * 
      * @param values Bit mask of set/clear state for features to change
      * @param mask Bit mask of features to change
@@ -1178,7 +1205,7 @@ public abstract class JsonGenerator
      * @since 2.3
      */
     public void writeObjectId(Object id) throws IOException {
-        throw new JsonGenerationException("No native support for writing Object Ids");
+        throw new JsonGenerationException("No native support for writing Object Ids", this);
     }
 
     /**
@@ -1191,7 +1218,7 @@ public abstract class JsonGenerator
      * a {@link JsonGenerationException} will be thrown.
      */
     public void writeObjectRef(Object id) throws IOException {
-        throw new JsonGenerationException("No native support for writing Object Ids");
+        throw new JsonGenerationException("No native support for writing Object Ids", this);
     }
     
     /**
@@ -1206,7 +1233,7 @@ public abstract class JsonGenerator
      * @since 2.3
      */
     public void writeTypeId(Object id) throws IOException {
-        throw new JsonGenerationException("No native support for writing Type Ids");
+        throw new JsonGenerationException("No native support for writing Type Ids", this);
     }
     
     /*
@@ -1646,7 +1673,7 @@ public abstract class JsonGenerator
      * or use a {@link JsonGenerationException} sub-class.
      */
     protected void _reportError(String msg) throws JsonGenerationException {
-        throw new JsonGenerationException(msg);
+        throw new JsonGenerationException(msg, this);
     }
 
     protected final void _throwInternal() { VersionUtil.throwInternal(); }
@@ -1654,7 +1681,7 @@ public abstract class JsonGenerator
     protected void _reportUnsupportedOperation() {
         throw new UnsupportedOperationException("Operation not supported by generator of type "+getClass().getName());
     }
-    
+
     /**
      * Helper method to try to call appropriate write method for given
      * untyped Object. At this point, no structural conversions should be done,
@@ -1702,9 +1729,8 @@ public abstract class JsonGenerator
             } else if (n instanceof BigDecimal) {
                 writeNumber((BigDecimal) n);
                 return;
-                
+
             // then Atomic types
-                
             } else if (n instanceof AtomicInteger) {
                 writeNumber(((AtomicInteger) n).get());
                 return;

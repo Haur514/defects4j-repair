@@ -14,7 +14,23 @@ JSON library.
 === Releases ===
 ------------------------------------------------------------------------
 
-2.6.2 (not yet released)
+2.7.0 (not yet released)
+
+#37: JsonParser.getTokenLocation() doesn't update after field names
+ (reported by Michael L)
+#198: Add back-references to `JsonParser` / `JsonGenerator` for low-level parsing issues
+ (via `JsonParseException`, `JsonGenerationException`)
+#211: Typo of function name com.fasterxml.jackson.core.Version.isUknownVersion()
+ (reported by timray@github)
+#229: Array element and field token spans include previous comma.
+- Implemented `ReaderBasedJsonParser.nextFieldName(SerializableString)`
+  (to improved Afterburner performance over String/char[] sources)
+
+2.6.3 (12-Oct-2015)
+
+#220: Problem with `JsonParser.nextFieldName(SerializableString)` for byte-backed parser
+
+2.6.2 (14-Sep-2015)
 
 #213: Parser is sometimes wrong when using CANONICALIZE_FIELD_NAMES
  (reported by ichernev@github)
@@ -51,6 +67,16 @@ JSON library.
 - Implement a new yet more optimized symbol table for byte-backed parsers
 - Add `JsonParser.Feature.IGNORE_UNDEFINED`, useful for data formats like protobuf
 - Optimize writing of String names (remove intermediate copy; with JDK7 no speed benefit)
+
+2.5.5 (not yet released)
+
+#220: Problem with `JsonParser.nextFieldName(SerializableString)` for byte-backed parser
+#221: Fixed ArrayIndexOutOfBounds exception for character-based `JsonGenerator`
+ (reported by a-lerion@github)
+
+2.5.4 (09-Jun-2015)
+
+No changes.
 
 2.5.3 (24-Apr-2015)
 
@@ -91,7 +117,7 @@ JSON library.
 - Added `JsonParser.hasTokenId(id)` convenience method
 - Added `JsonParser.nextFieldName()` (no args)
 
-2.4.6 (not released yet)
+2.4.6 (23-Apr-2015)
 
 #184: WRITE_NUMBERS_AS_STRINGS disables WRITE_BIGDECIMAL_AS_PLAIN
  (reported by Derek C)
@@ -136,6 +162,13 @@ No changes since 2.4.4.
   of `String` input as well.
 - Refactor `BufferRecycler` to eliminate helper enums
 
+2.3.5 (13-Jan-2015)
+
+#152: Exception for property names longer than 256k
+#173: An exception is thrown for a valid JsonPointer expression
+#176: `JsonPointer` should not consider "00" to be valid index
+
+2.3.4 (17-Jul-2014)
 2.3.3 (10-Apr-2014)
 
 No changes since 2.3.2.
