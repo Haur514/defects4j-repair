@@ -4,6 +4,8 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 
+import java.io.Reader;
+import java.io.StringReader;
 import java.util.List;
 
 /**
@@ -16,6 +18,7 @@ public class Parser {
     private TreeBuilder treeBuilder;
     private int maxErrors = DEFAULT_MAX_ERRORS;
     private ParseErrorList errors;
+    private ParseSettings settings;
 
     /**
      * Create a new Parser, using the specified TreeBuilder
@@ -23,12 +26,17 @@ public class Parser {
      */
     public Parser(TreeBuilder treeBuilder) {
         this.treeBuilder = treeBuilder;
+        settings = treeBuilder.defaultSettings();
     }
     
     public Document parseInput(String html, String baseUri) {
         errors = isTrackErrors() ? ParseErrorList.tracking(maxErrors) : ParseErrorList.noTracking();
-        Document doc = treeBuilder.parse(html, baseUri, errors);
-        return doc;
+        return treeBuilder.parse(new StringReader(html), baseUri, errors, settings);
+    }
+
+    public Document parseInput(Reader inputHtml, String baseUri) {
+        errors = isTrackErrors() ? ParseErrorList.tracking(maxErrors) : ParseErrorList.noTracking();
+        return treeBuilder.parse(inputHtml, baseUri, errors, settings);
     }
 
     // gets & sets
@@ -76,6 +84,15 @@ public class Parser {
         return errors;
     }
 
+    public Parser settings(ParseSettings settings) {
+        this.settings = settings;
+        return this;
+    }
+
+    public ParseSettings settings() {
+        return settings;
+    }
+
     // static parse functions below
     /**
      * Parse HTML into a Document.
@@ -87,7 +104,7 @@ public class Parser {
      */
     public static Document parse(String html, String baseUri) {
         TreeBuilder treeBuilder = new HtmlTreeBuilder();
-        return treeBuilder.parse(html, baseUri, ParseErrorList.noTracking());
+        return treeBuilder.parse(new StringReader(html), baseUri, ParseErrorList.noTracking(), treeBuilder.defaultSettings());
     }
 
     /**
@@ -102,7 +119,35 @@ public class Parser {
      */
     public static List<Node> parseFragment(String fragmentHtml, Element context, String baseUri) {
         HtmlTreeBuilder treeBuilder = new HtmlTreeBuilder();
-        return treeBuilder.parseFragment(fragmentHtml, context, baseUri, ParseErrorList.noTracking());
+        return treeBuilder.parseFragment(fragmentHtml, context, baseUri, ParseErrorList.noTracking(), treeBuilder.defaultSettings());
+    }
+
+    /**
+     * Parse a fragment of HTML into a list of nodes. The context element, if supplied, supplies parsing context.
+     *
+     * @param fragmentHtml the fragment of HTML to parse
+     * @param context (optional) the element that this HTML fragment is being parsed for (i.e. for inner HTML). This
+     * provides stack context (for implicit element creation).
+     * @param baseUri base URI of document (i.e. original fetch location), for resolving relative URLs.
+     * @param errorList list to add errors to
+     *
+     * @return list of nodes parsed from the input HTML. Note that the context element, if supplied, is not modified.
+     */
+    public static List<Node> parseFragment(String fragmentHtml, Element context, String baseUri, ParseErrorList errorList) {
+        HtmlTreeBuilder treeBuilder = new HtmlTreeBuilder();
+        return treeBuilder.parseFragment(fragmentHtml, context, baseUri, errorList, treeBuilder.defaultSettings());
+    }
+
+    /**
+     * Parse a fragment of XML into a list of nodes.
+     *
+     * @param fragmentXml the fragment of XML to parse
+     * @param baseUri base URI of document (i.e. original fetch location), for resolving relative URLs.
+     * @return list of nodes parsed from the input XML.
+     */
+    public static List<Node> parseXmlFragment(String fragmentXml, String baseUri) {
+        XmlTreeBuilder treeBuilder = new XmlTreeBuilder();
+        return treeBuilder.parseFragment(fragmentXml, baseUri, ParseErrorList.noTracking(), treeBuilder.defaultSettings());
     }
 
     /**
@@ -118,10 +163,24 @@ public class Parser {
         Element body = doc.body();
         List<Node> nodeList = parseFragment(bodyHtml, body, baseUri);
         Node[] nodes = nodeList.toArray(new Node[nodeList.size()]); // the node list gets modified when re-parented
+        for (int i = nodes.length - 1; i > 0; i--) {
+            nodes[i].remove();
+        }
         for (Node node : nodes) {
             body.appendChild(node);
         }
         return doc;
+    }
+
+    /**
+     * Utility method to unescape HTML entities from a string
+     * @param string HTML escaped string
+     * @param inAttribute if the string is to be escaped in strict mode (as attributes are)
+     * @return an unescaped string
+     */
+    public static String unescapeEntities(String string, boolean inAttribute) {
+        Tokeniser tokeniser = new Tokeniser(new CharacterReader(string), ParseErrorList.noTracking());
+        return tokeniser.unescapeEntities(inAttribute);
     }
 
     /**

@@ -2,14 +2,24 @@ package org.jsoup.nodes;
 
 import org.jsoup.Jsoup;
 import org.jsoup.TextUtil;
+import org.jsoup.parser.Tag;
 import org.jsoup.select.Elements;
 import org.junit.Test;
 
-import static org.junit.Assert.*;
-
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.Map;
+import java.util.Set;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * Tests for Element (DOM stuff mostly).
@@ -94,6 +104,13 @@ public class ElementTest {
         assertEquals("<pre><code>code\n\ncode</code></pre>", doc.body().html());
     }
 
+    @Test public void testKeepsPreTextAtDepth() {
+        String h = "<pre><code><span><b>code\n\ncode</b></span></code></pre>";
+        Document doc = Jsoup.parse(h);
+        assertEquals("code\n\ncode", doc.text());
+        assertEquals("<pre><code><span><b>code\n\ncode</b></span></code></pre>", doc.body().html());
+    }
+
     @Test public void testBrHasSpace() {
         Document doc = Jsoup.parse("<p>Hello<br>there</p>");
         assertEquals("Hello there", doc.text());
@@ -113,6 +130,18 @@ public class ElementTest {
         assertEquals("element", p.lastElementSibling().text());
     }
 
+    @Test public void testGetSiblingsWithDuplicateContent() {
+        Document doc = Jsoup.parse("<div><p>Hello<p id=1>there<p>this<p>this<p>is<p>an<p id=last>element</div>");
+        Element p = doc.getElementById("1");
+        assertEquals("there", p.text());
+        assertEquals("Hello", p.previousElementSibling().text());
+        assertEquals("this", p.nextElementSibling().text());
+        assertEquals("this", p.nextElementSibling().nextElementSibling().text());
+        assertEquals("is", p.nextElementSibling().nextElementSibling().nextElementSibling().text());
+        assertEquals("Hello", p.firstElementSibling().text());
+        assertEquals("element", p.lastElementSibling().text());
+    }
+
     @Test public void testGetParents() {
         Document doc = Jsoup.parse("<div><p>Hello <span>there</span></div>");
         Element span = doc.select("span").first();
@@ -127,6 +156,14 @@ public class ElementTest {
     
     @Test public void testElementSiblingIndex() {
         Document doc = Jsoup.parse("<div><p>One</p>...<p>Two</p>...<p>Three</p>");
+        Elements ps = doc.select("p");
+        assertTrue(0 == ps.get(0).elementSiblingIndex());
+        assertTrue(1 == ps.get(1).elementSiblingIndex());
+        assertTrue(2 == ps.get(2).elementSiblingIndex());
+    }
+
+    @Test public void testElementSiblingIndexSameContent() {
+        Document doc = Jsoup.parse("<div><p>One</p>...<p>One</p>...<p>One</p>");
         Elements ps = doc.select("p");
         assertTrue(0 == ps.get(0).elementSiblingIndex());
         assertTrue(1 == ps.get(1).elementSiblingIndex());
@@ -179,7 +216,7 @@ public class ElementTest {
     }
     
     @Test public void testClassDomMethods() {
-        Document doc = Jsoup.parse("<div><span class='mellow yellow'>Hello <b>Yellow</b></span></div>");
+        Document doc = Jsoup.parse("<div><span class=' mellow yellow '>Hello <b>Yellow</b></span></div>");
         List<Element> els = doc.getElementsByAttribute("class");
         Element span = els.get(0);
         assertEquals("mellow yellow", span.className());
@@ -191,9 +228,66 @@ public class ElementTest {
         assertTrue(classes.contains("yellow"));
 
         assertEquals("", doc.className());
+        classes = doc.classNames();
+        assertEquals(0, classes.size());
         assertFalse(doc.hasClass("mellow"));
     }
+    
+    @Test public void testHasClassDomMethods() {
+        Tag tag = Tag.valueOf("a");
+        Attributes attribs = new Attributes();
+        Element el = new Element(tag, "", attribs);
+        
+        attribs.put("class", "toto");
+        boolean hasClass = el.hasClass("toto");
+        assertTrue(hasClass);
+        
+        attribs.put("class", " toto");
+        hasClass = el.hasClass("toto");
+        assertTrue(hasClass);
+        
+        attribs.put("class", "toto ");
+        hasClass = el.hasClass("toto");
+        assertTrue(hasClass);
+        
+        attribs.put("class", "\ttoto ");
+        hasClass = el.hasClass("toto");
+        assertTrue(hasClass);
+        
+        attribs.put("class", "  toto ");
+        hasClass = el.hasClass("toto");
+        assertTrue(hasClass);
+        
+        attribs.put("class", "ab");
+        hasClass = el.hasClass("toto");
+        assertFalse(hasClass);
+        
+        attribs.put("class", "     ");
+        hasClass = el.hasClass("toto");
+        assertFalse(hasClass);
+        
+        attribs.put("class", "tototo");
+        hasClass = el.hasClass("toto");
+        assertFalse(hasClass);
+        
+        attribs.put("class", "raulpismuth  ");
+        hasClass = el.hasClass("raulpismuth");
+        assertTrue(hasClass);
+        
+        attribs.put("class", " abcd  raulpismuth efgh ");
+        hasClass = el.hasClass("raulpismuth");
+        assertTrue(hasClass);
+        
+        attribs.put("class", " abcd efgh raulpismuth");
+        hasClass = el.hasClass("raulpismuth");
+        assertTrue(hasClass);
+        
+        attribs.put("class", " abcd efgh raulpismuth ");
+        hasClass = el.hasClass("raulpismuth");
+        assertTrue(hasClass);
+    }
 
+    
     @Test public void testClassUpdates() {
         Document doc = Jsoup.parse("<div class='mellow yellow'></div>");
         Element div = doc.select("div").first();
@@ -209,18 +303,24 @@ public class ElementTest {
 
     @Test public void testOuterHtml() {
         Document doc = Jsoup.parse("<div title='Tags &amp;c.'><img src=foo.png><p><!-- comment -->Hello<p>there");
-        assertEquals("<html><head></head><body><div title=\"Tags &amp;c.\"><img src=\"foo.png\" /><p><!-- comment -->Hello</p><p>there</p></div></body></html>",
+        assertEquals("<html><head></head><body><div title=\"Tags &amp;c.\"><img src=\"foo.png\"><p><!-- comment -->Hello</p><p>there</p></div></body></html>",
                 TextUtil.stripNewlines(doc.outerHtml()));
     }
 
     @Test public void testInnerHtml() {
-        Document doc = Jsoup.parse("<div><p>Hello</p></div>");
+        Document doc = Jsoup.parse("<div>\n <p>Hello</p> </div>");
         assertEquals("<p>Hello</p>", doc.getElementsByTag("div").get(0).html());
     }
 
     @Test public void testFormatHtml() {
         Document doc = Jsoup.parse("<title>Format test</title><div><p>Hello <span>jsoup <span>users</span></span></p><p>Good.</p></div>");
         assertEquals("<html>\n <head>\n  <title>Format test</title>\n </head>\n <body>\n  <div>\n   <p>Hello <span>jsoup <span>users</span></span></p>\n   <p>Good.</p>\n  </div>\n </body>\n</html>", doc.html());
+    }
+    
+    @Test public void testFormatOutline() {
+        Document doc = Jsoup.parse("<title>Format test</title><div><p>Hello <span>jsoup <span>users</span></span></p><p>Good.</p></div>");
+        doc.outputSettings().outline(true);
+        assertEquals("<html>\n <head>\n  <title>Format test</title>\n </head>\n <body>\n  <div>\n   <p>\n    Hello \n    <span>\n     jsoup \n     <span>users</span>\n    </span>\n   </p>\n   <p>Good.</p>\n  </div>\n </body>\n</html>", doc.html());
     }
 
     @Test public void testSetIndent() {
@@ -230,9 +330,12 @@ public class ElementTest {
     }
 
     @Test public void testNotPretty() {
-        Document doc = Jsoup.parse("<div>   \n<p>Hello\n there</p></div>");
+        Document doc = Jsoup.parse("<div>   \n<p>Hello\n there\n</p></div>");
         doc.outputSettings().prettyPrint(false);
-        assertEquals("<html><head></head><body><div>   \n<p>Hello\n there</p></div></body></html>", doc.html());
+        assertEquals("<html><head></head><body><div>   \n<p>Hello\n there\n</p></div></body></html>", doc.html());
+
+        Element div = doc.select("div").first();
+        assertEquals("   \n<p>Hello\n there\n</p>", div.html());
     }
     
     @Test public void testEmptyElementFormatHtml() {
@@ -269,8 +372,9 @@ public class ElementTest {
         Document doc = Jsoup.parse("<div id=1><p>Hello</p></div>");
         Element div = doc.getElementById("1");
         div.appendElement("p").text("there");
-        div.appendElement("P").attr("class", "second").text("now");
-        assertEquals("<html><head></head><body><div id=\"1\"><p>Hello</p><p>there</p><p class=\"second\">now</p></div></body></html>",
+        div.appendElement("P").attr("CLASS", "second").text("now");
+        // manually specifying tag and attributes should now preserve case, regardless of parse mode
+        assertEquals("<html><head></head><body><div id=\"1\"><p>Hello</p><p>there</p><P CLASS=\"second\">now</P></div></body></html>",
                 TextUtil.stripNewlines(doc.html()));
 
         // check sibling index (with short circuit on reindexChildren):
@@ -279,6 +383,26 @@ public class ElementTest {
             assertEquals(i, ps.get(i).siblingIndex);
         }
     }
+    
+    @Test public void testAddBooleanAttribute() {
+        Element div = new Element(Tag.valueOf("div"), "");
+        
+        div.attr("true", true);
+        
+        div.attr("false", "value");
+        div.attr("false", false);
+        
+        assertTrue(div.hasAttr("true"));
+        assertEquals("", div.attr("true"));
+        
+        List<Attribute> attributes = div.attributes().asList();
+        assertEquals("There should be one attribute", 1, attributes.size());
+		assertTrue("Attribute should be boolean", attributes.get(0) instanceof BooleanAttribute);
+        
+        assertFalse(div.hasAttr("false"));
+ 
+        assertEquals("<div true></div>", div.outerHtml());
+    }    
 
     @Test public void testAppendRowToTable() {
         Document doc = Jsoup.parse("<table><tr><td>1</td></tr></table>");
@@ -324,6 +448,18 @@ public class ElementTest {
         assertEquals("there & now > Hello", div.text());
         assertEquals("there &amp; now &gt; <p>Hello</p>", TextUtil.stripNewlines(div.html()));
     }
+
+    @Test(expected = IllegalArgumentException.class) public void testThrowsOnAddNullText() {
+        Document doc = Jsoup.parse("<div id=1><p>Hello</p></div>");
+        Element div = doc.getElementById("1");
+        div.appendText(null);
+    }
+
+    @Test(expected = IllegalArgumentException.class)  public void testThrowsOnPrependNullText() {
+        Document doc = Jsoup.parse("<div id=1><p>Hello</p></div>");
+        Element div = doc.getElementById("1");
+        div.prependText(null);
+    }
     
     @Test public void testAddNewHtml() {
         Document doc = Jsoup.parse("<div id=1><p>Hello</p></div>");
@@ -358,6 +494,20 @@ public class ElementTest {
         assertEquals("<p>there</p><p>now</p>", TextUtil.stripNewlines(div.html()));
     }
 
+    @Test public void testSetHtmlTitle() {
+        Document doc = Jsoup.parse("<html><head id=2><title id=1></title></head></html>");
+
+        Element title = doc.getElementById("1");
+        title.html("good");
+        assertEquals("good", title.html());
+        title.html("<i>bad</i>");
+        assertEquals("&lt;i&gt;bad&lt;/i&gt;", title.html());
+
+        Element head = doc.getElementById("2");
+        head.html("<title><i>bad</i></title>");
+        assertEquals("<title>&lt;i&gt;bad&lt;/i&gt;</title>", head.html());
+    }
+
     @Test public void testWrap() {
         Document doc = Jsoup.parse("<div><p>Hello</p><p>There</p></div>");
         Element p = doc.select("p").first();
@@ -365,7 +515,7 @@ public class ElementTest {
         assertEquals("<div><div class=\"head\"><p>Hello</p></div><p>There</p></div>", TextUtil.stripNewlines(doc.body().html()));
 
         Element ret = p.wrap("<div><div class=foo></div><p>What?</p></div>");
-        assertEquals("<div><div class=\"head\"><div><div class=\"foo\"><p>Hello</p></div><p>What?</p></div></div><p>There</p></div>", 
+        assertEquals("<div><div class=\"head\"><div><div class=\"foo\"><p>Hello</p></div><p>What?</p></div></div><p>There</p></div>",
                 TextUtil.stripNewlines(doc.body().html()));
 
         assertEquals(ret, p);
@@ -445,10 +595,10 @@ public class ElementTest {
     @Test public void parentlessToString() {
         Document doc = Jsoup.parse("<img src='foo'>");
         Element img = doc.select("img").first();
-        assertEquals("<img src=\"foo\" />", img.toString());
+        assertEquals("<img src=\"foo\">", img.toString());
 
         img.remove(); // lost its parent
-        assertEquals("<img src=\"foo\" />", img.toString());
+        assertEquals("<img src=\"foo\">", img.toString());
     }
 
     @Test public void testClone() {
@@ -469,6 +619,59 @@ public class ElementTest {
         doc.body().appendChild(clone); // adopt
         assertNotNull(clone.parent());
         assertEquals("<div><p>One</p><p><span>Two</span></p></div><p><span>Two</span><span>Three</span></p>", TextUtil.stripNewlines(doc.body().html()));
+    }
+
+    @Test public void testClonesClassnames() {
+        Document doc = Jsoup.parse("<div class='one two'></div>");
+        Element div = doc.select("div").first();
+        Set<String> classes = div.classNames();
+        assertEquals(2, classes.size());
+        assertTrue(classes.contains("one"));
+        assertTrue(classes.contains("two"));
+
+        Element copy = div.clone();
+        Set<String> copyClasses = copy.classNames();
+        assertEquals(2, copyClasses.size());
+        assertTrue(copyClasses.contains("one"));
+        assertTrue(copyClasses.contains("two"));
+        copyClasses.add("three");
+        copyClasses.remove("one");
+
+        assertTrue(classes.contains("one"));
+        assertFalse(classes.contains("three"));
+        assertFalse(copyClasses.contains("one"));
+        assertTrue(copyClasses.contains("three"));
+
+        assertEquals("", div.html());
+        assertEquals("", copy.html());
+    }
+
+    @Test public void testShallowClone() {
+        String base = "http://example.com/";
+        Document doc = Jsoup.parse("<div id=1 class=one><p id=2 class=two>One", base);
+        Element d = doc.selectFirst("div");
+        Element p = doc.selectFirst("p");
+        TextNode t = p.textNodes().get(0);
+
+        Element d2 = d.shallowClone();
+        Element p2 = p.shallowClone();
+        TextNode t2 = (TextNode) t.shallowClone();
+
+        assertEquals(1, d.childNodeSize());
+        assertEquals(0, d2.childNodeSize());
+
+        assertEquals(1, p.childNodeSize());
+        assertEquals(0, p2.childNodeSize());
+        assertEquals("", p2.text());
+
+        assertEquals("two", p2.className());
+        assertEquals("One", t2.text());
+
+        d2.append("<p id=3>Three");
+        assertEquals(1, d2.childNodeSize());
+        assertEquals("Three", d2.text());
+        assertEquals("One", d.text());
+        assertEquals(base, d2.baseUri());
     }
 
     @Test public void testTagNameSet() {
@@ -539,4 +742,543 @@ public class ElementTest {
         assertEquals("<p>One</p>", els.get(0).outerHtml());
         assertEquals("<p>Three</p>", els.get(1).outerHtml());
     }
+
+    @Test public void testChildThrowsIndexOutOfBoundsOnMissing() {
+        Document doc = Jsoup.parse("<div><p>One</p><p>Two</p></div>");
+        Element div = doc.select("div").first();
+
+        assertEquals(2, div.children().size());
+        assertEquals("One", div.child(0).text());
+
+        try {
+            div.child(3);
+            fail("Should throw index out of bounds");
+        } catch (IndexOutOfBoundsException e) {}
+    }
+
+    @Test
+    public void moveByAppend() {
+        // test for https://github.com/jhy/jsoup/issues/239
+        // can empty an element and append its children to another element
+        Document doc = Jsoup.parse("<div id=1>Text <p>One</p> Text <p>Two</p></div><div id=2></div>");
+        Element div1 = doc.select("div").get(0);
+        Element div2 = doc.select("div").get(1);
+
+        assertEquals(4, div1.childNodeSize());
+        List<Node> children = div1.childNodes();
+        assertEquals(4, children.size());
+
+        div2.insertChildren(0, children);
+
+        assertEquals(0, children.size()); // children is backed by div1.childNodes, moved, so should be 0 now
+        assertEquals(0, div1.childNodeSize());
+        assertEquals(4, div2.childNodeSize());
+        assertEquals("<div id=\"1\"></div>\n<div id=\"2\">\n Text \n <p>One</p> Text \n <p>Two</p>\n</div>",
+            doc.body().html());
+    }
+
+    @Test
+    public void insertChildrenArgumentValidation() {
+        Document doc = Jsoup.parse("<div id=1>Text <p>One</p> Text <p>Two</p></div><div id=2></div>");
+        Element div1 = doc.select("div").get(0);
+        Element div2 = doc.select("div").get(1);
+        List<Node> children = div1.childNodes();
+
+        try {
+            div2.insertChildren(6, children);
+            fail();
+        } catch (IllegalArgumentException e) {}
+
+        try {
+            div2.insertChildren(-5, children);
+            fail();
+        } catch (IllegalArgumentException e) {
+        }
+
+        try {
+            div2.insertChildren(0, (Collection<? extends Node>) null);
+            fail();
+        } catch (IllegalArgumentException e) {
+        }
+    }
+
+    @Test
+    public void insertChildrenAtPosition() {
+        Document doc = Jsoup.parse("<div id=1>Text1 <p>One</p> Text2 <p>Two</p></div><div id=2>Text3 <p>Three</p></div>");
+        Element div1 = doc.select("div").get(0);
+        Elements p1s = div1.select("p");
+        Element div2 = doc.select("div").get(1);
+
+        assertEquals(2, div2.childNodeSize());
+        div2.insertChildren(-1, p1s);
+        assertEquals(2, div1.childNodeSize()); // moved two out
+        assertEquals(4, div2.childNodeSize());
+        assertEquals(3, p1s.get(1).siblingIndex()); // should be last
+
+        List<Node> els = new ArrayList<>();
+        Element el1 = new Element(Tag.valueOf("span"), "").text("Span1");
+        Element el2 = new Element(Tag.valueOf("span"), "").text("Span2");
+        TextNode tn1 = new TextNode("Text4");
+        els.add(el1);
+        els.add(el2);
+        els.add(tn1);
+
+        assertNull(el1.parent());
+        div2.insertChildren(-2, els);
+        assertEquals(div2, el1.parent());
+        assertEquals(7, div2.childNodeSize());
+        assertEquals(3, el1.siblingIndex());
+        assertEquals(4, el2.siblingIndex());
+        assertEquals(5, tn1.siblingIndex());
+    }
+
+    @Test
+    public void insertChildrenAsCopy() {
+        Document doc = Jsoup.parse("<div id=1>Text <p>One</p> Text <p>Two</p></div><div id=2></div>");
+        Element div1 = doc.select("div").get(0);
+        Element div2 = doc.select("div").get(1);
+        Elements ps = doc.select("p").clone();
+        ps.first().text("One cloned");
+        div2.insertChildren(-1, ps);
+
+        assertEquals(4, div1.childNodeSize()); // not moved -- cloned
+        assertEquals(2, div2.childNodeSize());
+        assertEquals("<div id=\"1\">Text <p>One</p> Text <p>Two</p></div><div id=\"2\"><p>One cloned</p><p>Two</p></div>",
+            TextUtil.stripNewlines(doc.body().html()));
+    }
+
+    @Test
+    public void testCssPath() {
+        Document doc = Jsoup.parse("<div id=\"id1\">A</div><div>B</div><div class=\"c1 c2\">C</div>");
+        Element divA = doc.select("div").get(0);
+        Element divB = doc.select("div").get(1);
+        Element divC = doc.select("div").get(2);
+        assertEquals(divA.cssSelector(), "#id1");
+        assertEquals(divB.cssSelector(), "html > body > div:nth-child(2)");
+        assertEquals(divC.cssSelector(), "html > body > div.c1.c2");
+
+        assertTrue(divA == doc.select(divA.cssSelector()).first());
+        assertTrue(divB == doc.select(divB.cssSelector()).first());
+        assertTrue(divC == doc.select(divC.cssSelector()).first());
+    }
+
+
+    @Test
+    public void testClassNames() {
+        Document doc = Jsoup.parse("<div class=\"c1 c2\">C</div>");
+        Element div = doc.select("div").get(0);
+
+        assertEquals("c1 c2", div.className());
+
+        final Set<String> set1 = div.classNames();
+        final Object[] arr1 = set1.toArray();
+        assertTrue(arr1.length==2);
+        assertEquals("c1", arr1[0]);
+        assertEquals("c2", arr1[1]);
+
+        // Changes to the set should not be reflected in the Elements getters
+       	set1.add("c3");
+        assertTrue(2==div.classNames().size());
+        assertEquals("c1 c2", div.className());
+
+        // Update the class names to a fresh set
+        final Set<String> newSet = new LinkedHashSet<>(3);
+        newSet.addAll(set1);
+        newSet.add("c3");
+        
+        div.classNames(newSet);
+
+        
+        assertEquals("c1 c2 c3", div.className());
+
+        final Set<String> set2 = div.classNames();
+        final Object[] arr2 = set2.toArray();
+        assertTrue(arr2.length==3);
+        assertEquals("c1", arr2[0]);
+        assertEquals("c2", arr2[1]);
+        assertEquals("c3", arr2[2]);
+    }
+
+    @Test
+    public void testHashAndEqualsAndValue() {
+        // .equals and hashcode are identity. value is content.
+
+        String doc1 = "<div id=1><p class=one>One</p><p class=one>One</p><p class=one>Two</p><p class=two>One</p></div>" +
+                "<div id=2><p class=one>One</p><p class=one>One</p><p class=one>Two</p><p class=two>One</p></div>";
+
+        Document doc = Jsoup.parse(doc1);
+        Elements els = doc.select("p");
+
+        /*
+        for (Element el : els) {
+            System.out.println(el.hashCode() + " - " + el.outerHtml());
+        }
+
+        0 1534787905 - <p class="one">One</p>
+        1 1534787905 - <p class="one">One</p>
+        2 1539683239 - <p class="one">Two</p>
+        3 1535455211 - <p class="two">One</p>
+        4 1534787905 - <p class="one">One</p>
+        5 1534787905 - <p class="one">One</p>
+        6 1539683239 - <p class="one">Two</p>
+        7 1535455211 - <p class="two">One</p>
+        */
+        assertEquals(8, els.size());
+        Element e0 = els.get(0);
+        Element e1 = els.get(1);
+        Element e2 = els.get(2);
+        Element e3 = els.get(3);
+        Element e4 = els.get(4);
+        Element e5 = els.get(5);
+        Element e6 = els.get(6);
+        Element e7 = els.get(7);
+
+        assertEquals(e0, e0);
+        assertTrue(e0.hasSameValue(e1));
+        assertTrue(e0.hasSameValue(e4));
+        assertTrue(e0.hasSameValue(e5));
+        assertFalse(e0.equals(e2));
+        assertFalse(e0.hasSameValue(e2));
+        assertFalse(e0.hasSameValue(e3));
+        assertFalse(e0.hasSameValue(e6));
+        assertFalse(e0.hasSameValue(e7));
+
+        assertEquals(e0.hashCode(), e0.hashCode());
+        assertFalse(e0.hashCode() == (e2.hashCode()));
+        assertFalse(e0.hashCode() == (e3).hashCode());
+        assertFalse(e0.hashCode() == (e6).hashCode());
+        assertFalse(e0.hashCode() == (e7).hashCode());
+    }
+
+    @Test public void testRelativeUrls() {
+        String html = "<body><a href='./one.html'>One</a> <a href='two.html'>two</a> <a href='../three.html'>Three</a> <a href='//example2.com/four/'>Four</a> <a href='https://example2.com/five/'>Five</a>";
+        Document doc = Jsoup.parse(html, "http://example.com/bar/");
+        Elements els = doc.select("a");
+
+        assertEquals("http://example.com/bar/one.html", els.get(0).absUrl("href"));
+        assertEquals("http://example.com/bar/two.html", els.get(1).absUrl("href"));
+        assertEquals("http://example.com/three.html", els.get(2).absUrl("href"));
+        assertEquals("http://example2.com/four/", els.get(3).absUrl("href"));
+        assertEquals("https://example2.com/five/", els.get(4).absUrl("href"));
+    }
+
+    @Test
+    public void appendMustCorrectlyMoveChildrenInsideOneParentElement() {
+        Document doc = new Document("");
+        Element body = doc.appendElement("body");
+        body.appendElement("div1");
+        body.appendElement("div2");
+        final Element div3 = body.appendElement("div3");
+        div3.text("Check");
+        final Element div4 = body.appendElement("div4");
+
+        ArrayList<Element> toMove = new ArrayList<>();
+        toMove.add(div3);
+        toMove.add(div4);
+
+        body.insertChildren(0, toMove);
+
+        String result = doc.toString().replaceAll("\\s+", "");
+        assertEquals("<body><div3>Check</div3><div4></div4><div1></div1><div2></div2></body>", result);
+    }
+
+    @Test
+    public void testHashcodeIsStableWithContentChanges() {
+        Element root = new Element(Tag.valueOf("root"), "");
+
+        HashSet<Element> set = new HashSet<>();
+        // Add root node:
+        set.add(root);
+
+        root.appendChild(new Element(Tag.valueOf("a"), ""));
+        assertTrue(set.contains(root));
+    }
+
+    @Test
+    public void testNamespacedElements() {
+        // Namespaces with ns:tag in HTML must be translated to ns|tag in CSS.
+        String html = "<html><body><fb:comments /></body></html>";
+        Document doc = Jsoup.parse(html, "http://example.com/bar/");
+        Elements els = doc.select("fb|comments");
+        assertEquals(1, els.size());
+        assertEquals("html > body > fb|comments", els.get(0).cssSelector());
+    }
+
+    @Test
+    public void testChainedRemoveAttributes() {
+        String html = "<a one two three four>Text</a>";
+        Document doc = Jsoup.parse(html);
+        Element a = doc.select("a").first();
+        a
+            .removeAttr("zero")
+            .removeAttr("one")
+            .removeAttr("two")
+            .removeAttr("three")
+            .removeAttr("four")
+            .removeAttr("five");
+        assertEquals("<a>Text</a>", a.outerHtml());
+    }
+
+    @Test
+    public void testLoopedRemoveAttributes() {
+        String html = "<a one two three four>Text</a><p foo>Two</p>";
+        Document doc = Jsoup.parse(html);
+        for (Element el : doc.getAllElements()) {
+            el.clearAttributes();
+        }
+
+        assertEquals("<a>Text</a>\n<p>Two</p>", doc.body().html());
+    }
+
+    @Test
+    public void testIs() {
+        String html = "<div><p>One <a class=big>Two</a> Three</p><p>Another</p>";
+        Document doc = Jsoup.parse(html);
+        Element p = doc.select("p").first();
+
+        assertTrue(p.is("p"));
+        assertFalse(p.is("div"));
+        assertTrue(p.is("p:has(a)"));
+        assertTrue(p.is("p:first-child"));
+        assertFalse(p.is("p:last-child"));
+        assertTrue(p.is("*"));
+        assertTrue(p.is("div p"));
+
+        Element q = doc.select("p").last();
+        assertTrue(q.is("p"));
+        assertTrue(q.is("p ~ p"));
+        assertTrue(q.is("p + p"));
+        assertTrue(q.is("p:last-child"));
+        assertFalse(q.is("p a"));
+        assertFalse(q.is("a"));
+    }
+
+
+    @Test public void elementByTagName() {
+        Element a = new Element("P");
+        assertTrue(a.tagName().equals("P"));
+    }
+
+    @Test public void testChildrenElements() {
+        String html = "<div><p><a>One</a></p><p><a>Two</a></p>Three</div><span>Four</span><foo></foo><img>";
+        Document doc = Jsoup.parse(html);
+        Element div = doc.select("div").first();
+        Element p = doc.select("p").first();
+        Element span = doc.select("span").first();
+        Element foo = doc.select("foo").first();
+        Element img = doc.select("img").first();
+
+        Elements docChildren = div.children();
+        assertEquals(2, docChildren.size());
+        assertEquals("<p><a>One</a></p>", docChildren.get(0).outerHtml());
+        assertEquals("<p><a>Two</a></p>", docChildren.get(1).outerHtml());
+        assertEquals(3, div.childNodes().size());
+        assertEquals("Three", div.childNodes().get(2).outerHtml());
+
+        assertEquals(1, p.children().size());
+        assertEquals("One", p.children().text());
+
+        assertEquals(0, span.children().size());
+        assertEquals(1, span.childNodes().size());
+        assertEquals("Four", span.childNodes().get(0).outerHtml());
+
+        assertEquals(0, foo.children().size());
+        assertEquals(0, foo.childNodes().size());
+        assertEquals(0, img.children().size());
+        assertEquals(0, img.childNodes().size());
+    }
+
+    @Test public void testShadowElementsAreUpdated() {
+        String html = "<div><p><a>One</a></p><p><a>Two</a></p>Three</div><span>Four</span><foo></foo><img>";
+        Document doc = Jsoup.parse(html);
+        Element div = doc.select("div").first();
+        Elements els = div.children();
+        List<Node> nodes = div.childNodes();
+
+        assertEquals(2, els.size()); // the two Ps
+        assertEquals(3, nodes.size()); // the "Three" textnode
+
+        Element p3 = new Element("p").text("P3");
+        Element p4 = new Element("p").text("P4");
+        div.insertChildren(1, p3);
+        div.insertChildren(3, p4);
+        Elements els2 = div.children();
+
+        // first els should not have changed
+        assertEquals(2, els.size());
+        assertEquals(4, els2.size());
+
+        assertEquals("<p><a>One</a></p>\n" +
+            "<p>P3</p>\n" +
+            "<p><a>Two</a></p>\n" +
+            "<p>P4</p>Three", div.html());
+        assertEquals("P3", els2.get(1).text());
+        assertEquals("P4", els2.get(3).text());
+
+        p3.after("<span>Another</span");
+
+        Elements els3 = div.children();
+        assertEquals(5, els3.size());
+        assertEquals("span", els3.get(2).tagName());
+        assertEquals("Another", els3.get(2).text());
+
+        assertEquals("<p><a>One</a></p>\n" +
+            "<p>P3</p>\n" +
+            "<span>Another</span>\n" +
+            "<p><a>Two</a></p>\n" +
+            "<p>P4</p>Three", div.html());
+    }
+
+    @Test public void classNamesAndAttributeNameIsCaseInsensitive() {
+        String html = "<p Class='SomeText AnotherText'>One</p>";
+        Document doc = Jsoup.parse(html);
+        Element p = doc.select("p").first();
+        assertEquals("SomeText AnotherText", p.className());
+        assertTrue(p.classNames().contains("SomeText"));
+        assertTrue(p.classNames().contains("AnotherText"));
+        assertTrue(p.hasClass("SomeText"));
+        assertTrue(p.hasClass("sometext"));
+        assertTrue(p.hasClass("AnotherText"));
+        assertTrue(p.hasClass("anothertext"));
+
+        Element p1 = doc.select(".SomeText").first();
+        Element p2 = doc.select(".sometext").first();
+        Element p3 = doc.select("[class=SomeText AnotherText]").first();
+        Element p4 = doc.select("[Class=SomeText AnotherText]").first();
+        Element p5 = doc.select("[class=sometext anothertext]").first();
+        Element p6 = doc.select("[class=SomeText AnotherText]").first();
+        Element p7 = doc.select("[class^=sometext]").first();
+        Element p8 = doc.select("[class$=nothertext]").first();
+        Element p9 = doc.select("[class^=sometext]").first();
+        Element p10 = doc.select("[class$=AnotherText]").first();
+
+        assertEquals("One", p1.text());
+        assertEquals(p1, p2);
+        assertEquals(p1, p3);
+        assertEquals(p1, p4);
+        assertEquals(p1, p5);
+        assertEquals(p1, p6);
+        assertEquals(p1, p7);
+        assertEquals(p1, p8);
+        assertEquals(p1, p9);
+        assertEquals(p1, p10);
+    }
+
+	@Test
+	public void testAppendTo() {
+		String parentHtml = "<div class='a'></div>";
+		String childHtml = "<div class='b'></div><p>Two</p>";
+
+		Document parentDoc = Jsoup.parse(parentHtml);
+		Element parent = parentDoc.body();
+        Document childDoc = Jsoup.parse(childHtml);
+
+        Element div = childDoc.select("div").first();
+        Element p = childDoc.select("p").first();
+        Element appendTo1 = div.appendTo(parent);
+        assertEquals(div, appendTo1);
+
+        Element appendTo2 = p.appendTo(div);
+        assertEquals(p, appendTo2);
+
+        assertEquals("<div class=\"a\"></div>\n<div class=\"b\">\n <p>Two</p>\n</div>", parentDoc.body().html());
+        assertEquals("", childDoc.body().html()); // got moved out
+	}
+
+	@Test public void testNormalizesNbspInText() {
+        String escaped = "You can't always get what you&nbsp;want.";
+        String withNbsp = "You can't always get what you want."; // there is an nbsp char in there
+        Document doc = Jsoup.parse("<p>" + escaped);
+        Element p = doc.select("p").first();
+        assertEquals("You can't always get what you want.", p.text()); // text is normalized
+
+        assertEquals("<p>" + escaped + "</p>", p.outerHtml()); // html / whole text keeps &nbsp;
+        assertEquals(withNbsp, p.textNodes().get(0).getWholeText());
+        assertEquals(160, withNbsp.charAt(29));
+
+        Element matched = doc.select("p:contains(get what you want)").first();
+        assertEquals("p", matched.nodeName());
+        assertTrue(matched.is(":containsOwn(get what you want)"));
+    }
+	
+	@Test
+	public void testRemoveBeforeIndex() {
+		Document doc = Jsoup.parse(
+	            "<html><body><div><p>before1</p><p>before2</p><p>XXX</p><p>after1</p><p>after2</p></div></body></html>",
+	            "");
+	    Element body = doc.select("body").first();
+	    Elements elems = body.select("p:matchesOwn(XXX)");
+	    Element xElem = elems.first();
+	    Elements beforeX = xElem.parent().getElementsByIndexLessThan(xElem.elementSiblingIndex());
+
+	    for(Element p : beforeX) {
+	        p.remove();
+	    }
+
+	    assertEquals("<body><div><p>XXX</p><p>after1</p><p>after2</p></div></body>", TextUtil.stripNewlines(body.outerHtml()));
+	}
+	
+	@Test
+	public void testRemoveAfterIndex() {
+		 Document doc2 = Jsoup.parse(
+		            "<html><body><div><p>before1</p><p>before2</p><p>XXX</p><p>after1</p><p>after2</p></div></body></html>",
+		            "");
+	    Element body = doc2.select("body").first();
+	    Elements elems = body.select("p:matchesOwn(XXX)");
+	    Element xElem = elems.first();
+	    Elements afterX = xElem.parent().getElementsByIndexGreaterThan(xElem.elementSiblingIndex());
+
+	    for(Element p : afterX) {
+	        p.remove();
+	    }
+
+	    assertEquals("<body><div><p>before1</p><p>before2</p><p>XXX</p></div></body>", TextUtil.stripNewlines(body.outerHtml()));
+	}
+	
+    @Test 
+    public void whiteSpaceClassElement(){
+	    Tag tag = Tag.valueOf("a");
+	    Attributes attribs = new Attributes();
+	    Element el = new Element(tag, "", attribs);
+	    
+	    attribs.put("class", "abc ");
+	    boolean hasClass = el.hasClass("ab");
+	    assertFalse(hasClass);
+	}
+
+	@Test
+    public void testNextElementSiblingAfterClone() {
+        // via https://github.com/jhy/jsoup/issues/951
+        String html = "<!DOCTYPE html><html lang=\"en\"><head></head><body><div>Initial element</div></body></html>";
+        String expectedText = "New element";
+        String cloneExpect = "New element in clone";
+
+        Document original = Jsoup.parse(html);
+        Document clone = original.clone();
+
+        Element originalElement = original.body().child(0);
+        originalElement.after("<div>" + expectedText + "</div>");
+        Element originalNextElementSibling = originalElement.nextElementSibling();
+        Element originalNextSibling = (Element) originalElement.nextSibling();
+        assertEquals(expectedText, originalNextElementSibling.text());
+        assertEquals(expectedText, originalNextSibling.text());
+
+        Element cloneElement = clone.body().child(0);
+        cloneElement.after("<div>" + cloneExpect + "</div>");
+        Element cloneNextElementSibling = cloneElement.nextElementSibling();
+        Element cloneNextSibling = (Element) cloneElement.nextSibling();
+        assertEquals(cloneExpect, cloneNextElementSibling.text());
+        assertEquals(cloneExpect, cloneNextSibling.text());
+    }
+
+    @Test
+    public void testRemovingEmptyClassAttributeWhenLastClassRemoved() {
+        // https://github.com/jhy/jsoup/issues/947
+        Document doc = Jsoup.parse("<img class=\"one two\" />");
+        Element img = doc.select("img").first();
+        img.removeClass("one");
+        img.removeClass("two");
+        assertFalse(doc.body().html().contains("class=\"\""));
+    }
+
 }
