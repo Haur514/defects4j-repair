@@ -1,6 +1,12 @@
 jsoup changelog
 
 *** Release 1.8.3 [PENDING]
+ * Added support for custom boolean attributes.
+   <https://github.com/jhy/jsoup/pull/555>
+
+ * When fetching XML URLs, automatically switch to the XML parser instead of the HTML parser.
+   <https://github.com/jhy/jsoup/pull/574>
+   
  * Fixed an issue in Element.getElementSiblingIndex (and related methods) where sibling elements with the same content
    would incorrectly have the same sibling index.
    <https://github.com/jhy/jsoup/issues/554>
@@ -8,6 +14,9 @@ jsoup changelog
  * Fixed an issue where unexpected elements in a badly nested table could be moved to the wrong location in the
    document.
    <https://github.com/jhy/jsoup/issues/552>
+
+ * Fixed an issue where a table nested within a TH cell would parse to an incorrect tree.
+   <https://github.com/jhy/jsoup/issues/575>
 
 *** Release 1.8.2 [2015-Apr-13]
  * Performance improvements for parsing HTML on Android, of 1.5x to 1.9x, with larger parses getting a bigger

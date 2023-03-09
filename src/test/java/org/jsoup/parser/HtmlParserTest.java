@@ -46,11 +46,11 @@ public class HtmlParserTest {
         String html = "<p =a>One<a <p>Something</p>Else";
         // this gets a <p> with attr '=a' and an <a tag with an attribue named '<p'; and then auto-recreated
         Document doc = Jsoup.parse(html);
-        assertEquals("<p =a=\"\">One<a <p=\"\">Something</a></p>\n" +
-                "<a <p=\"\">Else</a>", doc.body().html());
+        assertEquals("<p =a>One<a <p>Something</a></p>\n" +
+                "<a <p>Else</a>", doc.body().html());
 
         doc = Jsoup.parse("<p .....>");
-        assertEquals("<p .....=\"\"></p>", doc.body().html());
+        assertEquals("<p .....></p>", doc.body().html());
     }
 
     @Test public void parsesComments() {
@@ -869,5 +869,11 @@ public class HtmlParserTest {
         String html = doc.outerHtml();
         assertEquals("<form action=\"/submit\"> <hr> <label>This is a searchable index. Enter search keywords: <input name=\"isindex\"></label> <hr> </form>",
                 StringUtil.normaliseWhitespace(doc.body().html()));
+    }
+
+    @Test public void testReinsertionModeForThCelss() {
+        String body = "<body> <table> <tr> <th> <table><tr><td></td></tr></table> <div> <table><tr><td></td></tr></table> </div> <div></div> <div></div> <div></div> </th> </tr> </table> </body>";
+        Document doc = Jsoup.parse(body);
+        assertEquals(1, doc.body().children().size());
     }
 }
