@@ -95,8 +95,10 @@ public class FormElement extends Element {
                 }
             } else if ("checkbox".equalsIgnoreCase(type) || "radio".equalsIgnoreCase(type)) {
                 // only add checkbox or radio if they have the checked attribute
-                if (el.hasAttr("checked"))
-                    data.add(HttpConnection.KeyVal.create(name, el.val()));
+                if (el.hasAttr("checked")) {
+                    final String val = el.val();
+                    data.add(HttpConnection.KeyVal.create(name, val));
+                }
             } else {
                 data.add(HttpConnection.KeyVal.create(name, el.val()));
             }
