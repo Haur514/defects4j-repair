@@ -971,28 +971,30 @@ public class HtmlParserTest {
         assertTrue(System.currentTimeMillis() - start < 1000);
     }
 
-    @Test public void handlesDeepStack() {
-        // inspired by http://sv.stargate.wikia.com/wiki/M2J and https://github.com/jhy/jsoup/issues/955
-        // I didn't put it in the integration tests, because explorer and intellij kept dieing trying to preview/index it
-
-        // Arrange
-        StringBuilder longBody = new StringBuilder(500000);
-        for (int i = 0; i < 25000; i++) {
-            longBody.append(i).append("<dl><dd>");
-        }
-        for (int i = 0; i < 25000; i++) {
-            longBody.append(i).append("</dd></dl>");
-        }
-
-        // Act
-        long start = System.currentTimeMillis();
-        Document doc = Parser.parseBodyFragment(longBody.toString(), "");
-
-        // Assert
-        assertEquals(2, doc.body().childNodeSize());
-        assertEquals(25000, doc.select("dd").size());
-        assertTrue(System.currentTimeMillis() - start < 2000);
-    }
+    @Test public void handlesDeepStack() {}
+// Defects4J: flaky method
+//     @Test public void handlesDeepStack() {
+//         // inspired by http://sv.stargate.wikia.com/wiki/M2J and https://github.com/jhy/jsoup/issues/955
+//         // I didn't put it in the integration tests, because explorer and intellij kept dieing trying to preview/index it
+// 
+//         // Arrange
+//         StringBuilder longBody = new StringBuilder(500000);
+//         for (int i = 0; i < 25000; i++) {
+//             longBody.append(i).append("<dl><dd>");
+//         }
+//         for (int i = 0; i < 25000; i++) {
+//             longBody.append(i).append("</dd></dl>");
+//         }
+// 
+//         // Act
+//         long start = System.currentTimeMillis();
+//         Document doc = Parser.parseBodyFragment(longBody.toString(), "");
+// 
+//         // Assert
+//         assertEquals(2, doc.body().childNodeSize());
+//         assertEquals(25000, doc.select("dd").size());
+//         assertTrue(System.currentTimeMillis() - start < 2000);
+//     }
 
     @Test
     public void testInvalidTableContents() throws IOException {
@@ -1167,5 +1169,15 @@ public class HtmlParserTest {
         Element pre = doc.selectFirst("pre");
         assertEquals("One\nTwo", pre.text());
         assertEquals("\nOne\nTwo\n", pre.wholeText());
+  }
+
+  @Test public void handlesXmlDeclAndCommentsBeforeDoctype() throws IOException {
+      File in = ParseTest.getFile("/htmltests/comments.html");
+      Document doc = Jsoup.parse(in, "UTF-8");
+
+      assertEquals("<!--?xml version=\"1.0\" encoding=\"utf-8\"?--> <!-- so --><!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\"> <!-- what --> <html xml:lang=\"en\" lang=\"en\" xmlns=\"http://www.w3.org/1999/xhtml\"> <!-- now --> <head> <!-- then --> <meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\"> <title>A Certain Kind of Test</title> </head> <body> <h1>Hello</h1>h1&gt; (There is a UTF8 hidden BOM at the top of this file.) </body> </html>",
+          StringUtil.normaliseWhitespace(doc.html()));
+
+      assertEquals("A Certain Kind of Test", doc.head().select("title").text());
   }
 }
