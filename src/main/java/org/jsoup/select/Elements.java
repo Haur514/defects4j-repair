@@ -2,6 +2,7 @@ package org.jsoup.select;
 
 import org.jsoup.helper.Validate;
 import org.jsoup.nodes.Element;
+import org.jsoup.nodes.FormElement;
 import org.jsoup.nodes.Node;
 
 import java.util.*;
@@ -34,16 +35,27 @@ public class Elements implements List<Element>, Cloneable {
     public Elements(Element... elements) {
         this(Arrays.asList(elements));
     }
-    
+
+    /**
+     * Creates a deep copy of these elements.
+     * @return a deep copy
+     */
     @Override
 	public Elements clone() {
+        Elements clone;
+        try {
+            clone = (Elements) super.clone();
+        } catch (CloneNotSupportedException e) {
+            throw new RuntimeException(e);
+        }
     	List<Element> elements = new ArrayList<Element>();
+        clone.contents = elements;
     	
     	for(Element e : contents)
     		elements.add(e.clone());
 		
     	
-    	return new Elements(elements);
+    	return clone;
 	}
 
 	// attribute methods
@@ -455,7 +467,7 @@ public class Elements implements List<Element>, Cloneable {
     // list-like methods
     /**
      Get the first matched element.
-     @return The first matched element, or <code>null</code> if contents is empty;
+     @return The first matched element, or <code>null</code> if contents is empty.
      */
     public Element first() {
         return contents.isEmpty() ? null : contents.get(0);
@@ -481,6 +493,19 @@ public class Elements implements List<Element>, Cloneable {
             traversor.traverse(el);
         }
         return this;
+    }
+
+    /**
+     * Get the {@link FormElement} forms from the selected elements, if any.
+     * @return a list of FormElements pulled from the matched elements. The list will be empty if the elements contain
+     * no forms.
+     */
+    public List<FormElement> forms() {
+        ArrayList<FormElement> forms = new ArrayList<FormElement>();
+        for (Element el: contents)
+            if (el instanceof FormElement)
+                forms.add((FormElement) el);
+        return forms;
     }
 
     // implements List<Element> delegates:
