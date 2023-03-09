@@ -1615,7 +1615,7 @@ public class UTF8StreamJsonParser
         // Ok; unless we hit end-of-input, need to push last char read back
         if (!eof) {
             --_inputPtr;
-            // As per #105, need separating space between root values; check here
+            // As per [core#105], need separating space between root values; check here
             if (_parsingContext.inRoot()) {
                 _verifyRootSpace(c);
             }
