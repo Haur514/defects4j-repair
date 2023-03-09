@@ -13,6 +13,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.fasterxml.jackson.core.JsonParser.NumberType;
 import com.fasterxml.jackson.core.io.CharacterEscapes;
+import com.fasterxml.jackson.core.type.WritableTypeId;
+import com.fasterxml.jackson.core.type.WritableTypeId.Inclusion;
 import com.fasterxml.jackson.core.util.VersionUtil;
 
 import static com.fasterxml.jackson.core.JsonTokenId.*;
@@ -32,7 +34,7 @@ public abstract class JsonGenerator
      */
     public enum Feature {
         // // Low-level I/O / content features
-        
+
         /**
          * Feature that determines whether generator will automatically
          * close underlying output target that is NOT owned by the
@@ -83,7 +85,10 @@ public abstract class JsonGenerator
          * occurs when used straight from Javascript.
          *<p>
          * Feature is enabled by default (since it is required by JSON specification).
+         *
+         * @deprecated Since 2.10 use {@link com.fasterxml.jackson.core.json.JsonWriteFeature#QUOTE_FIELD_NAMES} instead
          */
+        @Deprecated
         QUOTE_FIELD_NAMES(true),
 
         /**
@@ -97,15 +102,45 @@ public abstract class JsonGenerator
          * output.
          *<p>
          * Feature is enabled by default.
+         *
+         * @deprecated Since 2.10 use {@link com.fasterxml.jackson.core.json.JsonWriteFeature#WRITE_NAN_AS_STRINGS} instead
          */
+         @Deprecated
         QUOTE_NON_NUMERIC_NUMBERS(true),
 
+        // // Character escaping features
+        
         /**
-         * Feature that forces all Java numbers to be written as JSON strings.
+         * Feature that specifies that all characters beyond 7-bit ASCII
+         * range (i.e. code points of 128 and above) need to be output
+         * using format-specific escapes (for JSON, backslash escapes),
+         * if format uses escaping mechanisms (which is generally true
+         * for textual formats but not for binary formats).
+         *<p>
+         * Note that this setting may not necessarily make sense for all
+         * data formats (for example, binary formats typically do not use
+         * any escaping mechanisms; and some textual formats do not have
+         * general-purpose escaping); if so, settings is simply ignored.
+         * Put another way, effects of this feature are data-format specific.
+         *<p>
+         * Feature is disabled by default.
+         *
+         * @deprecated Since 2.10 use {@link com.fasterxml.jackson.core.json.JsonWriteFeature#ESCAPE_NON_ASCII} instead
+         */
+         @Deprecated
+        ESCAPE_NON_ASCII(false),
+
+        // // Datatype coercion features
+        
+        /**
+         * Feature that forces all Java numbers to be written as Strings,
+         * even if the underlying data format has non-textual representation
+         * (which is the case for JSON as well as all binary formats).
          * Default state is 'false', meaning that Java numbers are to
          * be serialized using basic numeric serialization (as JSON
-         * numbers, integral or floating point). If enabled, all such
-         * numeric values are instead written out as JSON Strings.
+         * numbers, integral or floating point, for example).
+         * If enabled, all such numeric values are instead written out as
+         * textual values (which for JSON means quoted in double-quotes).
          *<p>
          * One use case is to avoid problems with Javascript limitations:
          * since Javascript standard specifies that all number handling
@@ -122,54 +157,17 @@ public abstract class JsonGenerator
          * serialized using {@link java.math.BigDecimal#toPlainString()} to prevent
          * values to be written using scientific notation.
          *<p>
+         * NOTE: only affects generators that serialize {@link java.math.BigDecimal}s
+         * using textual representation (textual formats but potentially some binary
+         * formats).
+         *<p>
          * Feature is disabled by default, so default output mode is used; this generally
          * depends on how {@link BigDecimal} has been created.
          * 
          * @since 2.3
          */
         WRITE_BIGDECIMAL_AS_PLAIN(false),
-        
-        /**
-         * Feature that specifies that all characters beyond 7-bit ASCII
-         * range (i.e. code points of 128 and above) need to be output
-         * using format-specific escapes (for JSON, backslash escapes),
-         * if format uses escaping mechanisms (which is generally true
-         * for textual formats but not for binary formats).
-         *<p>
-         * Note that this setting may not necessarily make sense for all
-         * data formats (for example, binary formats typically do not use
-         * any escaping mechanisms; and some textual formats do not have
-         * general-purpose escaping); if so, settings is simply ignored.
-         * Put another way, effects of this feature are data-format specific.
-         *<p>
-         * Feature is disabled by default.
-         */
-        ESCAPE_NON_ASCII(false),
 
-// 23-Nov-2015, tatu: for [core#223], if and when it gets implemented
-        /**
-         * Feature that specifies handling of UTF-8 content that contains
-         * characters beyond BMP (Basic Multilingual Plane), which are
-         * represented in UCS-2 (Java internal character encoding) as two
-         * "surrogate" characters. If feature is enabled, these surrogate
-         * pairs are separately escaped using backslash escapes; if disabled,
-         * native output (4-byte UTF-8 sequence, or, with char-backed output
-         * targets, writing of surrogates as is which is typically converted
-         * by {@link java.io.Writer} into 4-byte UTF-8 sequence eventually)
-         * is used.
-         *<p>
-         * Note that the original JSON specification suggests use of escaping;
-         * but that this is not correct from standard UTF-8 handling perspective.
-         * Because of two competing goals, this feature was added to allow either
-         * behavior to be used, but defaulting to UTF-8 specification compliant
-         * mode.
-         *<p>
-         * Feature is disabled by default.
-         *
-         * @since Xxx
-         */
-//        ESCAPE_UTF8_SURROGATES(false),
-        
         // // Schema/Validity support features
 
         /**
@@ -399,12 +397,10 @@ public abstract class JsonGenerator
      * @since 2.6
      */
     public JsonGenerator overrideFormatFeatures(int values, int mask) {
-        throw new IllegalArgumentException("No FormatFeatures defined for generator of type "+getClass().getName());
-        /*
-        int oldState = getFeatureMask();
-        int newState = (oldState & ~mask) | (values & mask);
-        return setFeatureMask(newState);
-        */
+        // 08-Oct-2018, tatu: For 2.10 we actually do get `JsonWriteFeature`s, although they
+        //    are (for 2.x only, not for 3.x) mapper to legacy settings. So do not freak out:
+//        throw new IllegalArgumentException("No FormatFeatures defined for generator of type "+getClass().getName());
+        return this;
     }
     
     /*
@@ -711,7 +707,7 @@ public abstract class JsonGenerator
      * @since 2.8
      */
     public boolean canWriteFormattedNumbers() { return false; }
-    
+
     /*
     /**********************************************************
     /* Public API, write methods, structural
@@ -1089,6 +1085,7 @@ public abstract class JsonGenerator
      * 
      * @since 2.1
      */
+//    public abstract void writeRaw(SerializableString raw) throws IOException;
     public void writeRaw(SerializableString raw) throws IOException {
         writeRaw(raw.getValue());
     }
@@ -1406,11 +1403,6 @@ public abstract class JsonGenerator
         throw new JsonGenerationException("No native support for writing Type Ids", this);
     }
 
-    // 24-May-2016, tatu: Looks like this won't quite make it in 2.8... too
-    //   many open questions on whether return value may be used and such to
-    //   really close the loop. But leaving code sample in, in case we can resolve it
-    //   it for 2.9.
-
     /*
      * Replacement method for {@link #writeTypeId(Object)} which is called
      * regardless of whether format has native type ids. If it does have native
@@ -1418,60 +1410,110 @@ public abstract class JsonGenerator
      * structural type id inclusion is to be used. For JSON, for example, no
      * native type ids exist and structural inclusion is always used.
      *<p>
-     * NOTE: from databind perspective, only "as-wrapper-array", "as-wrapper-object" and
-     * "as-property" inclusion styles call this method; the remaining "as-external-property"
-     * mechanism always uses writes type id value as simple property.
+     * NOTE: databind may choose to skip calling this method for some special cases
+     * (and instead included type id via regular write methods and/or {@link #writeTypeId}
+     * -- this is discouraged, but not illegal, and may be necessary as a work-around
+     * in some cases.
      *
-     * @param inclStyle Kind of inclusion; {@link JsonToken#START_ARRAY} for "as-wrapper-array",
-     *     {@link JsonToken#START_OBJECT} for "as-wrapper-object" and {@link JsonToken#FIELD_NAME}
-     *     for "as-property"
-     * @param forValue Java object for which type is being written; not used by standard mechanism
-     * @param valueShape Expected shape of the value to write, as expressed by the first token (for
-     *    structural type), or any of scalar types for non-structured values (typically
-     *    just {@link JsonToken#VALUE_STRING} -- exact token not required, just the fact it's scalar)
-     * @param typeId Type id to write
-     * @param propertyName Name of property to use, in case of "as-property" inclusion style
-     *
-     * @since 2.8
+     * @since 2.9
      */
-    /*
-    public Object writeTypeSuffix(JsonToken inclStyle, Object forValue, JsonToken valueShape,
-            String typeId, String propertyName) throws IOException
+    public WritableTypeId writeTypePrefix(WritableTypeId typeIdDef) throws IOException
     {
-        if (inclStyle == JsonToken.FIELD_NAME) { // as-property
-            if (typeId == null) { // should not include `null` type id in any form with this style
-                writeStartObject();
-            } else if (valueShape == JsonToken.START_OBJECT) {
-                if (canWriteTypeId()) {
-                    writeTypeId(typeId);
-                    writeStartObject();
-                } else {
-                    writeStartObject();
-                    writeStringField(propertyName, typeId);
-                }
-            } else if (valueShape == JsonToken.START_ARRAY) {
-                if (canWriteTypeId()) {
-                    writeTypeId(typeId);
-                    writeStartArray();
-                } else {
-                    writeStartArray();
-                    writeString(typeId);
-                }
-            } else { // any scalar
-                if (canWriteTypeId()) {
-                    writeTypeId(typeId);
-                }
-            }
-            return JsonToken.END_OBJECT;
-        }
-        if (inclStyle == JsonToken.START_ARRAY) { // as-wrapper-array
-        } else if (inclStyle == JsonToken.START_OBJECT) { // as-wrapper-object
-            
+        Object id = typeIdDef.id;
+
+        final JsonToken valueShape = typeIdDef.valueShape;
+        if (canWriteTypeId()) {
+            typeIdDef.wrapperWritten = false;
+            // just rely on native type output method (sub-classes likely to override)
+            writeTypeId(id);
         } else {
-            throw new JsonGenerationException("Unrecognized inclusion style: "+inclStyle, this);
+            // No native type id; write wrappers
+            // Normally we only support String type ids (non-String reserved for native type ids)
+            String idStr = (id instanceof String) ? (String) id : String.valueOf(id);
+            typeIdDef.wrapperWritten = true;
+
+            Inclusion incl = typeIdDef.include;
+            // first: can not output "as property" if value not Object; if so, must do "as array"
+            if ((valueShape != JsonToken.START_OBJECT)
+                    && incl.requiresObjectContext()) {
+                typeIdDef.include = incl = WritableTypeId.Inclusion.WRAPPER_ARRAY;
+            }
+            
+            switch (incl) {
+            case PARENT_PROPERTY:
+                // nothing to do here, as it has to be written in suffix...
+                break;
+            case PAYLOAD_PROPERTY:
+                // only output as native type id; otherwise caller must handle using some
+                // other mechanism, so...
+                break;
+            case METADATA_PROPERTY:
+                // must have Object context by now, so simply write as field name
+                // Note, too, that it's bit tricky, since we must print START_OBJECT that is part
+                // of value first -- and then NOT output it later on: hence return "early"
+                writeStartObject(typeIdDef.forValue);
+                writeStringField(typeIdDef.asProperty, idStr);
+                return typeIdDef;
+
+            case WRAPPER_OBJECT:
+                // NOTE: this is wrapper, not directly related to value to output, so don't pass
+                writeStartObject();
+                writeFieldName(idStr);
+                break;
+            case WRAPPER_ARRAY:
+            default: // should never occur but translate as "as-array"
+                writeStartArray(); // wrapper, not actual array object to write
+                writeString(idStr);
+            }
         }
+        // and finally possible start marker for value itself:
+        if (valueShape == JsonToken.START_OBJECT) {
+            writeStartObject(typeIdDef.forValue);
+        } else if (valueShape == JsonToken.START_ARRAY) {
+            // should we now set the current object?
+            writeStartArray();
+        }
+        return typeIdDef;
     }
-    */
+
+    /*
+     * @since 2.9
+     */
+    public WritableTypeId writeTypeSuffix(WritableTypeId typeIdDef) throws IOException
+    {
+        final JsonToken valueShape = typeIdDef.valueShape;
+        // First: does value need closing?
+        if (valueShape == JsonToken.START_OBJECT) {
+            writeEndObject();
+        } else if (valueShape == JsonToken.START_ARRAY) {
+            writeEndArray();
+        }
+
+        if (typeIdDef.wrapperWritten) {
+            switch (typeIdDef.include) {
+            case WRAPPER_ARRAY:
+                writeEndArray();
+                break;
+            case PARENT_PROPERTY:
+                // unusually, need to output AFTER value. And no real wrapper...
+                {
+                    Object id = typeIdDef.id;
+                    String idStr = (id instanceof String) ? (String) id : String.valueOf(id);
+                    writeStringField(typeIdDef.asProperty, idStr);
+                }
+                break;
+            case METADATA_PROPERTY:
+            case PAYLOAD_PROPERTY:
+                // no actual wrapper; included within Object itself
+                break;
+            case WRAPPER_OBJECT:
+            default: // should never occur but...
+                writeEndObject();
+                break;
+            }
+        }
+        return typeIdDef;
+    }
 
     /*
     /**********************************************************

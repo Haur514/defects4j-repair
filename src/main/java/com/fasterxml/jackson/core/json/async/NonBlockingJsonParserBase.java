@@ -25,7 +25,7 @@ public abstract class NonBlockingJsonParserBase
 
     /**
      * State right after parser has been constructed, before seeing the first byte
-     * to know if there's header.
+     * to handle possible (but optional) BOM.
      */
     protected final static int MAJOR_INITIAL = 0;
 
@@ -56,50 +56,63 @@ public abstract class NonBlockingJsonParserBase
      */
 
     /**
+     * State in which part of (UTF-8) BOM has been detected, but not yet completely.
+     */
+    protected final static int MINOR_ROOT_BOM = 1;
+
+    /**
      * State between root-level value, waiting for at least one white-space
      * character as separator
      */
-    protected final static int MINOR_ROOT_NEED_SEPARATOR = 1;
+    protected final static int MINOR_ROOT_NEED_SEPARATOR = 2;
 
     /**
      * State between root-level value, having processed at least one white-space
      * character, and expecting either more, start of a value, or end of input
      * stream.
      */
-    protected final static int MINOR_ROOT_GOT_SEPARATOR = 2;
+    protected final static int MINOR_ROOT_GOT_SEPARATOR = 3;
 
     // state before field name itself, waiting for quote (or unquoted name)
-    protected final static int MINOR_FIELD_LEADING_WS = 3;
+    protected final static int MINOR_FIELD_LEADING_WS = 4;
     // state before field name, expecting comma (or closing curly), then field name
-    protected final static int MINOR_FIELD_LEADING_COMMA = 4;
+    protected final static int MINOR_FIELD_LEADING_COMMA = 5;
 
     // State within regular (double-quoted) field name
-    protected final static int MINOR_FIELD_NAME = 10;
+    protected final static int MINOR_FIELD_NAME = 7;
     // State within regular (double-quoted) field name, within escape (having
     // encountered either just backslash, or backslash and 'u' and 0 - 3 hex digits,
-    protected final static int MINOR_FIELD_NAME_ESCAPE = 11;
+    protected final static int MINOR_FIELD_NAME_ESCAPE = 8;
 
-    protected final static int MINOR_VALUE_LEADING_WS = 14;
-    protected final static int MINOR_VALUE_LEADING_COMMA = 15;
-    protected final static int MINOR_VALUE_LEADING_COLON = 16;
+    protected final static int MINOR_FIELD_APOS_NAME = 9;
+    protected final static int MINOR_FIELD_UNQUOTED_NAME = 10;
 
-    protected final static int MINOR_VALUE_TOKEN_NULL = 17;
-    protected final static int MINOR_VALUE_TOKEN_TRUE = 18;
-    protected final static int MINOR_VALUE_TOKEN_FALSE = 19;
-    
-    protected final static int MINOR_NUMBER_LEADING_MINUS = 20;
-    protected final static int MINOR_NUMBER_LEADING_ZERO = 21;
-    protected final static int MINOR_NUMBER_INTEGER_DIGITS = 22;
+    protected final static int MINOR_VALUE_LEADING_WS = 12;
+    protected final static int MINOR_VALUE_EXPECTING_COMMA = 13;
+    protected final static int MINOR_VALUE_EXPECTING_COLON = 14;
+    protected final static int MINOR_VALUE_WS_AFTER_COMMA = 15;
 
-    protected final static int MINOR_NUMBER_FRACTION_DIGITS = 24;
-    protected final static int MINOR_NUMBER_EXPONENT_MARKER = 25;
-    protected final static int MINOR_NUMBER_EXPONENT_DIGITS = 27;
+    protected final static int MINOR_VALUE_TOKEN_NULL = 16;
+    protected final static int MINOR_VALUE_TOKEN_TRUE = 17;
+    protected final static int MINOR_VALUE_TOKEN_FALSE = 18;
 
-    protected final static int MINOR_VALUE_STRING = 30;
-    protected final static int MINOR_VALUE_STRING_ESCAPE = 31;
-    protected final static int MINOR_VALUE_STRING_UTF8_2 = 32;
-    protected final static int MINOR_VALUE_STRING_UTF8_3 = 33;
-    protected final static int MINOR_VALUE_STRING_UTF8_4 = 34;
+    protected final static int MINOR_VALUE_TOKEN_NON_STD = 19;
+
+    protected final static int MINOR_NUMBER_MINUS = 23;
+    protected final static int MINOR_NUMBER_ZERO = 24; // zero as first, possibly trimming multiple
+    protected final static int MINOR_NUMBER_MINUSZERO = 25; // "-0" (and possibly more zeroes) receive
+    protected final static int MINOR_NUMBER_INTEGER_DIGITS = 26;
+
+    protected final static int MINOR_NUMBER_FRACTION_DIGITS = 30;
+    protected final static int MINOR_NUMBER_EXPONENT_MARKER = 31;
+    protected final static int MINOR_NUMBER_EXPONENT_DIGITS = 32;
+
+    protected final static int MINOR_VALUE_STRING = 40;
+    protected final static int MINOR_VALUE_STRING_ESCAPE = 41;
+    protected final static int MINOR_VALUE_STRING_UTF8_2 = 42;
+    protected final static int MINOR_VALUE_STRING_UTF8_3 = 43;
+    protected final static int MINOR_VALUE_STRING_UTF8_4 = 44;
+    protected final static int MINOR_VALUE_APOS_STRING = 45;
 
     /**
      * Special state at which point decoding of a non-quoted token has encountered
@@ -108,7 +121,13 @@ public abstract class NonBlockingJsonParserBase
      * Attempt is made, then, to decode likely full input token to report suitable
      * error.
      */
-    protected final static int MINOR_VALUE_TOKEN_ERROR = 60;
+    protected final static int MINOR_VALUE_TOKEN_ERROR = 50;
+
+    protected final static int MINOR_COMMENT_LEADING_SLASH = 51;
+    protected final static int MINOR_COMMENT_CLOSING_ASTERISK = 52;
+    protected final static int MINOR_COMMENT_C = 53;
+    protected final static int MINOR_COMMENT_CPP = 54;
+    protected final static int MINOR_COMMENT_YAML = 55;
     
     /*
     /**********************************************************************
@@ -137,7 +156,7 @@ public abstract class NonBlockingJsonParserBase
     protected int _quoted32;
 
     protected int _quotedDigits;
-    
+
     /*
     /**********************************************************************
     /* Additional parsing state
@@ -145,14 +164,9 @@ public abstract class NonBlockingJsonParserBase
      */
 
     /**
-     * Current main decoding state
+     * Current main decoding state within logical tree
      */
     protected int _majorState;
-
-    /**
-     * Addition indicator within state; contextually relevant for just that state
-     */
-    protected int _minorState;
 
     /**
      * Value of {@link #_majorState} after completing a scalar value
@@ -160,11 +174,72 @@ public abstract class NonBlockingJsonParserBase
     protected int _majorStateAfterValue;
 
     /**
+     * Additional indicator within state; contextually relevant for just that state
+     */
+    protected int _minorState;
+
+    /**
+     * Secondary minor state indicator used during decoding of escapes and/or
+     * multi-byte Unicode characters
+     */
+    protected int _minorStateAfterSplit;
+
+    /**
      * Flag that is sent when calling application indicates that there will
      * be no more input to parse.
      */
     protected boolean _endOfInput = false;
 
+    /*
+    /**********************************************************************
+    /* Additional parsing state: non-standard tokens
+    /**********************************************************************
+     */
+
+    protected final static int NON_STD_TOKEN_NAN = 0;
+
+    protected final static int NON_STD_TOKEN_INFINITY = 1;
+    protected final static int NON_STD_TOKEN_PLUS_INFINITY = 2;
+    protected final static int NON_STD_TOKEN_MINUS_INFINITY = 3;
+
+    protected final static String[] NON_STD_TOKENS = new String[] {
+            "NaN",
+            "Infinity", "+Infinity", "-Infinity",
+    };
+
+    protected final static double[] NON_STD_TOKEN_VALUES = new double[] {
+            Double.NaN,
+            Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY,
+    };
+    
+    /**
+     * When tokenizing non-standard ("odd") tokens, this is the type to consider;
+     * also works as index to actual textual representation.
+     */
+    protected int _nonStdTokenType;
+
+    /*
+    /**********************************************************************
+    /* Location tracking, additional
+    /**********************************************************************
+     */
+
+    /**
+     * Since we are fed content that may or may not start at zero offset, we need
+     * to keep track of the first byte within that buffer, to be able to calculate
+     * logical offset within input "stream"
+     */
+    protected int _currBufferStart = 0;
+    
+    /**
+     * Alternate row tracker, used to keep track of position by `\r` marker
+     * (whereas <code>_currInputRow</code> tracks `\n`). Used to simplify
+     * tracking of linefeeds, assuming that input typically uses various
+     * linefeed combinations (`\r`, `\n` or `\r\n`) consistently, in which
+     * case we can simply choose max of two row candidates.
+     */
+    protected int _currInputRowAlt = 1;
+    
     /*
     /**********************************************************************
     /* Life-cycle
@@ -236,7 +311,7 @@ public abstract class NonBlockingJsonParserBase
         // 30-May-2017, tatu: Seems like this is the most certain way to prevent
         //    further decoding... not the optimal place, but due to inheritance
         //    hierarchy most convenient.
-        _inputPtr = 0;
+        _currBufferStart = 0;
         _inputEnd = 0;
     }
 
@@ -259,6 +334,24 @@ public abstract class NonBlockingJsonParserBase
         }
         // other types, no benefit from accessing as char[]
         return false;
+    }
+
+    @Override
+    public JsonLocation getCurrentLocation()
+    {
+        int col = _inputPtr - _currInputRowStart + 1; // 1-based
+        // Since we track CR and LF separately, max should gives us right answer
+        int row = Math.max(_currInputRow, _currInputRowAlt);
+        return new JsonLocation(_getSourceReference(),
+                _currInputProcessed + (_inputPtr - _currBufferStart), -1L, // bytes, chars
+                row, col);
+    }
+
+    @Override
+    public JsonLocation getTokenLocation()
+    {
+        return new JsonLocation(_getSourceReference(),
+                _tokenInputTotal, -1L, _tokenInputRow, _tokenInputCol);
     }
 
     /*
@@ -743,18 +836,38 @@ public abstract class NonBlockingJsonParserBase
         return t;
     }
 
+    @SuppressWarnings("deprecation")
+    protected final JsonToken _valueNonStdNumberComplete(int type) throws IOException
+    {
+        String tokenStr = NON_STD_TOKENS[type];
+        _textBuffer.resetWithString(tokenStr);
+        if (!isEnabled(Feature.ALLOW_NON_NUMERIC_NUMBERS)) {
+            _reportError("Non-standard token '%s': enable JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS to allow",
+                    tokenStr);
+        }
+        _intLength = 0;
+        _numTypesValid = NR_DOUBLE;
+        _numberDouble = NON_STD_TOKEN_VALUES[type];
+        _majorState = _majorStateAfterValue;
+        return (_currToken = JsonToken.VALUE_NUMBER_FLOAT);
+    }
+
+    protected final String _nonStdToken(int type) {
+        return NON_STD_TOKENS[type];
+    }
+
     /*
     /**********************************************************************
     /* Internal methods, error reporting, related
     /**********************************************************************
      */
 
-    protected final void _updateLocation()
+    protected final void _updateTokenLocation()
     {
-        _tokenInputRow = _currInputRow;
+        _tokenInputRow = Math.max(_currInputRow, _currInputRowAlt);
         final int ptr = _inputPtr;
-        _tokenInputTotal = _currInputProcessed + ptr;
         _tokenInputCol = ptr - _currInputRowStart;
+        _tokenInputTotal = _currInputProcessed + (ptr - _currBufferStart);
     }
 
     protected void _reportInvalidChar(int c) throws JsonParseException {
@@ -764,11 +877,11 @@ public abstract class NonBlockingJsonParserBase
         }
         _reportInvalidInitial(c);
     }
-    
+
     protected void _reportInvalidInitial(int mask) throws JsonParseException {
         _reportError("Invalid UTF-8 start byte 0x"+Integer.toHexString(mask));
     }
-	
+
     protected void _reportInvalidOther(int mask, int ptr) throws JsonParseException {
         _inputPtr = ptr;
         _reportInvalidOther(mask);

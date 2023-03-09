@@ -9,7 +9,7 @@ import java.util.Arrays;
 import com.fasterxml.jackson.core.util.ByteArrayBuilder;
 
 /**
- * Abstract base class used to define specific details of which
+ * Class used to define specific details of which
  * variant of Base64 encoding/decoding is to be used. Although there is
  * somewhat standard basic version (so-called "MIME Base64"), other variants
  * exists, see <a href="http://en.wikipedia.org/wiki/Base64">Base64 Wikipedia entry</a> for details.
@@ -457,13 +457,17 @@ public final class Base64Variant
     {
         int ptr = 0;
         int len = str.length();
-        
-        while (ptr < len) {
+
+    main_loop:
+        while (true) {
             // first, we'll skip preceding white space, if any
             char ch;
             do {
+                if (ptr >= len) {
+                    break main_loop;
+                }
                 ch = str.charAt(ptr++);
-            } while ((ptr < len) && (ch <= INT_SPACE));
+            } while (ch <= INT_SPACE);
             int bits = decodeBase64Char(ch);
             if (bits < 0) {
                 _reportInvalidBase64(ch, 0, null);
@@ -589,7 +593,19 @@ public final class Base64Variant
     }
 
     protected void _reportBase64EOF() throws IllegalArgumentException {
-        throw new IllegalArgumentException("Unexpected end-of-String in base64 content");
+        throw new IllegalArgumentException(missingPaddingMessage());
     }
+
+    /**
+     * Helper method that will construct a message to use in exceptions for cases where input ends
+     * prematurely in place where padding would be expected.
+     *
+     * @since 2.10
+     */
+    public String missingPaddingMessage() {
+        return String.format("Unexpected end of base64-encoded String: base64 variant '%s' expects padding (one or more '%c' characters) at the end",
+                getName(), getPaddingChar());
+    }
+
 }
 

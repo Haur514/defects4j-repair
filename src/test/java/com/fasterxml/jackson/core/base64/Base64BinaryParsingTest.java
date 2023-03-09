@@ -4,6 +4,8 @@ import static org.junit.Assert.assertArrayEquals;
 
 import java.io.*;
 
+import org.junit.Assert;
+
 import com.fasterxml.jackson.core.*;
 
 public class Base64BinaryParsingTest
@@ -32,7 +34,11 @@ public class Base64BinaryParsingTest
     public void testSimple() throws IOException
     {
         for (int mode : ALL_MODES) {
-            _testSimple(mode);
+            // [core#414]: Allow leading/trailign white-space, ensure it is accepted
+            _testSimple(mode, false, false);
+            _testSimple(mode, true, false);
+            _testSimple(mode, false, true);
+            _testSimple(mode, true, true);
         }
     }
 
@@ -46,6 +52,12 @@ public class Base64BinaryParsingTest
     public void testWithEscaped() throws IOException {
         for (int mode : ALL_MODES) {
             _testEscaped(mode);
+        }
+    }
+
+    public void testWithEscapedPadding() throws IOException {
+        for (int mode : ALL_MODES) {
+            _testEscapedPadding(mode);
         }
     }
 
@@ -105,7 +117,75 @@ public class Base64BinaryParsingTest
             p.close();
         }
     }
-    
+
+    public void testOkMissingPadding() throws IOException {
+        final byte[] DOC1 = new byte[] { (byte) 0xAD };
+        _testOkMissingPadding(DOC1, MODE_INPUT_STREAM);
+        _testOkMissingPadding(DOC1, MODE_INPUT_STREAM_THROTTLED);
+        _testOkMissingPadding(DOC1, MODE_READER);
+        _testOkMissingPadding(DOC1, MODE_DATA_INPUT);
+
+        final byte[] DOC2 = new byte[] { (byte) 0xAC, (byte) 0xDC };
+        _testOkMissingPadding(DOC2, MODE_INPUT_STREAM);
+        _testOkMissingPadding(DOC2, MODE_INPUT_STREAM_THROTTLED);
+        _testOkMissingPadding(DOC2, MODE_READER);
+        _testOkMissingPadding(DOC2, MODE_DATA_INPUT);
+    }
+
+    private void _testOkMissingPadding(byte[] input, int mode) throws IOException
+    {
+        final Base64Variant b64 = Base64Variants.MODIFIED_FOR_URL;
+        final String encoded = b64.encode(input, false);
+        JsonParser p = createParser(mode, quote(encoded));
+        // 1 byte -> 2 encoded chars; 2 bytes -> 3 encoded chars
+        assertEquals(input.length+1, encoded.length());
+        assertToken(JsonToken.VALUE_STRING, p.nextToken());
+        byte[] actual = p.getBinaryValue(b64);
+        Assert.assertArrayEquals(input, actual);
+        p.close();
+    }
+
+    public void testFailDueToMissingPadding() throws IOException {
+        final String DOC1 = quote("fQ"); // 1 bytes, no padding
+        _testFailDueToMissingPadding(DOC1, MODE_INPUT_STREAM);
+        _testFailDueToMissingPadding(DOC1, MODE_INPUT_STREAM_THROTTLED);
+        _testFailDueToMissingPadding(DOC1, MODE_READER);
+        _testFailDueToMissingPadding(DOC1, MODE_DATA_INPUT);
+
+        final String DOC2 = quote("A/A"); // 2 bytes, no padding
+        _testFailDueToMissingPadding(DOC2, MODE_INPUT_STREAM);
+        _testFailDueToMissingPadding(DOC2, MODE_INPUT_STREAM_THROTTLED);
+        _testFailDueToMissingPadding(DOC2, MODE_READER);
+        _testFailDueToMissingPadding(DOC2, MODE_DATA_INPUT);
+    }
+
+    private void _testFailDueToMissingPadding(String doc, int mode) throws IOException {
+        final String EXP_EXCEPTION_MATCH = "Unexpected end of base64-encoded String: base64 variant 'MIME' expects padding";
+        
+        // First, without getting text value first:
+        JsonParser p = createParser(mode, doc);
+        assertToken(JsonToken.VALUE_STRING, p.nextToken());
+        try {
+            /*byte[] b =*/ p.getBinaryValue(Base64Variants.MIME);
+            fail("Should not pass");
+        } catch (JsonParseException e) {
+            verifyException(e, EXP_EXCEPTION_MATCH);
+        }
+        p.close();
+
+        // second, access String first
+        p = createParser(mode, doc);
+        assertToken(JsonToken.VALUE_STRING, p.nextToken());
+        /*String str =*/ p.getText();
+        try {
+            /*byte[] b =*/ p.getBinaryValue(Base64Variants.MIME);
+            fail("Should not pass");
+        } catch (JsonParseException e) {
+            verifyException(e, EXP_EXCEPTION_MATCH);
+        }
+        p.close();
+    }
+
     /*
     /**********************************************************
     /* Test helper methods
@@ -125,7 +205,7 @@ public class Base64BinaryParsingTest
                 Base64Variants.PEM
         };
 
-        JsonFactory jsonFactory = new JsonFactory();
+        JsonFactory jsonFactory = sharedStreamFactory();
         final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         StringWriter chars = null;
         for (int len : LENS) {
@@ -188,7 +268,7 @@ public class Base64BinaryParsingTest
             139000
         };
 
-        JsonFactory jsonFactory = new JsonFactory();
+        JsonFactory jsonFactory = sharedStreamFactory();
         final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         StringWriter chars = null;
 
@@ -233,23 +313,27 @@ public class Base64BinaryParsingTest
         }
     }
 
-    private void _testSimple(int mode)
-        throws IOException
+    private void _testSimple(int mode, boolean leadingWS, boolean trailingWS) throws IOException
     {
-        /* The usual sample input string, from Thomas Hobbes's "Leviathan"
-         * (via Wikipedia)
-         */
+        // The usual sample input string, from Thomas Hobbes's "Leviathan"
+        // (via Wikipedia)
         final String RESULT = "Man is distinguished, not only by his reason, but by this singular passion from other animals, which is a lust of the mind, that by a perseverance of delight in the continued and indefatigable generation of knowledge, exceeds the short vehemence of any carnal pleasure.";
         final byte[] RESULT_BYTES = RESULT.getBytes("US-ASCII");
 
         // And here's what should produce it...
-        final String INPUT_STR = 
+        String INPUT_STR = 
  "TWFuIGlzIGRpc3Rpbmd1aXNoZWQsIG5vdCBvbmx5IGJ5IGhpcyByZWFzb24sIGJ1dCBieSB0aGlz"
 +"IHNpbmd1bGFyIHBhc3Npb24gZnJvbSBvdGhlciBhbmltYWxzLCB3aGljaCBpcyBhIGx1c3Qgb2Yg"
 +"dGhlIG1pbmQsIHRoYXQgYnkgYSBwZXJzZXZlcmFuY2Ugb2YgZGVsaWdodCBpbiB0aGUgY29udGlu"
 +"dWVkIGFuZCBpbmRlZmF0aWdhYmxlIGdlbmVyYXRpb24gb2Yga25vd2xlZGdlLCBleGNlZWRzIHRo"
 +"ZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm5hbCBwbGVhc3VyZS4="
             ;
+        if (leadingWS) {
+            INPUT_STR = "   "+INPUT_STR;
+        }
+        if (leadingWS) {
+            INPUT_STR = INPUT_STR+"   ";
+        }
 
         final String DOC = "\""+INPUT_STR+"\"";
         JsonParser p = createParser(mode, DOC);
@@ -263,7 +347,7 @@ public class Base64BinaryParsingTest
 
     private void _testInArray(int mode) throws IOException
     {
-        JsonFactory f = new JsonFactory();
+        JsonFactory f = sharedStreamFactory();
 
         final int entryCount = 7;
 
@@ -324,5 +408,54 @@ public class Base64BinaryParsingTest
             assertNull(p.nextToken());
         }
         p.close();
+    }
+
+    private void _testEscapedPadding(int mode) throws IOException
+    {
+        // Input: "Test!" -> "VGVzdCE="
+        final String DOC = quote("VGVzdCE\\u003d");
+
+        // 06-Sep-2018, tatu: actually one more, test escaping of padding
+        JsonParser p = createParser(mode, DOC);
+        assertToken(JsonToken.VALUE_STRING, p.nextToken());
+        assertEquals("Test!", new String(p.getBinaryValue(), "US-ASCII"));
+        if (mode != MODE_DATA_INPUT) {
+            assertNull(p.nextToken());
+        }
+        p.close();
+
+        // also, try out alternate access method
+        p = createParser(mode, DOC);
+        assertToken(JsonToken.VALUE_STRING, p.nextToken());
+        assertEquals("Test!", new String(_readBinary(p), "US-ASCII"));
+        if (mode != MODE_DATA_INPUT) {
+            assertNull(p.nextToken());
+        }
+        p.close();
+
+        // and then different padding; "X" -> "WA=="
+        final String DOC2 = quote("WA\\u003D\\u003D");
+        p = createParser(mode, DOC2);
+        assertToken(JsonToken.VALUE_STRING, p.nextToken());
+        assertEquals("X", new String(p.getBinaryValue(), "US-ASCII"));
+        if (mode != MODE_DATA_INPUT) {
+            assertNull(p.nextToken());
+        }
+        p.close();
+
+        p = createParser(mode, DOC2);
+        assertToken(JsonToken.VALUE_STRING, p.nextToken());
+        assertEquals("X", new String(_readBinary(p), "US-ASCII"));
+        if (mode != MODE_DATA_INPUT) {
+            assertNull(p.nextToken());
+        }
+        p.close();
+    }
+
+    private byte[] _readBinary(JsonParser p) throws IOException
+    {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        p.readBinaryValue(bytes);
+        return bytes.toByteArray();
     }
 }

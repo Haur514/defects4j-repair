@@ -157,7 +157,7 @@ public class DefaultPrettyPrinter
     }
 
     /**
-     * @since 2.6.0
+     * @since 2.6
      */
     public DefaultPrettyPrinter withRootSeparator(String rootSeparator) {
         return withRootSeparator((rootSeparator == null) ? null : new SerializedString(rootSeparator));

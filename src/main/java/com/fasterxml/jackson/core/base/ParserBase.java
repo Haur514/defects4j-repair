@@ -6,6 +6,7 @@ import java.math.BigInteger;
 import java.util.Arrays;
 
 import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.JsonParser.Feature;
 import com.fasterxml.jackson.core.io.IOContext;
 import com.fasterxml.jackson.core.io.NumberInput;
 import com.fasterxml.jackson.core.json.DupDetector;
@@ -358,9 +359,11 @@ public abstract class ParserBase extends ParserMinimalBase
             throw new IllegalStateException(e);
         }
     }
-    
+
     @Override public void close() throws IOException {
         if (!_closed) {
+            // 19-Jan-2018, tatu: as per [core#440] need to ensure no more data assumed available
+            _inputPtr = Math.max(_inputPtr, _inputEnd);
             _closed = true;
             try {
                 _closeInput();
@@ -821,10 +824,10 @@ public abstract class ParserBase extends ParserMinimalBase
             }
         } catch (NumberFormatException nex) {
             // Can this ever occur? Due to overflow, maybe?
-            _wrapError("Malformed numeric value '"+_textBuffer.contentsAsString()+"'", nex);
+            _wrapError("Malformed numeric value ("+_longNumberDesc(_textBuffer.contentsAsString())+")", nex);
         }
     }
-    
+
     private void _parseSlowInt(int expType) throws IOException
     {
         String numStr = _textBuffer.contentsAsString();
@@ -841,16 +844,33 @@ public abstract class ParserBase extends ParserMinimalBase
                 _numberLong = Long.parseLong(numStr);
                 _numTypesValid = NR_LONG;
             } else {
-                // nope, need the heavy guns... (rare case)
-                _numberBigInt = new BigInteger(numStr);
-                _numTypesValid = NR_BIGINT;
+                // 16-Oct-2018, tatu: Need to catch "too big" early due to [jackson-core#488]
+                if ((expType == NR_INT) || (expType == NR_LONG)) {
+                    _reportTooLongInt(expType, numStr);
+                }
+                if ((expType == NR_DOUBLE) || (expType == NR_FLOAT)) {
+                    _numberDouble = NumberInput.parseDouble(numStr);
+                    _numTypesValid = NR_DOUBLE;
+                } else {
+                    // nope, need the heavy guns... (rare case)
+                    _numberBigInt = new BigInteger(numStr);
+                    _numTypesValid = NR_BIGINT;
+                }
             }
         } catch (NumberFormatException nex) {
             // Can this ever occur? Due to overflow, maybe?
-            _wrapError("Malformed numeric value '"+numStr+"'", nex);
+            _wrapError("Malformed numeric value ("+_longNumberDesc(numStr)+")", nex);
         }
     }
-    
+
+    // @since 2.9.8
+    protected void _reportTooLongInt(int expType, String rawNum) throws IOException
+    {
+        final String numDesc = _longIntegerDesc(rawNum);
+        _reportError("Numeric value (%s) out of range of %s", numDesc,
+                (expType == NR_LONG) ? "long" : "int");
+    }
+
     /*
     /**********************************************************
     /* Numeric conversions
@@ -996,6 +1016,35 @@ public abstract class ParserBase extends ParserMinimalBase
                 (char) actCh, expCh, ctxt.typeDesc(), ctxt.getStartLocation(_getSourceReference())));
     }
 
+    @SuppressWarnings("deprecation")
+    protected char _handleUnrecognizedCharacterEscape(char ch) throws JsonProcessingException {
+        // as per [JACKSON-300]
+        if (isEnabled(Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER)) {
+            return ch;
+        }
+        // and [JACKSON-548]
+        if (ch == '\'' && isEnabled(Feature.ALLOW_SINGLE_QUOTES)) {
+            return ch;
+        }
+        _reportError("Unrecognized character escape "+_getCharDesc(ch));
+        return ch;
+    }
+
+    /**
+     * Method called to report a problem with unquoted control character.
+     * Note: it is possible to suppress some instances of
+     * exception by enabling {@link Feature#ALLOW_UNQUOTED_CONTROL_CHARS}.
+     */
+    @SuppressWarnings("deprecation")
+    protected void _throwUnquotedSpace(int i, String ctxtDesc) throws JsonParseException {
+        // JACKSON-208; possible to allow unquoted control chars:
+        if (!isEnabled(Feature.ALLOW_UNQUOTED_CONTROL_CHARS) || i > INT_SPACE) {
+            char c = (char) i;
+            String msg = "Illegal unquoted character ("+_getCharDesc(c)+"): has to be escaped using backslash to be included in "+ctxtDesc;
+            _reportError(msg);
+        }
+    }
+
     /*
     /**********************************************************
     /* Base64 handling support
@@ -1027,7 +1076,9 @@ public abstract class ParserBase extends ParserMinimalBase
         // otherwise try to find actual triplet value
         int bits = b64variant.decodeBase64Char(unescaped);
         if (bits < 0) {
-            throw reportInvalidBase64Char(b64variant, unescaped, index);
+            if (bits != Base64Variant.BASE64_VALUE_PADDING) {
+                throw reportInvalidBase64Char(b64variant, unescaped, index);
+            }
         }
         return bits;
     }
@@ -1047,7 +1098,10 @@ public abstract class ParserBase extends ParserMinimalBase
         // otherwise try to find actual triplet value
         int bits = b64variant.decodeBase64Char(unescaped);
         if (bits < 0) {
-            throw reportInvalidBase64Char(b64variant, unescaped, index);
+            // second check since padding can only be 3rd or 4th byte (index #2 or #3)
+            if ((bits != Base64Variant.BASE64_VALUE_PADDING) || (index < 2)) {
+                throw reportInvalidBase64Char(b64variant, unescaped, index);
+            }
         }
         return bits;
     }
@@ -1077,6 +1131,12 @@ public abstract class ParserBase extends ParserMinimalBase
             base = base + ": " + msg;
         }
         return new IllegalArgumentException(base);
+    }
+
+    // since 2.9.8
+    protected void _handleBase64MissingPadding(Base64Variant b64variant) throws IOException
+    {
+        _reportError(b64variant.missingPaddingMessage());
     }
 
     /*

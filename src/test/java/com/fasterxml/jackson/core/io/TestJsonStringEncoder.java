@@ -6,6 +6,7 @@ import java.util.Random;
 import static org.junit.Assert.*;
 
 import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.util.BufferRecyclers;
 
 public class TestJsonStringEncoder
     extends com.fasterxml.jackson.core.BaseTest
@@ -21,16 +22,15 @@ public class TestJsonStringEncoder
 
     public void testQuoteCharSequenceAsString() throws Exception
     {
-        JsonStringEncoder encoder = new JsonStringEncoder();
         StringBuilder output = new StringBuilder();
         StringBuilder builder = new StringBuilder();
         builder.append("foobar");
-        encoder.quoteAsString(builder, output);
+        BufferRecyclers.quoteAsJsonText(builder, output);
         assertEquals("foobar", output.toString());
         builder.setLength(0);
         output.setLength(0);
         builder.append("\"x\"");
-        encoder.quoteAsString(builder, output);
+        BufferRecyclers.quoteAsJsonText(builder, output);
         assertEquals("\\\"x\\\"", output.toString());
     }
 
@@ -54,7 +54,6 @@ public class TestJsonStringEncoder
 
     public void testQuoteLongCharSequenceAsString() throws Exception
     {
-        JsonStringEncoder encoder = new JsonStringEncoder();
         StringBuilder output = new StringBuilder();
         StringBuilder input = new StringBuilder();
         StringBuilder sb2 = new StringBuilder();
@@ -63,7 +62,7 @@ public class TestJsonStringEncoder
             sb2.append("\\\"");
         }
         String exp = sb2.toString();
-        encoder.quoteAsString(input, output);
+        BufferRecyclers.quoteAsJsonText(input, output);
         assertEquals(2*input.length(), output.length());
         assertEquals(exp, output.toString());
 
@@ -106,11 +105,10 @@ public class TestJsonStringEncoder
         }
     }
 
-    // [JACKSON-884]
     public void testCtrlChars() throws Exception
     {
         char[] input = new char[] { 0, 1, 2, 3, 4 };
-        char[] quoted = JsonStringEncoder.getInstance().quoteAsString(new String(input));
+        char[] quoted = BufferRecyclers.quoteAsJsonText(new String(input));
         assertEquals("\\u0000\\u0001\\u0002\\u0003\\u0004", new String(quoted));
     }
 
@@ -121,7 +119,7 @@ public class TestJsonStringEncoder
         StringBuilder builder = new StringBuilder();
         builder.append(input);
         StringBuilder output = new StringBuilder();
-        JsonStringEncoder.getInstance().quoteAsString(builder, output);
+        BufferRecyclers.quoteAsJsonText(builder, output);
         assertEquals("\\u0000\\u0001\\u0002\\u0003\\u0004", output.toString());
     }
 

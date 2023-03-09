@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 
 /**
  * Set of basic unit tests for verifying that the basic parser
@@ -108,7 +109,7 @@ public class NumberParsingTest
         _testSimpleLong(MODE_READER);
         _testSimpleLong(MODE_DATA_INPUT);
     }
-    
+
     private void _testSimpleLong(int mode) throws Exception
     {
         long EXP_L = 12345678907L;
@@ -309,39 +310,6 @@ public class NumberParsingTest
         p.close();
     }
 
-    public void testLongOverflow() throws Exception
-    {
-        BigInteger below = BigInteger.valueOf(Long.MIN_VALUE);
-        below = below.subtract(BigInteger.ONE);
-        BigInteger above = BigInteger.valueOf(Long.MAX_VALUE);
-        above = above.add(BigInteger.ONE);
-
-        String DOC_BELOW = below.toString() + " ";
-        String DOC_ABOVE = below.toString() + " ";
-
-        for (int mode : ALL_MODES) {
-            JsonParser p = createParser(mode, DOC_BELOW);
-            p.nextToken();
-            try {
-                long x = p.getLongValue();
-                fail("Expected an exception for underflow (input "+p.getText()+"): instead, got long value: "+x);
-            } catch (JsonParseException e) {
-                verifyException(e, "out of range of long");
-            }
-            p.close();
-
-            p = createParser(mode, DOC_ABOVE);
-            p.nextToken();
-            try {
-                long x = p.getLongValue();
-                fail("Expected an exception for underflow (input "+p.getText()+"): instead, got long value: "+x);
-            } catch (JsonParseException e) {
-                verifyException(e, "out of range of long");
-            }
-            p.close();
-            
-        }
-    }
     
     /**
      * Method that tries to test that number parsing works in cases where
@@ -461,8 +429,9 @@ public class NumberParsingTest
      */
     public void testParsingOfLongerSequencesWithNonNumeric() throws Exception
     {
-        JsonFactory f = new JsonFactory();
-        f.enable(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS);
+        JsonFactory f = JsonFactory.builder()
+                .enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS)
+                .build();
         _testParsingOfLongerSequencesWithNonNumeric(f, MODE_INPUT_STREAM);
         _testParsingOfLongerSequencesWithNonNumeric(f, MODE_INPUT_STREAM_THROTTLED);
         _testParsingOfLongerSequencesWithNonNumeric(f, MODE_READER);

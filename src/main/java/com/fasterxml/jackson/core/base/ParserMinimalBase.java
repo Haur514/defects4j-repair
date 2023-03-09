@@ -5,7 +5,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import com.fasterxml.jackson.core.*;
-import com.fasterxml.jackson.core.JsonParser.Feature;
 import com.fasterxml.jackson.core.io.JsonEOFException;
 import com.fasterxml.jackson.core.io.NumberInput;
 import com.fasterxml.jackson.core.util.ByteArrayBuilder;
@@ -36,8 +35,10 @@ public abstract class ParserMinimalBase extends JsonParser
     protected final static int INT_LCURLY = '{';
     protected final static int INT_RCURLY = '}';
     protected final static int INT_QUOTE = '"';
+    protected final static int INT_APOS = '\'';
     protected final static int INT_BACKSLASH = '\\';
     protected final static int INT_SLASH = '/';
+    protected final static int INT_ASTERISK = '*';
     protected final static int INT_COLON = ':';
     protected final static int INT_COMMA = ',';
     protected final static int INT_HASH = '#';
@@ -128,7 +129,7 @@ public abstract class ParserMinimalBase extends JsonParser
      * @since 2.9
      */
     protected final static int MAX_ERROR_TOKEN_LENGTH = 256;
-    
+
     /*
     /**********************************************************
     /* Minimal generally useful state
@@ -247,6 +248,12 @@ public abstract class ParserMinimalBase extends JsonParser
                 if (--open == 0) {
                     return this;
                 }
+                // 23-May-2018, tatu: [core#463] Need to consider non-blocking case...
+            } else if (t == JsonToken.NOT_AVAILABLE) {
+                // Nothing much we can do except to either return `null` (which seems wrong),
+                // or, what we actually do, signal error
+                _reportError("Not enough content available for `skipChildren()`: non-blocking parser? (%s)",
+                            getClass().getName());
             }
         }
     }
@@ -539,12 +546,36 @@ public abstract class ParserMinimalBase extends JsonParser
 
     protected void reportOverflowInt() throws IOException {
         _reportError(String.format("Numeric value (%s) out of range of int (%d - %s)",
-                getText(), Integer.MIN_VALUE, Integer.MAX_VALUE));
+                _longIntegerDesc(getText()), Integer.MIN_VALUE, Integer.MAX_VALUE));
     }
-    
+
     protected void reportOverflowLong() throws IOException {
         _reportError(String.format("Numeric value (%s) out of range of long (%d - %s)",
-                getText(), Long.MIN_VALUE, Long.MAX_VALUE));
+                _longIntegerDesc(getText()), Long.MIN_VALUE, Long.MAX_VALUE));
+    }
+
+    // @since 2.9.8
+    protected String _longIntegerDesc(String rawNum) {
+        int rawLen = rawNum.length();
+        if (rawLen < 1000) {
+            return rawNum;
+        }
+        if (rawNum.startsWith("-")) {
+            rawLen -= 1;
+        }
+        return String.format("[Integer with %d digits]", rawLen);
+    }
+
+    // @since 2.9.8
+    protected String _longNumberDesc(String rawNum) {
+        int rawLen = rawNum.length();
+        if (rawLen < 1000) {
+            return rawNum;
+        }
+        if (rawNum.startsWith("-")) {
+            rawLen -= 1;
+        }
+        return String.format("[number with %d characters]", rawLen);
     }
 
     protected void _reportUnexpectedChar(int ch, String comment) throws JsonParseException
@@ -610,33 +641,6 @@ public abstract class ParserMinimalBase extends JsonParser
         char c = (char) i;
         String msg = "Illegal character ("+_getCharDesc(c)+"): only regular white space (\\r, \\n, \\t) is allowed between tokens";
         _reportError(msg);
-    }
-
-    /**
-     * Method called to report a problem with unquoted control character.
-     * Note: starting with version 1.4, it is possible to suppress
-     * exception by enabling {@link Feature#ALLOW_UNQUOTED_CONTROL_CHARS}.
-     */
-    protected void _throwUnquotedSpace(int i, String ctxtDesc) throws JsonParseException {
-        // JACKSON-208; possible to allow unquoted control chars:
-        if (!isEnabled(Feature.ALLOW_UNQUOTED_CONTROL_CHARS) || i > INT_SPACE) {
-            char c = (char) i;
-            String msg = "Illegal unquoted character ("+_getCharDesc(c)+"): has to be escaped using backslash to be included in "+ctxtDesc;
-            _reportError(msg);
-        }
-    }
-
-    protected char _handleUnrecognizedCharacterEscape(char ch) throws JsonProcessingException {
-        // as per [JACKSON-300]
-        if (isEnabled(Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER)) {
-            return ch;
-        }
-        // and [JACKSON-548]
-        if (ch == '\'' && isEnabled(Feature.ALLOW_SINGLE_QUOTES)) {
-            return ch;
-        }
-        _reportError("Unrecognized character escape "+_getCharDesc(ch));
-        return ch;
     }
 
     /*

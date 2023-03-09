@@ -1,9 +1,7 @@
 language: java
-# core streaming still builds on jdk6 and above:
-jdk:
-  - openjdk6
-  - oraclejdk7
-  - oraclejdk8
+# 08-Dec-2018, tatu: While it should be possible to run core streaming on Java 6,
+#   build won't work with anything below Java 8 now
+  - openjdk8
 
 # Below this line is configuration for deploying to the Sonatype OSS repo
 # http://blog.xeiam.com/2013/05/configure-travis-ci-to-deploy-snapshots.html
@@ -14,8 +12,13 @@ after_success: "mvn deploy --settings target/travis/settings.xml"
 branches:
   only:
     - master
-    - "2.8"
-    - "2.7"
+    - "2.10"
+
+# to make jdk6 work, as per: https://github.com/travis-ci/travis-ci/issues/8199
+addons:
+  apt:
+    packages:
+      - openjdk-6-jdk
 
 env:
   global:

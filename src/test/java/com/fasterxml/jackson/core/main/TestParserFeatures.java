@@ -3,6 +3,7 @@ package com.fasterxml.jackson.core.main;
 import java.io.*;
 
 import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 
 /**
  * Unit tests for verifying that additional <code>JsonParser.Feature</code>
@@ -14,11 +15,7 @@ public class TestParserFeatures
     public void testDefaultSettings() throws Exception
     {
         JsonFactory f = new JsonFactory();
-        assertTrue(f.isEnabled(JsonParser.Feature.AUTO_CLOSE_SOURCE));
-        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_COMMENTS));
-        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES));
-        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_SINGLE_QUOTES));
-        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS));
+        assertTrue(f.isEnabled(StreamReadFeature.AUTO_CLOSE_SOURCE));
 
         JsonParser p = f.createParser(new StringReader("{}"));
         _testDefaultSettings(p);
@@ -28,6 +25,16 @@ public class TestParserFeatures
         p.close();
     }
 
+    @SuppressWarnings("deprecation")
+    public void testDeprecatedDefaultSettings() throws Exception
+    {
+        JsonFactory f = sharedStreamFactory();
+        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_COMMENTS));
+        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS));
+        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES));
+        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_SINGLE_QUOTES));
+    }
+    
     public void testQuotesRequired() throws Exception
     {
         _testQuotesRequired(false);
@@ -101,8 +108,9 @@ public class TestParserFeatures
 
     private void _testTabsEnabled(boolean useStream) throws Exception
     {
-        JsonFactory f = new JsonFactory();
-        f.configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true);
+        JsonFactory f = JsonFactory.builder()
+                .configure(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS, true)
+                .build();
 
         String FIELD = "a\tb";
         String VALUE = "\t";

@@ -414,8 +414,13 @@ public class FilteringParserDelegate extends JsonParserDelegate
                 }
                 _itemFilter = f;
                 if (f == TokenFilter.INCLUDE_ALL) {
-                    if (_includePath) {
-                        return (_currToken = t);
+                    if (_verifyAllowedMatches()) {
+                        if (_includePath) {
+                            return (_currToken = t);
+                        }
+                    } else {
+                        delegate.nextToken();
+                        delegate.skipChildren();
                     }
                 }
                 if (_includePath) {
@@ -437,7 +442,9 @@ public class FilteringParserDelegate extends JsonParserDelegate
                 f = _headContext.checkValue(f);
                 if ((f == TokenFilter.INCLUDE_ALL)
                         || ((f != null) && f.includeValue(delegate))) {
+                    if (_verifyAllowedMatches()) {
                         return (_currToken = t);
+                    }
                 }
             }
             // Otherwise not included (leaves must be explicitly included)
@@ -572,7 +579,7 @@ public class FilteringParserDelegate extends JsonParserDelegate
                     }
                     _itemFilter = f;
                     if (f == TokenFilter.INCLUDE_ALL) {
-                        if (_includePath) {
+                        if (_verifyAllowedMatches() && _includePath) {
                             return (_currToken = t);
                         }
 //                        if (_includeImmediateParent) { ...
@@ -597,7 +604,9 @@ public class FilteringParserDelegate extends JsonParserDelegate
                     f = _headContext.checkValue(f);
                     if ((f == TokenFilter.INCLUDE_ALL)
                             || ((f != null) && f.includeValue(delegate))) {
+                        if (_verifyAllowedMatches()) {
                             return (_currToken = t);
+                        }
                     }
                 }
                 // Otherwise not included (leaves must be explicitly included)
@@ -687,10 +696,6 @@ public class FilteringParserDelegate extends JsonParserDelegate
                     if (returnEnd) {
                         return t;
                     }
-                    // Hmmh. Do we need both checks, or should above suffice?
-                    if (gotEnd || (_headContext == buffRoot)) {
-                        return null;
-                    }
                 }
                 continue main_loop;
 
@@ -715,7 +720,13 @@ public class FilteringParserDelegate extends JsonParserDelegate
                     }
                     _itemFilter = f;
                     if (f == TokenFilter.INCLUDE_ALL) {
-                        return _nextBuffered(buffRoot);
+                        if (_verifyAllowedMatches()) {
+                            return _nextBuffered(buffRoot);
+                        } else {
+                            // edge case: if no more matches allowed, reset filter
+                            // to initial state to prevent missing a token in next iteration
+                            _itemFilter = _headContext.setFieldName(name);
+                        }
                     }
                 }
                 continue main_loop;
@@ -729,7 +740,9 @@ public class FilteringParserDelegate extends JsonParserDelegate
                     f = _headContext.checkValue(f);
                     if ((f == TokenFilter.INCLUDE_ALL)
                             || ((f != null) && f.includeValue(delegate))) {
+                        if (_verifyAllowedMatches()) {
                             return _nextBuffered(buffRoot);
+                        }
                     }
                 }
                 // Otherwise not included (leaves must be explicitly included)
@@ -768,6 +781,13 @@ public class FilteringParserDelegate extends JsonParserDelegate
         }
     }
 
+    private final boolean _verifyAllowedMatches() throws IOException {
+        if (_matchCount == 0 || _allowMultipleMatches) {
+            ++_matchCount;
+            return true;
+        }
+        return false;
+    }
 
     @Override
     public JsonToken nextValue() throws IOException {

@@ -20,14 +20,25 @@ public class UTF8StreamJsonParser
 {
     final static byte BYTE_LF = (byte) '\n';
 
+    @SuppressWarnings("deprecation")
+    private final static int FEAT_MASK_TRAILING_COMMA = Feature.ALLOW_TRAILING_COMMA.getMask();
+    @SuppressWarnings("deprecation")
+    private final static int FEAT_MASK_LEADING_ZEROS = Feature.ALLOW_NUMERIC_LEADING_ZEROS.getMask();
+    @SuppressWarnings("deprecation")
+    private final static int FEAT_MASK_NON_NUM_NUMBERS = Feature.ALLOW_NON_NUMERIC_NUMBERS.getMask();
+    @SuppressWarnings("deprecation")
+    private final static int FEAT_MASK_ALLOW_MISSING = Feature.ALLOW_MISSING_VALUES.getMask();
+    private final static int FEAT_MASK_ALLOW_SINGLE_QUOTES = Feature.ALLOW_SINGLE_QUOTES.getMask();
+    private final static int FEAT_MASK_ALLOW_UNQUOTED_NAMES = Feature.ALLOW_UNQUOTED_FIELD_NAMES.getMask();
+    private final static int FEAT_MASK_ALLOW_JAVA_COMMENTS = Feature.ALLOW_COMMENTS.getMask();
+    private final static int FEAT_MASK_ALLOW_YAML_COMMENTS = Feature.ALLOW_YAML_COMMENTS.getMask();
+
     // This is the main input-code lookup table, fetched eagerly
     private final static int[] _icUTF8 = CharTypes.getInputCodeUtf8();
 
     // Latin1 encoding is not supported, but we do use 8-bit subset for
     // pre-processing task, to simplify first pass, keep it fast.
     protected final static int[] _icLatin1 = CharTypes.getInputCodeLatin1();
-
-    protected final static int FEAT_MASK_TRAILING_COMMA = Feature.ALLOW_TRAILING_COMMA.getMask();
 
     /*
     /**********************************************************
@@ -487,18 +498,14 @@ public class UTF8StreamJsonParser
                 (_currToken != JsonToken.VALUE_EMBEDDED_OBJECT || _binaryValue == null)) {
             _reportError("Current token ("+_currToken+") not VALUE_STRING or VALUE_EMBEDDED_OBJECT, can not access as binary");
         }
-        /* To ensure that we won't see inconsistent data, better clear up
-         * state...
-         */
+        // To ensure that we won't see inconsistent data, better clear up state...
         if (_tokenIncomplete) {
             try {
                 _binaryValue = _decodeBase64(b64variant);
             } catch (IllegalArgumentException iae) {
                 throw _constructError("Failed to decode VALUE_STRING as base64 ("+b64variant+"): "+iae.getMessage());
             }
-            /* let's clear incomplete only now; allows for accessing other
-             * textual content in error cases
-             */
+            // let's clear incomplete only now; allows for accessing other textual content in error cases
             _tokenIncomplete = false;
         } else { // may actually require conversion...
             if (_binaryValue == null) {
@@ -588,9 +595,13 @@ public class UTF8StreamJsonParser
             if (bits < 0) {
                 if (bits != Base64Variant.BASE64_VALUE_PADDING) {
                     // as per [JACKSON-631], could also just be 'missing'  padding
-                    if (ch == '"' && !b64variant.usesPadding()) {
+                    if (ch == INT_QUOTE) {
                         decodedData >>= 4;
                         buffer[outputPtr++] = (byte) decodedData;
+                        if (b64variant.usesPadding()) {
+                            --_inputPtr; // to keep parser state bit more consistent
+                            _handleBase64MissingPadding(b64variant);
+                        }
                         break;
                     }
                     bits = _decodeBase64Escape(b64variant, ch, 2);
@@ -602,7 +613,9 @@ public class UTF8StreamJsonParser
                     }
                     ch = _inputBuffer[_inputPtr++] & 0xFF;
                     if (!b64variant.usesPaddingChar(ch)) {
-                        throw reportInvalidBase64Char(b64variant, ch, 3, "expected padding character '"+b64variant.getPaddingChar()+"'");
+                        if (_decodeBase64Escape(b64variant, ch, 3) != Base64Variant.BASE64_VALUE_PADDING) {
+                            throw reportInvalidBase64Char(b64variant, ch, 3, "expected padding character '"+b64variant.getPaddingChar()+"'");
+                        }
                     }
                     // Got 12 bits, only need 8, need to shift
                     decodedData >>= 4;
@@ -621,10 +634,14 @@ public class UTF8StreamJsonParser
             if (bits < 0) {
                 if (bits != Base64Variant.BASE64_VALUE_PADDING) {
                     // as per [JACKSON-631], could also just be 'missing'  padding
-                    if (ch == '"' && !b64variant.usesPadding()) {
+                    if (ch == INT_QUOTE) {
                         decodedData >>= 2;
                         buffer[outputPtr++] = (byte) (decodedData >> 8);
                         buffer[outputPtr++] = (byte) decodedData;
+                        if (b64variant.usesPadding()) {
+                            --_inputPtr; // to keep parser state bit more consistent
+                            _handleBase64MissingPadding(b64variant);
+                        }
                         break;
                     }
                     bits = _decodeBase64Escape(b64variant, ch, 3);
@@ -947,7 +964,6 @@ public class UTF8StreamJsonParser
     public String nextFieldName() throws IOException
     {
         // // // Note: this is almost a verbatim copy of nextToken()
-
         _numTypesValid = NR_UNKNOWN;
         if (_currToken == JsonToken.FIELD_NAME) {
             _nextAfterName();
@@ -1099,7 +1115,7 @@ public class UTF8StreamJsonParser
         _inputPtr = ptr-1;
         return _skipColon2(false);
     }
-    
+
     private final void _isNextTokenNameYes(int i) throws IOException
     {
         _currToken = JsonToken.FIELD_NAME;
@@ -1486,7 +1502,7 @@ public class UTF8StreamJsonParser
             return INT_0;
         }
         // [JACKSON-358]: we may want to allow them, after all...
-        if (!isEnabled(Feature.ALLOW_NUMERIC_LEADING_ZEROS)) {
+        if ((_features & FEAT_MASK_LEADING_ZEROS) == 0) {
             reportInvalidNumber("Leading zeroes not allowed");
         }
         // if so, just need to skip either all zeroes (if followed by number); or all but one (if non-number)
@@ -1982,11 +1998,11 @@ public class UTF8StreamJsonParser
     protected String _handleOddName(int ch) throws IOException
     {
         // First: may allow single quotes
-        if (ch == '\'' && isEnabled(Feature.ALLOW_SINGLE_QUOTES)) {
+        if (ch == INT_APOS && (_features & FEAT_MASK_ALLOW_SINGLE_QUOTES) != 0) {
             return _parseAposName();
         }
         // Allow unquoted names if feature enabled:
-        if (!isEnabled(Feature.ALLOW_UNQUOTED_FIELD_NAMES)) {
+        if ((_features & FEAT_MASK_ALLOW_UNQUOTED_NAMES) == 0) {
             char c = (char) _decodeCharForError(ch);
             _reportUnexpectedChar(c, "was expecting double-quote to start field name");
         }
@@ -2059,7 +2075,7 @@ public class UTF8StreamJsonParser
             }
         }
         int ch = _inputBuffer[_inputPtr++] & 0xFF;
-        if (ch == '\'') { // special case, ''
+        if (ch == INT_APOS) { // special case, ''
             return "";
         }
         int[] quads = _quadBuffer;
@@ -2072,7 +2088,7 @@ public class UTF8StreamJsonParser
         final int[] codes = _icLatin1;
 
         while (true) {
-            if (ch == '\'') {
+            if (ch == INT_APOS) {
                 break;
             }
             // additional check to skip handling of double-quotes
@@ -2581,7 +2597,7 @@ public class UTF8StreamJsonParser
             // 28-Mar-2016: [core#116]: If Feature.ALLOW_MISSING_VALUES is enabled
             //   we may allow "missing values", that is, encountering a trailing
             //   comma or closing marker where value would be expected
-            if (isEnabled(Feature.ALLOW_MISSING_VALUES)) {
+            if ((_features & FEAT_MASK_ALLOW_MISSING) != 0) {
                 --_inputPtr;
                 return JsonToken.VALUE_NULL;
             }
@@ -2591,20 +2607,20 @@ public class UTF8StreamJsonParser
             // been handled earlier
             _reportUnexpectedChar(c, "expected a value");
         case '\'':
-            if (isEnabled(Feature.ALLOW_SINGLE_QUOTES)) {
+            if ((_features & FEAT_MASK_ALLOW_SINGLE_QUOTES) != 0) {
                 return _handleApos();
             }
             break;
         case 'N':
             _matchToken("NaN", 1);
-            if (isEnabled(Feature.ALLOW_NON_NUMERIC_NUMBERS)) {
+            if ((_features & FEAT_MASK_NON_NUM_NUMBERS) != 0) {
                 return resetAsNaN("NaN", Double.NaN);
             }
             _reportError("Non-standard token 'NaN': enable JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS to allow");
             break;
         case 'I':
             _matchToken("Infinity", 1);
-            if (isEnabled(Feature.ALLOW_NON_NUMERIC_NUMBERS)) {
+            if ((_features & FEAT_MASK_NON_NUM_NUMBERS) != 0) {
                 return resetAsNaN("Infinity", Double.POSITIVE_INFINITY);
             }
             _reportError("Non-standard token 'Infinity': enable JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS to allow");
@@ -2658,7 +2674,7 @@ public class UTF8StreamJsonParser
                 }
                 while (_inputPtr < max) {
                     c = (int) inputBuffer[_inputPtr++] & 0xFF;
-                    if (c == '\'' || codes[c] != 0) {
+                    if (c == INT_APOS || codes[c] != 0) {
                         break ascii_loop;
                     }
                     outBuf[outPtr++] = (char) c;
@@ -2666,7 +2682,7 @@ public class UTF8StreamJsonParser
             }
 
             // Ok: end marker, escape or multi-byte?
-            if (c == '\'') {
+            if (c == INT_APOS) {
                 break main_loop;
             }
 
@@ -2743,7 +2759,7 @@ public class UTF8StreamJsonParser
                 break;
             }
             _matchToken(match, 3);
-            if (isEnabled(Feature.ALLOW_NON_NUMERIC_NUMBERS)) {
+            if ((_features & FEAT_MASK_NON_NUM_NUMBERS) != 0) {
                 return resetAsNaN(match, neg ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
             }
             _reportError("Non-standard token '%s': enable JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS to allow",
@@ -2918,7 +2934,7 @@ public class UTF8StreamJsonParser
         }        
         throw _constructError("Unexpected end-of-input within/between "+_parsingContext.typeDesc()+" entries");
     }
-    
+
     private final int _skipWSOrEnd() throws IOException
     {
         // Let's handle first character separately since it is likely that
@@ -3095,7 +3111,7 @@ public class UTF8StreamJsonParser
 
     private final void _skipComment() throws IOException
     {
-        if (!isEnabled(Feature.ALLOW_COMMENTS)) {
+        if ((_features & FEAT_MASK_ALLOW_JAVA_COMMENTS) == 0) {
             _reportUnexpectedChar('/', "maybe a (non-standard) comment? (not recognized as one since Feature 'ALLOW_COMMENTS' not enabled for parser)");
         }
         // First: check which comment (if either) it is:
@@ -3103,9 +3119,9 @@ public class UTF8StreamJsonParser
             _reportInvalidEOF(" in a comment", null);
         }
         int c = _inputBuffer[_inputPtr++] & 0xFF;
-        if (c == '/') {
+        if (c == INT_SLASH) {
             _skipLine();
-        } else if (c == '*') {
+        } else if (c == INT_ASTERISK) {
             _skipCComment();
         } else {
             _reportUnexpectedChar(c, "was expecting either '*' or '/' for a comment");
@@ -3160,7 +3176,7 @@ public class UTF8StreamJsonParser
 
     private final boolean _skipYAMLComment() throws IOException
     {
-        if (!isEnabled(Feature.ALLOW_YAML_COMMENTS)) {
+        if ((_features & FEAT_MASK_ALLOW_YAML_COMMENTS) == 0) {
             return false;
         }
         _skipLine();
@@ -3609,10 +3625,14 @@ public class UTF8StreamJsonParser
             // First branch: can get padding (-> 1 byte)
             if (bits < 0) {
                 if (bits != Base64Variant.BASE64_VALUE_PADDING) {
-                    // as per [JACKSON-631], could also just be 'missing'  padding
-                    if (ch == '"' && !b64variant.usesPadding()) {
+                    // could also just be 'missing'  padding
+                    if (ch == INT_QUOTE) {
                         decodedData >>= 4;
                         builder.append(decodedData);
+                        if (b64variant.usesPadding()) {
+                            --_inputPtr; // to keep parser state bit more consistent
+                            _handleBase64MissingPadding(b64variant);
+                        }
                         return builder.toByteArray();
                     }
                     bits = _decodeBase64Escape(b64variant, ch, 2);
@@ -3624,7 +3644,9 @@ public class UTF8StreamJsonParser
                     }
                     ch = _inputBuffer[_inputPtr++] & 0xFF;
                     if (!b64variant.usesPaddingChar(ch)) {
-                        throw reportInvalidBase64Char(b64variant, ch, 3, "expected padding character '"+b64variant.getPaddingChar()+"'");
+                        if (_decodeBase64Escape(b64variant, ch, 3) != Base64Variant.BASE64_VALUE_PADDING) {
+                            throw reportInvalidBase64Char(b64variant, ch, 3, "expected padding character '"+b64variant.getPaddingChar()+"'");
+                        }
                     }
                     // Got 12 bits, only need 8, need to shift
                     decodedData >>= 4;
@@ -3642,21 +3664,22 @@ public class UTF8StreamJsonParser
             bits = b64variant.decodeBase64Char(ch);
             if (bits < 0) {
                 if (bits != Base64Variant.BASE64_VALUE_PADDING) {
-                    // as per [JACKSON-631], could also just be 'missing'  padding
-                    if (ch == '"' && !b64variant.usesPadding()) {
+                    // could also just be 'missing'  padding
+                    if (ch == INT_QUOTE) {
                         decodedData >>= 2;
                         builder.appendTwoBytes(decodedData);
+                        if (b64variant.usesPadding()) {
+                            --_inputPtr; // to keep parser state bit more consistent
+                            _handleBase64MissingPadding(b64variant);
+                        }
                         return builder.toByteArray();
                     }
                     bits = _decodeBase64Escape(b64variant, ch, 3);
                 }
                 if (bits == Base64Variant.BASE64_VALUE_PADDING) {
-                    /* With padding we only get 2 bytes; but we have
-                     * to shift it a bit so it is identical to triplet
-                     * case with partial output.
-                     * 3 chars gives 3x6 == 18 bits, of which 2 are
-                     * dummies, need to discard:
-                     */
+                    // With padding we only get 2 bytes; but we have to shift it
+                    // a bit so it is identical to triplet case with partial output.
+                    // 3 chars gives 3x6 == 18 bits, of which 2 are dummies, need to discard:
                     decodedData >>= 2;
                     builder.appendTwoBytes(decodedData);
                     continue;
