@@ -74,22 +74,27 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
      * been fully processed, and needs to be finished for
      * some access (or skipped to obtain the next token)
      */
-    protected boolean _tokenIncomplete = false;
+    protected boolean _tokenIncomplete;
+
+    /**
+     * Value of {@link #_inputPtr} at the time when the first character of
+     * name token was read. Used for calculating token location when requested;
+     * combined with {@link #_currInputProcessed}, may be updated appropriately
+     * as needed.
+     *
+     * @since 2.7
+     */
+    protected long _nameStartOffset;
 
     /**
      * @since 2.7
      */
-    protected long _nameInputTotal; 
+    protected int _nameStartRow;
 
     /**
      * @since 2.7
      */
-    protected int _nameInputRow;
-
-    /**
-     * @since 2.7
-     */
-    protected int _nameInputCol;
+    protected int _nameStartCol;
 
     /*
     /**********************************************************
@@ -161,8 +166,15 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     @Override
     protected boolean loadMore() throws IOException
     {
-        _currInputProcessed += _inputEnd;
-        _currInputRowStart -= _inputEnd;
+        final int bufSize = _inputEnd;
+
+        _currInputProcessed += bufSize;
+        _currInputRowStart -= bufSize;
+
+        // 26-Nov-2015, tatu: Since name-offset requires it too, must offset
+        //   this increase to avoid "moving" name-offset, resulting most likely
+        //   in negative value, which is fine as combine value remains unchanged.
+        _nameStartOffset -= bufSize;
 
         if (_reader != null) {
             int count = _reader.read(_inputBuffer, 0, _inputBuffer.length);
@@ -603,7 +615,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             if (!_parsingContext.inArray()) {
                 _reportMismatchedEndMarker(i, '}');
             }
-            _parsingContext = _parsingContext.getParent();
+            _parsingContext = _parsingContext.clearAndGetParent();
             return (_currToken = JsonToken.END_ARRAY);
         }
         if (i == INT_RCURLY) {
@@ -611,7 +623,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             if (!_parsingContext.inObject()) {
                 _reportMismatchedEndMarker(i, ']');
             }
-            _parsingContext = _parsingContext.getParent();
+            _parsingContext = _parsingContext.clearAndGetParent();
             return (_currToken = JsonToken.END_OBJECT);
         }
 
@@ -619,7 +631,6 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         if (_parsingContext.expectComma()) {
             i = _skipComma(i);
         }
-        _updateLocation();
 
         /* And should we now have a name? Always true for Object contexts, since
          * the intermediate 'expect-value' state is never retained.
@@ -627,11 +638,13 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         boolean inObject = _parsingContext.inObject();
         if (inObject) {
             // First, field name itself:
+            _updateNameLocation();
             String name = (i == INT_QUOTE) ? _parseName() : _handleOddName(i);
             _parsingContext.setCurrentName(name);
             _currToken = JsonToken.FIELD_NAME;
             i = _skipColon();
         }
+        _updateLocation();
 
         // Ok: we must have a value... what is it?
 
@@ -754,7 +767,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             if (!_parsingContext.inArray()) {
                 _reportMismatchedEndMarker(i, '}');
             }
-            _parsingContext = _parsingContext.getParent();
+            _parsingContext = _parsingContext.clearAndGetParent();
             _currToken = JsonToken.END_ARRAY;
             return false;
         }
@@ -763,20 +776,21 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             if (!_parsingContext.inObject()) {
                 _reportMismatchedEndMarker(i, ']');
             }
-            _parsingContext = _parsingContext.getParent();
+            _parsingContext = _parsingContext.clearAndGetParent();
             _currToken = JsonToken.END_OBJECT;
             return false;
         }
         if (_parsingContext.expectComma()) {
             i = _skipComma(i);
         }
-        _updateLocation();
 
         if (!_parsingContext.inObject()) {
+            _updateLocation();
             _nextTokenNotInObject(i);
             return false;
         }
 
+        _updateNameLocation();
         if (i == INT_QUOTE) {
             // when doing literal match, must consider escaping:
             char[] nameChars = sstr.asQuotedChars();
@@ -832,7 +846,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             if (!_parsingContext.inArray()) {
                 _reportMismatchedEndMarker(i, '}');
             }
-            _parsingContext = _parsingContext.getParent();
+            _parsingContext = _parsingContext.clearAndGetParent();
             _currToken = JsonToken.END_ARRAY;
             return null;
         }
@@ -841,24 +855,26 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             if (!_parsingContext.inObject()) {
                 _reportMismatchedEndMarker(i, ']');
             }
-            _parsingContext = _parsingContext.getParent();
+            _parsingContext = _parsingContext.clearAndGetParent();
             _currToken = JsonToken.END_OBJECT;
             return null;
         }
         if (_parsingContext.expectComma()) {
             i = _skipComma(i);
         }
-        _updateLocation();
         if (!_parsingContext.inObject()) {
+            _updateLocation();
             _nextTokenNotInObject(i);
             return null;
         }
 
+        _updateNameLocation();
         String name = (i == INT_QUOTE) ? _parseName() : _handleOddName(i);
         _parsingContext.setCurrentName(name);
         _currToken = JsonToken.FIELD_NAME;
         i = _skipColon();
 
+        _updateLocation();
         if (i == INT_QUOTE) {
             _tokenIncomplete = true;
             _nextToken = JsonToken.VALUE_STRING;
@@ -914,6 +930,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     private final void _isNextTokenNameYes(int i) throws IOException
     {
         _currToken = JsonToken.FIELD_NAME;
+        _updateLocation();
 
         switch (i) {
         case '"':
@@ -964,6 +981,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         _parsingContext.setCurrentName(name);
         _currToken = JsonToken.FIELD_NAME;
         i = _skipColon();
+        _updateLocation();
         if (i == INT_QUOTE) {
             _tokenIncomplete = true;
             _nextToken = JsonToken.VALUE_STRING;
@@ -2668,10 +2686,13 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     public JsonLocation getTokenLocation()
     {
         final Object src = _ioContext.getSourceReference();
+        if (_currToken == JsonToken.FIELD_NAME) {
+            long total = _currInputProcessed + (_nameStartOffset-1);
+            return new JsonLocation(src,
+                    -1L, total, _nameStartRow, _nameStartCol);
+        }
         return new JsonLocation(src,
-                -1L, getTokenCharacterOffset(),
-                getTokenLineNr(),
-                getTokenColumnNr());
+                -1L, _tokenInputTotal-1, _tokenInputRow, _tokenInputCol);
     }
 
     @Override
@@ -2681,21 +2702,23 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                 -1L, _currInputProcessed + _inputPtr,
                 _currInputRow, col);
     }
-    
+
     // @since 2.7
     private final void _updateLocation()
     {
-        _tokenInputTotal = _currInputProcessed + _inputPtr - 1;
+        int ptr = _inputPtr;
+        _tokenInputTotal = _currInputProcessed + ptr;
         _tokenInputRow = _currInputRow;
-        _tokenInputCol = _inputPtr - _currInputRowStart - 1;
+        _tokenInputCol = ptr - _currInputRowStart;
     }
 
     // @since 2.7
     private final void _updateNameLocation()
     {
-        _nameInputTotal = _currInputProcessed + _inputPtr - 1;
-        _nameInputRow = _currInputRow;
-        _nameInputCol = _inputPtr - _currInputRowStart - 1;
+        int ptr = _inputPtr;
+        _nameStartOffset = ptr;
+        _nameStartRow = _currInputRow;
+        _nameStartCol = ptr - _currInputRowStart;
     }
 
     /*

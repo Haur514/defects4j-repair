@@ -729,9 +729,15 @@ public class JsonFactory
 
     /**
      * Method for constructing JSON parser instance to parse
-     * contents of specified file. Encoding is auto-detected
-     * from contents according to JSON specification recommended
-     * mechanism.
+     * contents of specified file.
+     *
+     *<p>
+     * Encoding is auto-detected from contents according to JSON
+     * specification recommended mechanism. Json specification
+     * supports only UTF-8, UTF-16 and UTF-32 as valid encodings,
+     * so auto-detection implemented only for this charsets.
+     * For other charsets use {@link #createParser(java.io.Reader)}.
+     *
      *<p>
      * Underlying input stream (needed for reading contents)
      * will be <b>owned</b> (and managed, i.e. closed as need be) by
@@ -751,9 +757,14 @@ public class JsonFactory
     /**
      * Method for constructing JSON parser instance to parse
      * contents of resource reference by given URL.
-     * Encoding is auto-detected
-     * from contents according to JSON specification recommended
-     * mechanism.
+     *
+     *<p>
+     * Encoding is auto-detected from contents according to JSON
+     * specification recommended mechanism. Json specification
+     * supports only UTF-8, UTF-16 and UTF-32 as valid encodings,
+     * so auto-detection implemented only for this charsets.
+     * For other charsets use {@link #createParser(java.io.Reader)}.
+     *
      *<p>
      * Underlying input stream (needed for reading contents)
      * will be <b>owned</b> (and managed, i.e. closed as need be) by
@@ -780,8 +791,12 @@ public class JsonFactory
      * if (and only if) {@link com.fasterxml.jackson.core.JsonParser.Feature#AUTO_CLOSE_SOURCE}
      * is enabled.
      *<p>
+     *
      * Note: no encoding argument is taken since it can always be
-     * auto-detected as suggested by JSON RFC.
+     * auto-detected as suggested by JSON RFC. Json specification
+     * supports only UTF-8, UTF-16 and UTF-32 as valid encodings,
+     * so auto-detection implemented only for this charsets.
+     * For other charsets use {@link #createParser(java.io.Reader)}.
      *
      * @param in InputStream to use for reading JSON content to parse
      * 
@@ -897,15 +912,20 @@ public class JsonFactory
 
     /*
     /**********************************************************
-    /* Parser factories (old ones, as per [Issue-25])
+    /* Parser factories (old ones, pre-2.2)
     /**********************************************************
      */
 
     /**
      * Method for constructing JSON parser instance to parse
-     * contents of specified file. Encoding is auto-detected
-     * from contents according to JSON specification recommended
-     * mechanism.
+     * contents of specified file.
+     *<p>
+     * Encoding is auto-detected from contents according to JSON
+     * specification recommended mechanism. Json specification
+     * supports only UTF-8, UTF-16 and UTF-32 as valid encodings,
+     * so auto-detection implemented only for this charsets.
+     * For other charsets use {@link #createParser(java.io.Reader)}.
+     *
      *<p>
      * Underlying input stream (needed for reading contents)
      * will be <b>owned</b> (and managed, i.e. closed as need be) by
@@ -923,9 +943,14 @@ public class JsonFactory
     /**
      * Method for constructing JSON parser instance to parse
      * contents of resource reference by given URL.
-     * Encoding is auto-detected
-     * from contents according to JSON specification recommended
-     * mechanism.
+     *
+     *<p>
+     * Encoding is auto-detected from contents according to JSON
+     * specification recommended mechanism. Json specification
+     * supports only UTF-8, UTF-16 and UTF-32 as valid encodings,
+     * so auto-detection implemented only for this charsets.
+     * For other charsets use {@link #createParser(java.io.Reader)}.
+     *
      *<p>
      * Underlying input stream (needed for reading contents)
      * will be <b>owned</b> (and managed, i.e. closed as need be) by
@@ -950,8 +975,12 @@ public class JsonFactory
      * if (and only if) {@link com.fasterxml.jackson.core.JsonParser.Feature#AUTO_CLOSE_SOURCE}
      * is enabled.
      *<p>
+     *
      * Note: no encoding argument is taken since it can always be
-     * auto-detected as suggested by JSON RFC.
+     * auto-detected as suggested by JSON RFC. Json specification
+     * supports only UTF-8, UTF-16 and UTF-32 as valid encodings,
+     * so auto-detection implemented only for this charsets.
+     * For other charsets use {@link #createParser(java.io.Reader)}.
      *
      * @param in InputStream to use for reading JSON content to parse
      * 
@@ -1121,7 +1150,7 @@ public class JsonFactory
 
     /*
     /**********************************************************
-    /* Generator factories, old (as per [Issue-25]
+    /* Generator factories, old (pre-2.2)
     /**********************************************************
      */
 
@@ -1183,27 +1212,6 @@ public class JsonFactory
     @Deprecated
     public JsonGenerator createJsonGenerator(OutputStream out) throws IOException {
         return createGenerator(out, JsonEncoding.UTF8);
-    }
-    
-    /**
-     * Method for constructing JSON generator for writing JSON content
-     * to specified file, overwriting contents it might have (or creating
-     * it if such file does not yet exist).
-     * Encoding to use must be specified, and needs to be one of available
-     * types (as per JSON specification).
-     *<p>
-     * Underlying stream <b>is owned</b> by the generator constructed,
-     * i.e. generator will handle closing of file when
-     * {@link JsonGenerator#close} is called.
-     *
-     * @param f File to write contents to
-     * @param enc Character encoding to use
-     * 
-     * @deprecated Since 2.2, use {@link #createGenerator(File,JsonEncoding)} instead.
-     */
-    @Deprecated
-    public JsonGenerator createJsonGenerator(File f, JsonEncoding enc) throws IOException {
-        return createGenerator(f, enc);
     }
 
     /*
@@ -1433,7 +1441,7 @@ public class JsonFactory
         }
         return br;
     }
-    
+
     /**
      * Overridable factory method that actually instantiates desired
      * context object.
@@ -1441,7 +1449,7 @@ public class JsonFactory
     protected IOContext _createContext(Object srcRef, boolean resourceManaged) {
         return new IOContext(_getBufferRecycler(), srcRef, resourceManaged);
     }
-    
+
     /**
      * Helper methods used for constructing an optimal stream for
      * parsers to use, when input is to be read from an URL.

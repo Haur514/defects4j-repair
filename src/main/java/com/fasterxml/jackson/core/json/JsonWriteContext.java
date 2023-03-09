@@ -35,14 +35,14 @@ public class JsonWriteContext extends JsonStreamContext
     /**********************************************************
      */
 
-    protected JsonWriteContext _child = null;
+    protected JsonWriteContext _child;
 
     /*
     /**********************************************************
     /* Location/state information (minus source reference)
     /**********************************************************
      */
-    
+
     /**
      * Name of the field of which value is to be parsed; only
      * used for OBJECT contexts
@@ -53,7 +53,7 @@ public class JsonWriteContext extends JsonStreamContext
      * @since 2.5
      */
     protected Object _currentValue;
-    
+
     /**
      * Marker used to indicate that we just received a name, and
      * now expect a value
@@ -136,6 +136,22 @@ public class JsonWriteContext extends JsonStreamContext
     @Override public final JsonWriteContext getParent() { return _parent; }
     @Override public final String getCurrentName() { return _currentName; }
 
+    /**
+     * Method that can be used to both clear the accumulated references
+     * (specifically value set with {@link #setCurrentValue(Object)})
+     * that should not be retained, and returns parent (as would
+     * {@link #getParent()} do). Typically called when closing the active
+     * context when encountering {@link JsonToken#END_ARRAY} or
+     * {@link JsonToken#END_OBJECT}.
+     *
+     * @since 2.7
+     */
+    public JsonWriteContext clearAndGetParent() {
+        _currentValue = null;
+        // could also clear the current name, but seems cheap enough to leave?
+        return _parent;
+    }
+    
     public DupDetector getDupDetector() {
         return _dups;
     }
@@ -147,7 +163,7 @@ public class JsonWriteContext extends JsonStreamContext
      */
     public int writeFieldName(String name) throws JsonProcessingException {
         if (_gotName) {
-            return JsonWriteContext.STATUS_EXPECT_VALUE;
+            return STATUS_EXPECT_VALUE;
         }
         _gotName = true;
         _currentName = name;

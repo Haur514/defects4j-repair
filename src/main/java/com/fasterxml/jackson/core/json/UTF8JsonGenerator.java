@@ -27,7 +27,7 @@ public class UTF8JsonGenerator
     // intermediate copies only made up to certain length...
     private final static int MAX_BYTES_TO_BUFFER = 512;
 
-    final static byte[] HEX_CHARS = CharTypes.copyHexBytes();
+    private final static byte[] HEX_CHARS = CharTypes.copyHexBytes();
 
     private final static byte[] NULL_BYTES = { 'n', 'u', 'l', 'l' };
     private final static byte[] TRUE_BYTES = { 't', 'r', 'u', 'e' };
@@ -54,7 +54,7 @@ public class UTF8JsonGenerator
      * Pointer to the position right beyond the last character to output
      * (end marker; may be past the buffer)
      */
-    protected int _outputTail = 0;
+    protected int _outputTail;
 
     /**
      * End marker of the output buffer; one past the last valid position
@@ -93,18 +93,6 @@ public class UTF8JsonGenerator
 
     /*
     /**********************************************************
-    /* Quick flags
-    /**********************************************************
-     */
-
-    /**
-     * Flag that is set if quoting is not to be added around
-     * JSON Object property names.
-     */
-    protected boolean _cfgUnqNames;
-
-    /*
-    /**********************************************************
     /* Life-cycle
     /**********************************************************
      */
@@ -130,7 +118,6 @@ public class UTF8JsonGenerator
         if (isEnabled(Feature.ESCAPE_NON_ASCII)) {
             setHighestNonEscapedChar(127);
         }
-        _cfgUnqNames = !Feature.QUOTE_FIELD_NAMES.enabledIn(features);
     }
     
     public UTF8JsonGenerator(IOContext ctxt, int features, ObjectCodec codec,
@@ -148,7 +135,6 @@ public class UTF8JsonGenerator
         _outputMaxContiguous = (_outputEnd >> 3);
         _charBuffer = ctxt.allocConcatBuffer();
         _charBufferLength = _charBuffer.length;
-        _cfgUnqNames = !Feature.QUOTE_FIELD_NAMES.enabledIn(features);
     }
 
     /*
@@ -305,7 +291,7 @@ public class UTF8JsonGenerator
             }
             _outputBuffer[_outputTail++] = BYTE_RBRACKET;
         }
-        _writeContext = _writeContext.getParent();
+        _writeContext = _writeContext.clearAndGetParent();
     }
 
     @Override
@@ -337,7 +323,7 @@ public class UTF8JsonGenerator
             }
             _outputBuffer[_outputTail++] = BYTE_RCURLY;
         }
-        _writeContext = _writeContext.getParent();
+        _writeContext = _writeContext.clearAndGetParent();
     }
 
     /**
@@ -1048,7 +1034,7 @@ public class UTF8JsonGenerator
         if (_outputStream != null) {
             if (_ioContext.isResourceManaged() || isEnabled(Feature.AUTO_CLOSE_TARGET)) {
                 _outputStream.close();
-            } else  if (isEnabled(Feature.FLUSH_PASSED_TO_STREAM)) {
+            } else if (isEnabled(Feature.FLUSH_PASSED_TO_STREAM)) {
                 // If we can't close it, we should at least flush
                 _outputStream.flush();
             }

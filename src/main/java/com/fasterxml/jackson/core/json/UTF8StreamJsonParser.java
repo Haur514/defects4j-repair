@@ -64,7 +64,7 @@ public class UTF8StreamJsonParser
      * been fully processed, and needs to be finished for
      * some access (or skipped to obtain the next token)
      */
-    protected boolean _tokenIncomplete = false;
+    protected boolean _tokenIncomplete;
 
     /**
      * Temporary storage for partially parsed name bytes.
@@ -72,19 +72,24 @@ public class UTF8StreamJsonParser
     private int _quad1;
 
     /**
+     * Value of {@link #_inputPtr} at the time when the first character of
+     * name token was read. Used for calculating token location when requested;
+     * combined with {@link #_currInputProcessed}, may be updated appropriately
+     * as needed.
+     *
      * @since 2.7
      */
-    protected long _nameInputTotal; 
+    protected int _nameStartOffset; 
 
     /**
      * @since 2.7
      */
-    protected int _nameInputRow;
+    protected int _nameStartRow;
 
     /**
      * @since 2.7
      */
-    protected int _nameInputCol;
+    protected int _nameStartCol;
 
     /*
     /**********************************************************
@@ -183,9 +188,16 @@ public class UTF8StreamJsonParser
     @Override
     protected final boolean loadMore() throws IOException
     {
+        final int bufSize = _inputEnd;
+
         _currInputProcessed += _inputEnd;
         _currInputRowStart -= _inputEnd;
-        
+
+        // 26-Nov-2015, tatu: Since name-offset requires it too, must offset
+        //   this increase to avoid "moving" name-offset, resulting most likely
+        //   in negative value, which is fine as combine value remains unchanged.
+        _nameStartOffset -= bufSize;
+
         if (_inputStream != null) {
             int space = _inputBuffer.length;
             if (space == 0) { // only occurs when we've been closed
@@ -221,9 +233,15 @@ public class UTF8StreamJsonParser
         // Need to move remaining data in front?
         int amount = _inputEnd - _inputPtr;
         if (amount > 0 && _inputPtr > 0) {
-            _currInputProcessed += _inputPtr;
-            _currInputRowStart -= _inputPtr;
-            System.arraycopy(_inputBuffer, _inputPtr, _inputBuffer, 0, amount);
+            final int ptr = _inputPtr;
+
+            _currInputProcessed += ptr;
+            _currInputRowStart -= ptr;
+            // 26-Nov-2015, tatu: Since name-offset requires it too, must offset
+            //  (note: probably has little effect here but just in case)
+            _nameStartOffset -= ptr;
+
+            System.arraycopy(_inputBuffer, ptr, _inputBuffer, 0, amount);
             _inputEnd = amount;
         } else {
             _inputEnd = 0;
@@ -701,7 +719,7 @@ public class UTF8StreamJsonParser
             if (!_parsingContext.inArray()) {
                 _reportMismatchedEndMarker(i, '}');
             }
-            _parsingContext = _parsingContext.getParent();
+            _parsingContext = _parsingContext.clearAndGetParent();
             return (_currToken = JsonToken.END_ARRAY);
         }
         if (i == INT_RCURLY) {
@@ -709,7 +727,7 @@ public class UTF8StreamJsonParser
             if (!_parsingContext.inObject()) {
                 _reportMismatchedEndMarker(i, ']');
             }
-            _parsingContext = _parsingContext.getParent();
+            _parsingContext = _parsingContext.clearAndGetParent();
             return (_currToken = JsonToken.END_OBJECT);
         }
 
@@ -885,7 +903,7 @@ public class UTF8StreamJsonParser
             if (!_parsingContext.inArray()) {
                 _reportMismatchedEndMarker(i, '}');
             }
-            _parsingContext = _parsingContext.getParent();
+            _parsingContext = _parsingContext.clearAndGetParent();
             _currToken = JsonToken.END_ARRAY;
             return false;
         }
@@ -894,7 +912,7 @@ public class UTF8StreamJsonParser
             if (!_parsingContext.inObject()) {
                 _reportMismatchedEndMarker(i, ']');
             }
-            _parsingContext = _parsingContext.getParent();
+            _parsingContext = _parsingContext.clearAndGetParent();
             _currToken = JsonToken.END_OBJECT;
             return false;
         }
@@ -972,7 +990,7 @@ public class UTF8StreamJsonParser
             if (!_parsingContext.inArray()) {
                 _reportMismatchedEndMarker(i, '}');
             }
-            _parsingContext = _parsingContext.getParent();
+            _parsingContext = _parsingContext.clearAndGetParent();
             _currToken = JsonToken.END_ARRAY;
             return null;
         }
@@ -981,7 +999,7 @@ public class UTF8StreamJsonParser
             if (!_parsingContext.inObject()) {
                 _reportMismatchedEndMarker(i, ']');
             }
-            _parsingContext = _parsingContext.getParent();
+            _parsingContext = _parsingContext.clearAndGetParent();
             _currToken = JsonToken.END_OBJECT;
             return null;
         }
@@ -3615,12 +3633,12 @@ public class UTF8StreamJsonParser
     {
         final Object src = _ioContext.getSourceReference();
         if (_currToken == JsonToken.FIELD_NAME) {
+            long total = _currInputProcessed + (_nameStartOffset-1);
             return new JsonLocation(src,
-                    _nameInputTotal, -1L, _nameInputRow, _tokenInputCol);
+                    total, -1L, _nameStartRow, _nameStartCol);
         }
         return new JsonLocation(src,
-                getTokenCharacterOffset(), -1L, getTokenLineNr(),
-                getTokenColumnNr());
+                _tokenInputTotal-1, -1L, _tokenInputRow, _tokenInputCol);
     }
 
     // As per [core#108], must ensure we call the right method
@@ -3636,17 +3654,19 @@ public class UTF8StreamJsonParser
     // @since 2.7
     private final void _updateLocation()
     {
-        _tokenInputTotal = _currInputProcessed + _inputPtr - 1;
         _tokenInputRow = _currInputRow;
-        _tokenInputCol = _inputPtr - _currInputRowStart - 1;
+        final int ptr = _inputPtr;
+        _tokenInputTotal = _currInputProcessed + ptr;
+        _tokenInputCol = ptr - _currInputRowStart;
     }
 
     // @since 2.7
     private final void _updateNameLocation()
     {
-        _nameInputTotal = _currInputProcessed + _inputPtr - 1;
-        _nameInputRow = _currInputRow;
-        _nameInputCol = _inputPtr - _currInputRowStart - 1;
+        _nameStartRow = _currInputRow;
+        final int ptr = _inputPtr;
+        _nameStartOffset = ptr;
+        _nameStartCol = ptr - _currInputRowStart;
     }
 
     /*

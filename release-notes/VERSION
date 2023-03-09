@@ -14,7 +14,16 @@ JSON library.
 === Releases ===
 ------------------------------------------------------------------------
 
-2.7.0 (not yet released)
+2.7.2 (not yet released)
+
+#246: Fix UTF8JsonGenerator to allow QUOTE_FIELD_NAMES to be toggled
+ (suggested by philipa@github)
+
+2.7.1 (02-Feb-2016)
+
+No changes since 2.7.0.
+
+2.7.0 (10-Jun-2016)
 
 #37: JsonParser.getTokenLocation() doesn't update after field names
  (reported by Michael L)
@@ -25,6 +34,16 @@ JSON library.
 #229: Array element and field token spans include previous comma.
 - Implemented `ReaderBasedJsonParser.nextFieldName(SerializableString)`
   (to improved Afterburner performance over String/char[] sources)
+
+2.6.6 (not yet released)
+
+#248: VersionUtil.versionFor() unexpectedly return null instead of Version.unknownVersion()
+ (reported by sammyhk@github)
+
+2.6.5 (19-Jan-2016)
+2.6.4 (07-Dec-2015)
+
+No changes since 2.6.3.
 
 2.6.3 (12-Oct-2015)
 
