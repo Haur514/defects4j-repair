@@ -214,7 +214,7 @@
     <jar jarfile="${maven.build.dir}/${maven.build.finalName}.jar" 
          compress="true" 
          index="false" 
-         manifest="/private/tmp/initialize-revisions.pl_91368_1572447118/80f/target/classes/META-INF/MANIFEST.MF" 
+         manifest="/private/tmp/initialize-revisions.pl_91368_1572447118/82f/target/classes/META-INF/MANIFEST.MF" 
          basedir="${maven.build.outputDir}" 
          excludes="**/package.html"/>
   </target>
