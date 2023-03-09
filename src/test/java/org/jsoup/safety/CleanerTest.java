@@ -4,7 +4,6 @@ import org.jsoup.Jsoup;
 import org.jsoup.TextUtil;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Entities;
-import org.jsoup.safety.Whitelist;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -93,9 +92,11 @@ public class CleanerTest {
         String ok = "<p>Test <b><a href='http://example.com/'>OK</a></b></p>";
         String nok1 = "<p><script></script>Not <b>OK</b></p>";
         String nok2 = "<p align=right>Test Not <b>OK</b></p>";
+        String nok3 = "<!-- comment --><p>Not OK</p>"; // comments and the like will be cleaned
         assertTrue(Jsoup.isValid(ok, Whitelist.basic()));
         assertFalse(Jsoup.isValid(nok1, Whitelist.basic()));
         assertFalse(Jsoup.isValid(nok2, Whitelist.basic()));
+        assertFalse(Jsoup.isValid(nok3, Whitelist.basic()));
     }
     
     @Test public void resolvesRelativeLinks() {
@@ -104,7 +105,7 @@ public class CleanerTest {
         assertEquals("<a href=\"http://example.com/foo\" rel=\"nofollow\">Link</a>\n<img src=\"http://example.com/bar\" />", clean);
     }
 
-    @Test public void preservesRelatedLinksIfConfigured() {
+    @Test public void preservesRelativeLinksIfConfigured() {
         String html = "<a href='/foo'>Link</a><img src='/bar'> <img src='javascript:alert()'>";
         String clean = Jsoup.clean(html, "http://example.com/", Whitelist.basicWithImages().preserveRelativeLinks(true));
         assertEquals("<a href=\"/foo\" rel=\"nofollow\">Link</a>\n<img src=\"/bar\" /> \n<img />", clean);
@@ -175,6 +176,10 @@ public class CleanerTest {
         Document dirtyDoc = Jsoup.parse(dirty);
         Document cleanDoc = new Cleaner(Whitelist.basic()).clean(dirtyDoc);
         assertFalse(cleanDoc == null);
-        assertEquals(0, cleanDoc.body().childNodes().size());
+        assertEquals(0, cleanDoc.body().childNodeSize());
+    }
+
+    @Test public void cleansInternationalText() {
+        assertEquals("привет", Jsoup.clean("привет", Whitelist.none()));
     }
 }

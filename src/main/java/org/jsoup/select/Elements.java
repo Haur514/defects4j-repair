@@ -34,7 +34,11 @@ public class Elements implements List<Element>, Cloneable {
     public Elements(Element... elements) {
         this(Arrays.asList(elements));
     }
-    
+
+    /**
+     * Creates a deep copy of these elements.
+     * @return a deep copy
+     */
     @Override
 	public Elements clone() {
     	List<Element> elements = new ArrayList<Element>();
@@ -455,7 +459,7 @@ public class Elements implements List<Element>, Cloneable {
     // list-like methods
     /**
      Get the first matched element.
-     @return The first matched element, or <code>null</code> if contents is empty;
+     @return The first matched element, or <code>null</code> if contents is empty.
      */
     public Element first() {
         return contents.isEmpty() ? null : contents.get(0);

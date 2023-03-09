@@ -284,7 +284,7 @@ public class HtmlParserTest {
         Element div = doc.getElementById("1");
         assertEquals("<html> <foo><&amp;", div.text());
         assertEquals(0, div.children().size());
-        assertEquals(1, div.childNodes().size()); // no elements, one text node
+        assertEquals(1, div.childNodeSize()); // no elements, one text node
     }
 
     @Test public void handlesInvalidStartTags() {
@@ -719,5 +719,33 @@ public class HtmlParserTest {
         assertEquals(1, nodes.size()); // returns <html> node (not document) -- no context means doc gets created
         assertEquals("html", nodes.get(0).nodeName());
         assertEquals("<html> <head></head> <body> <ol> <li>One</li> </ol> <p>Two</p> </body> </html>", StringUtil.normaliseWhitespace(nodes.get(0).outerHtml()));
+    }
+
+    @Test public void doesNotFindShortestMatchingEntity() {
+        // previous behaviour was to identify a possible entity, then chomp down the string until a match was found.
+        // (as defined in html5.) However in practise that lead to spurious matches against the author's intent.
+        String html = "One &clubsuite; &clubsuit;";
+        Document doc = Jsoup.parse(html);
+        assertEquals(StringUtil.normaliseWhitespace("One &amp;clubsuite; ♣"), doc.body().html());
+    }
+
+    @Test public void relaxedBaseEntityMatchAndStrictExtendedMatch() {
+        // extended entities need a ; at the end to match, base does not
+        String html = "&amp &quot &reg &icy &hopf &icy; &hopf;";
+        Document doc = Jsoup.parse(html);
+        doc.outputSettings().escapeMode(Entities.EscapeMode.extended); // modifies output only to clarify test
+        assertEquals(StringUtil.normaliseWhitespace("&amp; &quot; &reg; &amp;icy &amp;hopf &icy; &hopf;"), doc.body().html());
+    }
+
+    @Test public void handlesXmlDeclarationAsBogusComment() {
+        String html = "<?xml encoding='UTF-8' ?><body>One</body>";
+        Document doc = Jsoup.parse(html);
+        assertEquals("<!--?xml encoding='UTF-8' ?--> <html> <head></head> <body> One </body> </html>", StringUtil.normaliseWhitespace(doc.outerHtml()));
+    }
+
+    @Test public void handlesTagsInTextarea() {
+        String html = "<textarea><p>Jsoup</p></textarea>";
+        Document doc = Jsoup.parse(html);
+        assertEquals("<textarea>&lt;p&gt;Jsoup&lt;/p&gt;</textarea>", doc.body().html());
     }
 }
