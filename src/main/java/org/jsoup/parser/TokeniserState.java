@@ -1,5 +1,7 @@
 package org.jsoup.parser;
 
+import org.jsoup.nodes.DocumentType;
+
 import java.util.Arrays;
 
 /**
@@ -880,6 +882,7 @@ enum TokeniserState {
                     break;
                 default:
                     t.error(this);
+                    r.unconsume();
                     t.transition(BeforeAttributeName);
             }
         }
@@ -1188,9 +1191,9 @@ enum TokeniserState {
             else if (r.matches('>')) {
                 t.emitDoctypePending();
                 t.advanceTransition(Data);
-            } else if (r.matchConsumeIgnoreCase("PUBLIC")) {
+            } else if (r.matchConsumeIgnoreCase(DocumentType.PUBLIC_KEY)) {
                 t.transition(AfterDoctypePublicKeyword);
-            } else if (r.matchConsumeIgnoreCase("SYSTEM")) {
+            } else if (r.matchConsumeIgnoreCase(DocumentType.SYSTEM_KEY)) {
                 t.transition(AfterDoctypeSystemKeyword);
             } else {
                 t.error(this);

@@ -53,6 +53,7 @@ abstract class Token {
             return name.toString();
         }
 
+
         String getPublicIdentifier() {
             return publicIdentifier.toString();
         }

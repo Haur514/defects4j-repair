@@ -1,6 +1,13 @@
 jsoup changelog
 
-*** Release 1.10.1 [PENDING]
+*** Release 1.10.2 [PENDING]
+ * Improved startup time, particularly on Android, by reducing garbage generation and CPU execution time when loading
+   the HTML entity files. About 1.72x faster in this area.
+
+ * Bugfix - a "SYSTEM" flag in doctype tags would be incorrectly removed.
+   <https://github.com/jhy/jsoup/issues/408>
+
+*** Release 1.10.1 [2016-Oct-23]
  * New feature: added the option to preserve case for tags and/or attributes, with ParseSettings. By default, the HTML
    parser will continue to normalize tag names and attribute names to lower case, and the XML parser will now preserve
    case, according to the relevant spec. The CSS selectors for tags and attributes remain case insensitive, per the CSS
@@ -21,6 +28,12 @@ jsoup changelog
    is not defined by the server, or is defined incorrectly.
    <https://github.com/jhy/jsoup/issues/743>
 
+ * Improved performance of class selectors by reducing memory allocation and garbase collection.
+   <https://github.com/jhy/jsoup/pull/753>
+
+ * Improved performance of HTML output by reducing the creation of temporary attribute list iterators.
+   <https://github.com/jhy/jsoup/pull/755>
+
  * Fixed an issue when converting to the W3CDom XML, where valid (but ugly) HTML attribute names containing characters
    like '"' could not be converted into valid XML attribute names. These attribute names are now normalized if possible,
    or not added to the XML DOM.
@@ -31,6 +44,12 @@ jsoup changelog
 
  * Fixed an issue where attribute names starting with a slash would be parsed incorrectly.
    <https://github.com/jhy/jsoup/pull/748>
+
+ * Don't reuse charset encoders from OutputSettings, to make threadsafe.
+   <https://github.com/jhy/jsoup/issues/740>
+
+ * Fixed an issue in connections with a requestBody where a custom content-type header could be ignored.
+   <https://github.com/jhy/jsoup/issues/756>
 
 *** Release 1.9.2 [2016-May-17]
  * Fixed an issue where tag names that contained non-ascii characters but started with an ascii character

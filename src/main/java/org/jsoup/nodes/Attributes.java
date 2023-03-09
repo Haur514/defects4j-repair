@@ -172,7 +172,11 @@ public class Attributes implements Iterable<Attribute>, Cloneable {
     }
 
     public Iterator<Attribute> iterator() {
-        return asList().iterator();
+        if (attributes == null || attributes.isEmpty()) {
+            return Collections.<Attribute>emptyList().iterator();
+        }
+
+        return attributes.values().iterator();
     }
 
     /**

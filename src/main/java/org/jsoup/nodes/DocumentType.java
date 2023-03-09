@@ -9,6 +9,8 @@ import org.jsoup.nodes.Document.OutputSettings.*;
  * A {@code <!DOCTYPE>} node.
  */
 public class DocumentType extends Node {
+    public static final String PUBLIC_KEY = "PUBLIC";
+    public static final String SYSTEM_KEY = "SYSTEM";
     private static final String NAME = "name";
     private static final String PUBLIC_ID = "publicId";
     private static final String SYSTEM_ID = "systemId";
@@ -28,6 +30,15 @@ public class DocumentType extends Node {
         attr(PUBLIC_ID, publicId);
         attr(SYSTEM_ID, systemId);
     }
+
+    /**
+     * Create a new doctype element.
+     * @param name the doctype's name
+     * @param publicId the doctype's public ID
+     * @param systemId the doctype's system ID
+     * @param baseUri the doctype's base URI
+     */
+
 
     @Override
     public String nodeName() {
