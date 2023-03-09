@@ -12,11 +12,11 @@ import static org.junit.Assert.*;
  @author Jonathan Hedley, jonathan@hedley.net */
 public class TextNodeTest {
     @Test public void testBlank() {
-        TextNode one = new TextNode("", "");
-        TextNode two = new TextNode("     ", "");
-        TextNode three = new TextNode("  \n\n   ", "");
-        TextNode four = new TextNode("Hello", "");
-        TextNode five = new TextNode("  \nHello ", "");
+        TextNode one = new TextNode("");
+        TextNode two = new TextNode("     ");
+        TextNode three = new TextNode("  \n\n   ");
+        TextNode four = new TextNode("Hello");
+        TextNode five = new TextNode("  \nHello ");
 
         assertTrue(one.isBlank());
         assertTrue(two.isBlank());
@@ -40,7 +40,7 @@ public class TextNodeTest {
         tn.text(" POW!");
         assertEquals("One <span>two &amp;</span> POW!", TextUtil.stripNewlines(p.html()));
 
-        tn.attr("text", "kablam &");
+        tn.attr(tn.nodeName(), "kablam &");
         assertEquals("kablam &", tn.text());
         assertEquals("One <span>two &amp;</span>kablam &amp;", TextUtil.stripNewlines(p.html()));
     }
@@ -65,5 +65,11 @@ public class TextNodeTest {
         tail.wrap("<b></b>");
 
         assertEquals("Hello <b>there</b>", TextUtil.stripNewlines(div.html())); // not great that we get \n<b>there there... must correct
+    }
+
+    @Test public void testWithSupplementaryCharacter(){
+        Document doc = Jsoup.parse(new String(Character.toChars(135361)));
+        TextNode t = doc.body().textNodes().get(0);
+        assertEquals(new String(Character.toChars(135361)), t.outerHtml().trim());
     }
 }
