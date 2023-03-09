@@ -1,6 +1,8 @@
 package org.jsoup.helper;
 
 import static org.junit.Assert.*;
+
+import org.jsoup.integration.ParseTest;
 import org.junit.Test;
 import org.jsoup.Connection;
 
@@ -48,6 +50,29 @@ public class HttpConnectionTest {
         res.header("accept-encoding", "deflate");
         assertEquals("deflate", res.header("Accept-Encoding"));
         assertEquals("deflate", res.header("accept-Encoding"));
+    }
+
+    @Test public void headers() {
+        Connection con = HttpConnection.connect("http://example.com");
+        Map<String, String> headers = new HashMap<String, String>();
+        headers.put("content-type", "text/html");
+        headers.put("Connection", "keep-alive");
+        headers.put("Host", "http://example.com");
+        con.headers(headers);
+        assertEquals("text/html", con.request().header("content-type"));
+        assertEquals("keep-alive", con.request().header("Connection"));
+        assertEquals("http://example.com", con.request().header("Host"));
+    }
+
+    @Test public void sameHeadersCombineWithComma() {
+        Map<String, List<String>> headers = new HashMap<String, List<String>>();
+        List<String> values = new ArrayList<String>();
+        values.add("no-cache");
+        values.add("no-store");
+        headers.put("Cache-Control", values);
+        HttpConnection.Response res = new HttpConnection.Response();
+        res.processResponseHeaders(headers);
+        assertEquals("no-cache, no-store", res.header("Cache-Control"));
     }
 
     @Test public void ignoresEmptySetCookies() {
@@ -136,5 +161,23 @@ public class HttpConnectionTest {
         Connection con = HttpConnection.connect("http://example.com/");
         con.cookie("Name", "Val");
         assertEquals("Val", con.request().cookie("Name"));
+    }
+
+    @Test public void inputStream() {
+        Connection.KeyVal kv = HttpConnection.KeyVal.create("file", "thumb.jpg", ParseTest.inputStreamFrom("Check"));
+        assertEquals("file", kv.key());
+        assertEquals("thumb.jpg", kv.value());
+        assertTrue(kv.hasInputStream());
+
+        kv = HttpConnection.KeyVal.create("one", "two");
+        assertEquals("one", kv.key());
+        assertEquals("two", kv.value());
+        assertFalse(kv.hasInputStream());
+    }
+
+    @Test public void requestBody() {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.requestBody("foo");
+        assertEquals("foo", con.request().requestBody());
     }
 }
