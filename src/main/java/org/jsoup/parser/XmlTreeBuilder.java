@@ -63,7 +63,8 @@ public class XmlTreeBuilder extends TreeBuilder {
 
     void insert(Token.Comment commentToken) {
         Comment comment = new Comment(commentToken.getData(), baseUri);
-        insertNode(comment);
+        Node insert = comment;
+        insertNode(insert);
     }
 
     void insert(Token.Character characterToken) {
