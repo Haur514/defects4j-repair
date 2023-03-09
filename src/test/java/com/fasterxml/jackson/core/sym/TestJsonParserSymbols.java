@@ -12,7 +12,7 @@ import com.fasterxml.jackson.core.json.UTF8StreamJsonParser;
  */
 @SuppressWarnings("serial")
 public class TestJsonParserSymbols
-    extends com.fasterxml.jackson.test.BaseTest
+    extends com.fasterxml.jackson.core.BaseTest
 {
     /**
      * To peek into state of "root" symbol tables (parent of all symbol
@@ -46,6 +46,15 @@ public class TestJsonParserSymbols
         assertEquals(3, f.byteSymbolCount());
     }
 
+    public void testHashCalc() throws Exception
+    {
+        CharsToNameCanonicalizer sym = CharsToNameCanonicalizer.createRoot(123);
+        char[] str1 = "foo".toCharArray();
+        char[] str2 = " foo ".toCharArray();
+
+        assertEquals(sym.calcHash(str1, 0, 3), sym.calcHash(str2, 1, 3));
+    }
+    
     public void testCharSymbolsWithClose() throws Exception
     {
         _testWithClose(false);
@@ -88,7 +97,6 @@ public class TestJsonParserSymbols
         assertEquals(2, useBytes ? f.byteSymbolCount() : f.charSymbolCount());
     }
 
-    @SuppressWarnings("resource")
     private JsonParser _getParser(MyJsonFactory f, String doc, boolean useBytes) throws IOException
     {
         JsonParser jp;

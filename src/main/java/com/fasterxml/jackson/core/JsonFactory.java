@@ -43,9 +43,9 @@ public class JsonFactory
         java.io.Serializable // since 2.1 (for Android, mostly)
 {
     /**
-     * Computed for Jackson 2.3.0 release
+     * Computed for Jackson 2.4.0 release
      */
-    private static final long serialVersionUID = 3194418244231611666L;
+    private static final long serialVersionUID = 3306684576057132431L;
 
     /*
     /**********************************************************
@@ -86,7 +86,23 @@ public class JsonFactory
          *<p>
          * This setting is enabled by default.
          */
-        CANONICALIZE_FIELD_NAMES(true)
+        CANONICALIZE_FIELD_NAMES(true),
+
+        /**
+         * Feature that determines what happens if we encounter a case in symbol
+         * handling where number of hash collisions exceeds a safety threshold
+         * -- which almost certainly means a denial-of-service attack via generated
+         * duplicate hash codes.
+         * If feature is enabled, an {@link IllegalStateException} is
+         * thrown to indicate the suspected denial-of-service attack; if disabled, processing continues but
+         * canonicalization (and thereby <code>intern()</code>ing) is disabled) as protective
+         * measure.
+         *<p>
+         * This setting is enabled by default.
+         * 
+         * @since 2.4
+         */
+        FAIL_ON_SYMBOL_HASH_OVERFLOW(true),
 
         ;
 
@@ -99,26 +115,18 @@ public class JsonFactory
          * Method that calculates bit set (flags) of all features that
          * are enabled by default.
          */
-        public static int collectDefaults()
-        {
+        public static int collectDefaults() {
             int flags = 0;
             for (Feature f : values()) {
-                if (f.enabledByDefault()) {
-                    flags |= f.getMask();
-                }
+                if (f.enabledByDefault()) { flags |= f.getMask(); }
             }
             return flags;
         }
         
-        private Feature(boolean defaultState)
-        {
-            _defaultState = defaultState;
-        }
+        private Feature(boolean defaultState) { _defaultState = defaultState; }
         
         public boolean enabledByDefault() { return _defaultState; }
-
         public boolean enabledIn(int flags) { return (flags & getMask()) != 0; }
-        
         public int getMask() { return (1 << ordinal()); }
     }
 
@@ -257,7 +265,7 @@ public class JsonFactory
      * and this reuse only works within context of a single
      * factory instance.
      */
-    public JsonFactory() { this((ObjectCodec) null); }
+    public JsonFactory() { this(null); }
 
     public JsonFactory(ObjectCodec oc) { _objectCodec = oc; }
 
@@ -352,9 +360,7 @@ public class JsonFactory
      * 
      * @since 2.3
      */
-    public boolean requiresPropertyOrdering() {
-        return false;
-    }
+    public boolean requiresPropertyOrdering() { return false; }
 
     /**
      * Introspection method that higher-level functionality may call
@@ -368,10 +374,22 @@ public class JsonFactory
      * 
      * @since 2.3
      */
-    public boolean canHandleBinaryNatively() {
-        return false;
-    }
+    public boolean canHandleBinaryNatively() { return false; }
 
+    /**
+     * Introspection method that can be used by base factory to check
+     * whether access using <code>char[]</code> is something that actual
+     * parser implementations can take advantage of, over having to
+     * use {@link java.io.Reader}. Sub-types are expected to override
+     * definition; default implementation (suitable for JSON) alleges
+     * that optimization are possible; and thereby is likely to try
+     * to access {@link java.lang.String} content by first copying it into
+     * recyclable intermediate buffer.
+     * 
+     * @since 2.4
+     */
+    public boolean canUseCharArrays() { return true; }
+    
     /*
     /**********************************************************
     /* Format detection functionality (since 1.8)
@@ -596,9 +614,7 @@ public class JsonFactory
      * Method for accessing custom escapes factory uses for {@link JsonGenerator}s
      * it creates.
      */
-    public CharacterEscapes getCharacterEscapes() {
-        return _characterEscapes;
-    }
+    public CharacterEscapes getCharacterEscapes() { return _characterEscapes; }
 
     /**
      * Method for defining custom escapes factory uses for {@link JsonGenerator}s
@@ -686,17 +702,11 @@ public class JsonFactory
      * 
      * @since 2.1
      */
-    public JsonParser createParser(File f)
-        throws IOException, JsonParseException
-    {
+    public JsonParser createParser(File f) throws IOException, JsonParseException {
         // true, since we create InputStream from File
         IOContext ctxt = _createContext(f, true);
         InputStream in = new FileInputStream(f);
-        // [JACKSON-512]: allow wrapping with InputDecorator
-        if (_inputDecorator != null) {
-            in = _inputDecorator.decorate(ctxt, in);
-        }
-        return _createParser(in, ctxt);
+        return _createParser(_decorate(in, ctxt), ctxt);
     }
 
     /**
@@ -714,17 +724,11 @@ public class JsonFactory
      * 
      * @since 2.1
      */
-    public JsonParser createParser(URL url)
-        throws IOException, JsonParseException
-    {
+    public JsonParser createParser(URL url) throws IOException, JsonParseException {
         // true, since we create InputStream from URL
         IOContext ctxt = _createContext(url, true);
         InputStream in = _optimizedStreamFromURL(url);
-        // [JACKSON-512]: allow wrapping with InputDecorator
-        if (_inputDecorator != null) {
-            in = _inputDecorator.decorate(ctxt, in);
-        }
-        return _createParser(in, ctxt);
+        return _createParser(_decorate(in, ctxt), ctxt);
     }
 
     /**
@@ -744,17 +748,11 @@ public class JsonFactory
      * 
      * @since 2.1
      */
-    public JsonParser createParser(InputStream in)
-        throws IOException, JsonParseException
-    {
+    public JsonParser createParser(InputStream in) throws IOException, JsonParseException {
         IOContext ctxt = _createContext(in, false);
-        // [JACKSON-512]: allow wrapping with InputDecorator
-        if (_inputDecorator != null) {
-            in = _inputDecorator.decorate(ctxt, in);
-        }
-        return _createParser(in, ctxt);
+        return _createParser(_decorate(in, ctxt), ctxt);
     }
-
+    
     /**
      * Method for constructing parser for parsing
      * the contents accessed via specified Reader.
@@ -769,16 +767,10 @@ public class JsonFactory
      * 
      * @since 2.1
      */
-    public JsonParser createParser(Reader r)
-        throws IOException, JsonParseException
-    {
+    public JsonParser createParser(Reader r) throws IOException, JsonParseException {
         // false -> we do NOT own Reader (did not create it)
         IOContext ctxt = _createContext(r, false);
-        // [JACKSON-512]: allow wrapping with InputDecorator
-        if (_inputDecorator != null) {
-            r = _inputDecorator.decorate(ctxt, r);
-        }
-        return _createParser(r, ctxt);
+        return _createParser(_decorate(r, ctxt), ctxt);
     }
 
     /**
@@ -787,11 +779,8 @@ public class JsonFactory
      * 
      * @since 2.1
      */
-    public JsonParser createParser(byte[] data)
-        throws IOException, JsonParseException
-    {
+    public JsonParser createParser(byte[] data) throws IOException, JsonParseException {
         IOContext ctxt = _createContext(data, true);
-        // [JACKSON-512]: allow wrapping with InputDecorator
         if (_inputDecorator != null) {
             InputStream in = _inputDecorator.decorate(ctxt, data, 0, data.length);
             if (in != null) {
@@ -811,9 +800,7 @@ public class JsonFactory
      * 
      * @since 2.1
      */
-    public JsonParser createParser(byte[] data, int offset, int len)
-        throws IOException, JsonParseException
-    {
+    public JsonParser createParser(byte[] data, int offset, int len) throws IOException, JsonParseException {
         IOContext ctxt = _createContext(data, true);
         // [JACKSON-512]: allow wrapping with InputDecorator
         if (_inputDecorator != null) {
@@ -831,17 +818,42 @@ public class JsonFactory
      * 
      * @since 2.1
      */
-    public JsonParser createParser(String content)
-        throws IOException, JsonParseException
-    {
-        Reader r = new StringReader(content);
-        // true -> we own the Reader (and must close); not a big deal
-        IOContext ctxt = _createContext(r, true);
-        // [JACKSON-512]: allow wrapping with InputDecorator
-        if (_inputDecorator != null) {
-            r = _inputDecorator.decorate(ctxt, r);
+    public JsonParser createParser(String content) throws IOException, JsonParseException {
+        final int strLen = content.length();
+        // Actually, let's use this for medium-sized content, up to 64kB chunk (32kb char)
+        if (_inputDecorator != null || strLen > 0x8000 || !canUseCharArrays()) {
+            // easier to just wrap in a Reader than extend InputDecorator; or, if content
+            // is too long for us to copy it over
+            return createParser(new StringReader(content));
         }
-        return _createParser(r, ctxt);
+        IOContext ctxt = _createContext(content, true);
+        char[] buf = ctxt.allocTokenBuffer(strLen);
+        content.getChars(0, strLen, buf, 0);
+        return _createParser(buf, 0, strLen, ctxt, true);
+    }
+
+    /**
+     * Method for constructing parser for parsing
+     * contents of given char array.
+     * 
+     * @since 2.4
+     */
+    public JsonParser createParser(char[] content) throws IOException {
+        return createParser(content, 0, content.length);
+    }
+    
+    /**
+     * Method for constructing parser for parsing contents of given char array.
+     * 
+     * @since 2.4
+     */
+    public JsonParser createParser(char[] content, int offset, int len) throws IOException {
+        if (_inputDecorator != null) { // easier to just wrap in a Reader than extend InputDecorator
+            return createParser(new CharArrayReader(content, offset, len));
+        }
+        return _createParser(content, offset, len, _createContext(content, true),
+                // important: buffer is NOT recyclable, as it's from caller
+                false);
     }
 
     /*
@@ -859,18 +871,13 @@ public class JsonFactory
      * Underlying input stream (needed for reading contents)
      * will be <b>owned</b> (and managed, i.e. closed as need be) by
      * the parser, since caller has no access to it.
-     *<p>
-     * NOTE: as of 2.1, should not be used (will be deprecated in 2.2);
-     * instead, should call <code>createParser</code>.
      *
      * @param f File that contains JSON content to parse
      * 
      * @deprecated Since 2.2, use {@link #createParser(File)} instead.
      */
     @Deprecated
-    public JsonParser createJsonParser(File f)
-        throws IOException, JsonParseException
-    {
+    public JsonParser createJsonParser(File f) throws IOException, JsonParseException {
         return createParser(f);
     }
 
@@ -884,18 +891,13 @@ public class JsonFactory
      * Underlying input stream (needed for reading contents)
      * will be <b>owned</b> (and managed, i.e. closed as need be) by
      * the parser, since caller has no access to it.
-     *<p>
-     * NOTE: as of 2.1, should not be used (will be deprecated in 2.2);
-     * instead, should call <code>createParser</code>.
      *
      * @param url URL pointing to resource that contains JSON content to parse
      * 
      * @deprecated Since 2.2, use {@link #createParser(URL)} instead.
      */
     @Deprecated
-    public JsonParser createJsonParser(URL url)
-        throws IOException, JsonParseException
-    {
+    public JsonParser createJsonParser(URL url) throws IOException, JsonParseException {
         return createParser(url);
     }
 
@@ -911,18 +913,13 @@ public class JsonFactory
      *<p>
      * Note: no encoding argument is taken since it can always be
      * auto-detected as suggested by JSON RFC.
-     *<p>
-     * NOTE: as of 2.1, should not be used (will be deprecated in 2.2);
-     * instead, should call <code>createParser</code>.
      *
      * @param in InputStream to use for reading JSON content to parse
      * 
      * @deprecated Since 2.2, use {@link #createParser(InputStream)} instead.
      */
     @Deprecated
-    public JsonParser createJsonParser(InputStream in)
-        throws IOException, JsonParseException
-    {
+    public JsonParser createJsonParser(InputStream in) throws IOException, JsonParseException {
         return createParser(in);
     }
 
@@ -935,43 +932,29 @@ public class JsonFactory
      * end-of-stream is reacher, or parser close method called)
      * if (and only if) {@link com.fasterxml.jackson.core.JsonParser.Feature#AUTO_CLOSE_SOURCE}
      * is enabled.
-     *<p>
-     * NOTE: as of 2.1, should not be used (will be deprecated in 2.2);
-     * instead, should call <code>createParser</code>.
      *
      * @param r Reader to use for reading JSON content to parse
      * 
      * @deprecated Since 2.2, use {@link #createParser(Reader)} instead.
      */
     @Deprecated
-    public JsonParser createJsonParser(Reader r)
-        throws IOException, JsonParseException
-    {
+    public JsonParser createJsonParser(Reader r) throws IOException, JsonParseException {
         return createParser(r);
     }
 
     /**
-     * Method for constructing parser for parsing
-     * the contents of given byte array.
-     *<p>
-     * NOTE: as of 2.1, should not be used (will be deprecated in 2.2);
-     * instead, should call <code>createParser</code>.
+     * Method for constructing parser for parsing the contents of given byte array.
      * 
      * @deprecated Since 2.2, use {@link #createParser(byte[])} instead.
      */
     @Deprecated
-    public JsonParser createJsonParser(byte[] data)
-        throws IOException, JsonParseException
-    {
+    public JsonParser createJsonParser(byte[] data) throws IOException, JsonParseException {
         return createParser(data);
     }
 
     /**
      * Method for constructing parser for parsing
      * the contents of given byte array.
-     *<p>
-     * NOTE: as of 2.1, should not be used (will be deprecated in 2.2);
-     * instead, should call <code>createParser</code>.
      * 
      * @param data Buffer that contains data to parse
      * @param offset Offset of the first data byte within buffer
@@ -980,9 +963,7 @@ public class JsonFactory
      * @deprecated Since 2.2, use {@link #createParser(byte[],int,int)} instead.
      */
     @Deprecated
-    public JsonParser createJsonParser(byte[] data, int offset, int len)
-        throws IOException, JsonParseException
-    {
+    public JsonParser createJsonParser(byte[] data, int offset, int len) throws IOException, JsonParseException {
         return createParser(data, offset, len);
     }
 
@@ -993,9 +974,7 @@ public class JsonFactory
      * @deprecated Since 2.2, use {@link #createParser(String)} instead.
      */
     @Deprecated
-    public JsonParser createJsonParser(String content)
-        throws IOException, JsonParseException
-    {
+    public JsonParser createJsonParser(String content) throws IOException, JsonParseException {
         return createParser(content);
     }
 
@@ -1034,18 +1013,10 @@ public class JsonFactory
         IOContext ctxt = _createContext(out, false);
         ctxt.setEncoding(enc);
         if (enc == JsonEncoding.UTF8) {
-            // [JACKSON-512]: allow wrapping with _outputDecorator
-            if (_outputDecorator != null) {
-                out = _outputDecorator.decorate(ctxt, out);
-            }
-            return _createUTF8Generator(out, ctxt);
+            return _createUTF8Generator(_decorate(out, ctxt), ctxt);
         }
         Writer w = _createWriter(out, enc, ctxt);
-        // [JACKSON-512]: allow wrapping with _outputDecorator
-        if (_outputDecorator != null) {
-            w = _outputDecorator.decorate(ctxt, w);
-        }
-        return _createGenerator(w, ctxt);
+        return _createGenerator(_decorate(w, ctxt), ctxt);
     }
 
     /**
@@ -1073,17 +1044,11 @@ public class JsonFactory
      * 
      * @since 2.1
      *
-     * @param out Writer to use for writing JSON content 
+     * @param w Writer to use for writing JSON content 
      */
-    public JsonGenerator createGenerator(Writer out)
-        throws IOException
-    {
-        IOContext ctxt = _createContext(out, false);
-        // [JACKSON-512]: allow wrapping with _outputDecorator
-        if (_outputDecorator != null) {
-            out = _outputDecorator.decorate(ctxt, out);
-        }
-        return _createGenerator(out, ctxt);
+    public JsonGenerator createGenerator(Writer w) throws IOException {
+        IOContext ctxt = _createContext(w, false);
+        return _createGenerator(_decorate(w, ctxt), ctxt);
     }
     
     /**
@@ -1102,26 +1067,17 @@ public class JsonFactory
      * 
      * @since 2.1
      */
-    public JsonGenerator createGenerator(File f, JsonEncoding enc)
-        throws IOException
+    public JsonGenerator createGenerator(File f, JsonEncoding enc) throws IOException
     {
         OutputStream out = new FileOutputStream(f);
         // true -> yes, we have to manage the stream since we created it
         IOContext ctxt = _createContext(out, true);
         ctxt.setEncoding(enc);
         if (enc == JsonEncoding.UTF8) {
-            // [JACKSON-512]: allow wrapping with _outputDecorator
-            if (_outputDecorator != null) {
-                out = _outputDecorator.decorate(ctxt, out);
-            }
-            return _createUTF8Generator(out, ctxt);
+            return _createUTF8Generator(_decorate(out, ctxt), ctxt);
         }
         Writer w = _createWriter(out, enc, ctxt);
-        // [JACKSON-512]: allow wrapping with _outputDecorator
-        if (_outputDecorator != null) {
-            w = _outputDecorator.decorate(ctxt, w);
-        }
-        return _createGenerator(w, ctxt);
+        return _createGenerator(_decorate(w, ctxt), ctxt);
     }    
 
     /*
@@ -1153,9 +1109,7 @@ public class JsonFactory
      * @deprecated Since 2.2, use {@link #createGenerator(OutputStream, JsonEncoding)} instead.
      */
     @Deprecated
-    public JsonGenerator createJsonGenerator(OutputStream out, JsonEncoding enc)
-        throws IOException
-    {
+    public JsonGenerator createJsonGenerator(OutputStream out, JsonEncoding enc) throws IOException {
         return createGenerator(out, enc);
     }
 
@@ -1175,9 +1129,7 @@ public class JsonFactory
      * @deprecated Since 2.2, use {@link #createGenerator(Writer)} instead.
      */
     @Deprecated
-    public JsonGenerator createJsonGenerator(Writer out)
-        throws IOException
-    {
+    public JsonGenerator createJsonGenerator(Writer out) throws IOException {
         return createGenerator(out);
     }
 
@@ -1208,13 +1160,10 @@ public class JsonFactory
      * @param f File to write contents to
      * @param enc Character encoding to use
      * 
-     * 
      * @deprecated Since 2.2, use {@link #createGenerator(File,JsonEncoding)} instead.
      */
     @Deprecated
-    public JsonGenerator createJsonGenerator(File f, JsonEncoding enc)
-        throws IOException
-    {
+    public JsonGenerator createJsonGenerator(File f, JsonEncoding enc) throws IOException {
         return createGenerator(f, enc);
     }
 
@@ -1237,24 +1186,12 @@ public class JsonFactory
      * 
      * @since 2.1
      */
-    protected JsonParser _createParser(InputStream in, IOContext ctxt)
-        throws IOException, JsonParseException
-    {
+    protected JsonParser _createParser(InputStream in, IOContext ctxt) throws IOException {
         // As per [JACKSON-259], may want to fully disable canonicalization:
         return new ByteSourceJsonBootstrapper(ctxt, in).constructParser(_parserFeatures,
-                _objectCodec, _rootByteSymbols, _rootCharSymbols,
-                isEnabled(JsonFactory.Feature.CANONICALIZE_FIELD_NAMES),
-                isEnabled(JsonFactory.Feature.INTERN_FIELD_NAMES));
+                _objectCodec, _rootByteSymbols, _rootCharSymbols, _factoryFeatures);
     }
 
-    /**
-     * @deprecated since 2.1 -- use {@link #_createParser(InputStream, IOContext)} instead
-     */
-    @Deprecated
-    protected JsonParser _createJsonParser(InputStream in, IOContext ctxt) throws IOException, JsonParseException {
-        return _createParser(in, ctxt);
-    }
-    
     /**
      * Overridable factory method that actually instantiates parser
      * using given {@link Reader} object for reading content.
@@ -1267,20 +1204,22 @@ public class JsonFactory
      * 
      * @since 2.1
      */
-    protected JsonParser _createParser(Reader r, IOContext ctxt)
-        throws IOException, JsonParseException
-    {
+    protected JsonParser _createParser(Reader r, IOContext ctxt) throws IOException {
         return new ReaderBasedJsonParser(ctxt, _parserFeatures, r, _objectCodec,
-                _rootCharSymbols.makeChild(isEnabled(JsonFactory.Feature.CANONICALIZE_FIELD_NAMES),
-                        isEnabled(JsonFactory.Feature.INTERN_FIELD_NAMES)));
+                _rootCharSymbols.makeChild(_factoryFeatures));
     }
 
     /**
-     * @deprecated since 2.1 -- use {@link #_createParser(Reader, IOContext)} instead
+     * Overridable factory method that actually instantiates parser
+     * using given <code>char[]</code> object for accessing content.
+     * 
+     * @since 2.4
      */
-    @Deprecated
-    protected JsonParser _createJsonParser(Reader r, IOContext ctxt) throws IOException, JsonParseException {
-        return _createParser(r, ctxt);
+    protected JsonParser _createParser(char[] data, int offset, int len, IOContext ctxt,
+            boolean recyclable) throws IOException {
+        return new ReaderBasedJsonParser(ctxt, _parserFeatures, null, _objectCodec,
+                _rootCharSymbols.makeChild(_factoryFeatures),
+                        data, offset, offset+len, recyclable);
     }
 
     /**
@@ -1294,23 +1233,12 @@ public class JsonFactory
      * interface from sub-class perspective, although not a public
      * method available to users of factory implementations.
      */
-    protected JsonParser _createParser(byte[] data, int offset, int len, IOContext ctxt)
-        throws IOException, JsonParseException
+    protected JsonParser _createParser(byte[] data, int offset, int len, IOContext ctxt) throws IOException
     {
         return new ByteSourceJsonBootstrapper(ctxt, data, offset, len).constructParser(_parserFeatures,
-                _objectCodec, _rootByteSymbols, _rootCharSymbols,
-                isEnabled(JsonFactory.Feature.CANONICALIZE_FIELD_NAMES),
-                isEnabled(JsonFactory.Feature.INTERN_FIELD_NAMES));
+                _objectCodec, _rootByteSymbols, _rootCharSymbols, _factoryFeatures);
     }
 
-    /**
-     * @deprecated since 2.1 -- use {@link #_createParser(byte[], int, int, IOContext)} instead
-     */
-    @Deprecated
-    protected JsonParser _createJsonParser(byte[] data, int offset, int len, IOContext ctxt) throws IOException, JsonParseException {
-        return _createParser(data, offset, len, ctxt);
-    }
-    
     /*
     /**********************************************************
     /* Factory methods used by factory for creating generator instances,
@@ -1328,8 +1256,7 @@ public class JsonFactory
      * interface from sub-class perspective, although not a public
      * method available to users of factory implementations.
      */
-    protected JsonGenerator _createGenerator(Writer out, IOContext ctxt)
-        throws IOException
+    protected JsonGenerator _createGenerator(Writer out, IOContext ctxt) throws IOException
     {
         WriterBasedJsonGenerator gen = new WriterBasedJsonGenerator(ctxt,
                 _generatorFeatures, _objectCodec, out);
@@ -1341,19 +1268,6 @@ public class JsonFactory
             gen.setRootValueSeparator(rootSep);
         }
         return gen;
-    }
-
-    /**
-     * @deprecated since 2.1 -- use {@link #_createGenerator(Writer, IOContext)} instead
-     */
-    @Deprecated
-    protected JsonGenerator _createJsonGenerator(Writer out, IOContext ctxt)
-        throws IOException
-    {
-        /* NOTE: MUST call the deprecated method until it is deleted, just so
-         * that override still works as expected, for now.
-         */
-        return _createGenerator(out, ctxt);
     }
 
     /**
@@ -1379,16 +1293,6 @@ public class JsonFactory
         return gen;
     }
 
-    /**
-     * @deprecated since 2.1
-     */
-    @Deprecated
-    protected JsonGenerator _createUTF8JsonGenerator(OutputStream out, IOContext ctxt)
-        throws IOException
-    {
-        return _createUTF8Generator(out, ctxt);
-    }
-
     protected Writer _createWriter(OutputStream out, JsonEncoding enc, IOContext ctxt) throws IOException
     {
         // note: this should not get called any more (caller checks, dispatches)
@@ -1398,21 +1302,70 @@ public class JsonFactory
         // not optimal, but should do unless we really care about UTF-16/32 encoding speed
         return new OutputStreamWriter(out, enc.getJavaName());
     }
+
+    /*
+    /**********************************************************
+    /* Internal factory methods, decorator handling
+    /**********************************************************
+     */
+
+    /**
+     * @since 2.4
+     */
+    protected final InputStream _decorate(InputStream in, IOContext ctxt) throws IOException {
+        if (_inputDecorator != null) {
+            InputStream in2 = _inputDecorator.decorate(ctxt, in);
+            if (in2 != null) {
+                return in2;
+            }
+        }
+        return in;
+    }
+    
+    /**
+     * @since 2.4
+     */
+    protected final Reader _decorate(Reader in, IOContext ctxt) throws IOException {
+        if (_inputDecorator != null) {
+            Reader in2 = _inputDecorator.decorate(ctxt, in);
+            if (in2 != null) {
+                return in2;
+            }
+        }
+        return in;
+    }
+
+    /**
+     * @since 2.4
+     */
+    protected final OutputStream _decorate(OutputStream out, IOContext ctxt) throws IOException {
+        if (_outputDecorator != null) {
+            OutputStream out2 = _outputDecorator.decorate(ctxt, out);
+            if (out2 != null) {
+                return out2;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * @since 2.4
+     */
+    protected final Writer _decorate(Writer out, IOContext ctxt) throws IOException {
+        if (_outputDecorator != null) {
+            Writer out2 = _outputDecorator.decorate(ctxt, out);
+            if (out2 != null) {
+                return out2;
+            }
+        }
+        return out;
+    }
     
     /*
     /**********************************************************
     /* Internal factory methods, other
     /**********************************************************
      */
-
-    /**
-     * Overridable factory method that actually instantiates desired
-     * context object.
-     */
-    protected IOContext _createContext(Object srcRef, boolean resourceManaged)
-    {
-        return new IOContext(_getBufferRecycler(), srcRef, resourceManaged);
-    }
 
     /**
      * Method used by factory to create buffer recycler instances
@@ -1433,13 +1386,19 @@ public class JsonFactory
     }
     
     /**
+     * Overridable factory method that actually instantiates desired
+     * context object.
+     */
+    protected IOContext _createContext(Object srcRef, boolean resourceManaged) {
+        return new IOContext(_getBufferRecycler(), srcRef, resourceManaged);
+    }
+    
+    /**
      * Helper methods used for constructing an optimal stream for
      * parsers to use, when input is to be read from an URL.
      * This helps when reading file content via URL.
      */
-    protected InputStream _optimizedStreamFromURL(URL url)
-        throws IOException
-    {
+    protected InputStream _optimizedStreamFromURL(URL url) throws IOException {
         if ("file".equals(url.getProtocol())) {
             /* Can not do this if the path refers
              * to a network drive on windows. This fixes the problem;

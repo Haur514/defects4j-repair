@@ -11,22 +11,33 @@ import com.fasterxml.jackson.core.*;
  */
 @SuppressWarnings("resource")
 public class TestNumericValues
-    extends com.fasterxml.jackson.test.BaseTest
+    extends com.fasterxml.jackson.core.BaseTest
 {
+    private final JsonFactory FACTORY = new JsonFactory();
+    
     public void testSimpleBoolean() throws Exception
     {
-        JsonParser jp = createParserUsingReader("[ true ]");
+        JsonParser jp = FACTORY.createParser("[ true ]");
         assertToken(JsonToken.START_ARRAY, jp.nextToken());
         assertToken(JsonToken.VALUE_TRUE, jp.nextToken());
         assertEquals(true, jp.getBooleanValue());
         jp.close();
     }
-
+    
     public void testSimpleInt() throws Exception
     {
-        int EXP_I = 1234;
+        for (int EXP_I : new int[] { 1234, -999, 0, 1, -2 }) {
+            _testSimpleInt(EXP_I, false);
+            _testSimpleInt(EXP_I, true);
+        }
+    }
 
-        JsonParser jp = createParserUsingReader("[ "+EXP_I+" ]");
+    private void _testSimpleInt(int EXP_I, boolean useStream) throws Exception
+    {
+        String DOC = "[ "+EXP_I+" ]";
+        JsonParser jp = useStream
+                ? FACTORY.createParser(DOC)
+                : FACTORY.createParser(DOC.getBytes("UTF-8"));
         assertToken(JsonToken.START_ARRAY, jp.nextToken());
         assertToken(JsonToken.VALUE_NUMBER_INT, jp.nextToken());
         assertEquals(JsonParser.NumberType.INT, jp.getNumberType());
@@ -36,6 +47,31 @@ public class TestNumericValues
         assertEquals((long) EXP_I, jp.getLongValue());
         assertEquals((double) EXP_I, jp.getDoubleValue());
         assertEquals(BigDecimal.valueOf((long) EXP_I), jp.getDecimalValue());
+        assertToken(JsonToken.END_ARRAY, jp.nextToken());
+        assertNull(jp.nextToken());
+        jp.close();
+
+        DOC = String.valueOf(EXP_I);
+        jp = useStream
+                ? FACTORY.createParser(DOC)
+                : FACTORY.createParser(DOC.getBytes("UTF-8"));
+        assertToken(JsonToken.VALUE_NUMBER_INT, jp.nextToken());
+        assertEquals(DOC, jp.getText());
+
+        int i = 0;
+        
+        try {
+            i = jp.getIntValue();
+        } catch (Exception e) {
+            throw new Exception("Failed to parse input '"+DOC+"' (parser of type "+jp.getClass().getSimpleName()+")", e);
+        }
+        
+        assertEquals(EXP_I, i);
+
+        assertEquals((long) EXP_I, jp.getLongValue());
+        assertEquals((double) EXP_I, jp.getDoubleValue());
+        assertEquals(BigDecimal.valueOf((long) EXP_I), jp.getDecimalValue());
+        assertNull(jp.nextToken());
         jp.close();
     }
 
@@ -46,9 +82,9 @@ public class TestNumericValues
             String input = "[ "+Integer.MAX_VALUE+","+Integer.MIN_VALUE+" ]";
             JsonParser jp;
             if (i == 0) {
-                jp = createParserUsingReader(input);                
+                jp = FACTORY.createParser(input);                
             } else {
-                jp = this.createParserUsingStream(input, "UTF-8");
+                jp = createParserUsingStream(input, "UTF-8");
             }
             assertToken(JsonToken.START_ARRAY, jp.nextToken());
             assertToken(JsonToken.VALUE_NUMBER_INT, jp.nextToken());
@@ -62,12 +98,11 @@ public class TestNumericValues
         }
     }
 
-    public void testSimpleLong()
-        throws Exception
+    public void testSimpleLong() throws Exception
     {
         long EXP_L = 12345678907L;
 
-        JsonParser jp = createParserUsingReader("[ "+EXP_L+" ]");
+        JsonParser jp = FACTORY.createParser("[ "+EXP_L+" ]");
         assertToken(JsonToken.START_ARRAY, jp.nextToken());
         assertToken(JsonToken.VALUE_NUMBER_INT, jp.nextToken());
         // beyond int, should be long
@@ -86,8 +121,7 @@ public class TestNumericValues
         jp.close();
     }
 
-    public void testLongRange()
-        throws Exception
+    public void testLongRange() throws Exception
     {
         for (int i = 0; i < 2; ++i) {
             long belowMinInt = -1L + Integer.MIN_VALUE;
@@ -95,7 +129,7 @@ public class TestNumericValues
             String input = "[ "+Long.MAX_VALUE+","+Long.MIN_VALUE+","+aboveMaxInt+", "+belowMinInt+" ]";
             JsonParser jp;
             if (i == 0) {
-                jp = createParserUsingReader(input);                
+                jp = FACTORY.createParser(input);                
             } else {
                 jp = this.createParserUsingStream(input, "UTF-8");
             }
@@ -134,7 +168,7 @@ public class TestNumericValues
             String input = "[ "+small+"  ,  "+big+"]";
             JsonParser jp;
             if (i == 0) {
-                jp = createParserUsingReader(input);                
+                jp = FACTORY.createParser(input);                
             } else {
                 jp = this.createParserUsingStream(input, "UTF-8");
             }
@@ -163,7 +197,7 @@ public class TestNumericValues
         for (int i = 0; i < 2; ++i) {
             JsonParser jp;
             if (i == 0) {
-                jp = createParserUsingReader(NUMBER_STR);                
+                jp = FACTORY.createParser(NUMBER_STR);                
             } else {
                 jp = this.createParserUsingStream(NUMBER_STR, "UTF-8");
             }
@@ -175,34 +209,54 @@ public class TestNumericValues
         }
     }
     
-    public void testSimpleDouble()
-        throws Exception
+    public void testSimpleDouble() throws Exception
     {
         final String[] INPUTS = new String[] {
-            "1234.00", "2.1101567E-16", "1.0e5", "2.5e+5", "9e4", "-12e-3", "0.25"
+            "1234.00", "2.1101567E-16", "1.0e5", "0.0", "1.0", "-1.0", 
+            "-0.5", "-12.9", "-999.0",
+            "2.5e+5", "9e4", "-12e-3", "0.25",
         };
         for (int input = 0; input < 2; ++input) {
             for (int i = 0; i < INPUTS.length; ++i) {
 
-                /* Testing double is more difficult, given the rounding
-                 * errors and such. But let's try anyways.
-                 */
+                // First in array
+                
                 String STR = INPUTS[i];
                 double EXP_D = Double.parseDouble(STR);
                 String DOC = "["+STR+"]";
-                
+
                 JsonParser jp;
                 
                 if (input == 0) {
                     jp = createParserUsingStream(DOC, "UTF-8");
                 } else {
-                    jp = createParserUsingReader(DOC);
+                    jp = FACTORY.createParser(DOC);
                 }
                 assertToken(JsonToken.START_ARRAY, jp.nextToken());
                 assertToken(JsonToken.VALUE_NUMBER_FLOAT, jp.nextToken());
                 assertEquals(STR, jp.getText());
                 assertEquals(EXP_D, jp.getDoubleValue());
                 assertToken(JsonToken.END_ARRAY, jp.nextToken());
+                assertNull(jp.nextToken());
+                jp.close();
+
+                // then outside
+                if (input == 0) {
+                    jp = createParserUsingStream(STR, "UTF-8");
+                } else {
+                    jp = FACTORY.createParser(STR);
+                }
+                JsonToken t = null;
+
+                try {
+                    t = jp.nextToken();
+                } catch (Exception e) {
+                    throw new Exception("Failed to parse input '"+STR+"' (parser of type "+jp.getClass().getSimpleName()+")", e);
+                }
+                
+                assertToken(JsonToken.VALUE_NUMBER_FLOAT, t);
+                assertEquals(STR, jp.getText());
+                assertNull(jp.nextToken());
                 jp.close();
             }
         }
@@ -218,7 +272,7 @@ public class TestNumericValues
             if (input == 0) {
                 jp = createParserUsingStream(DOC, "UTF-8");
             } else {
-                jp = createParserUsingReader(DOC);
+                jp = FACTORY.createParser(DOC);
             }
 
             assertToken(JsonToken.START_ARRAY, jp.nextToken());
@@ -280,7 +334,7 @@ public class TestNumericValues
             if (input == 0) {
                 jp = createParserUsingStream(DOC_BELOW, "UTF-8");
             } else {
-                jp = createParserUsingReader(DOC_BELOW);
+                jp = FACTORY.createParser(DOC_BELOW);
             }
             jp.nextToken();
             try {
@@ -353,7 +407,7 @@ public class TestNumericValues
             if (input == 0) {
                 jp = createParserUsingStream(DOC, "UTF-8");
             } else {
-                jp = createParserUsingReader(DOC);
+                jp = FACTORY.createParser(DOC);
             }
 
             assertToken(JsonToken.START_ARRAY, jp.nextToken());
@@ -377,7 +431,7 @@ public class TestNumericValues
     public void testInvalidBooleanAccess()
         throws Exception
     {
-        JsonParser jp = createParserUsingReader("[ \"abc\" ]");
+        JsonParser jp = FACTORY.createParser("[ \"abc\" ]");
         assertToken(JsonToken.START_ARRAY, jp.nextToken());
         assertToken(JsonToken.VALUE_STRING, jp.nextToken());
         try {
@@ -391,7 +445,7 @@ public class TestNumericValues
 
     public void testInvalidIntAccess() throws Exception
     {
-        JsonParser jp = createParserUsingReader("[ \"abc\" ]");
+        JsonParser jp = FACTORY.createParser("[ \"abc\" ]");
         assertToken(JsonToken.START_ARRAY, jp.nextToken());
         assertToken(JsonToken.VALUE_STRING, jp.nextToken());
         try {

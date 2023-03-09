@@ -2,6 +2,7 @@ package com.fasterxml.jackson.core.json;
 
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
+import java.util.Random;
 
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
@@ -10,7 +11,7 @@ import com.fasterxml.jackson.core.SerializableString;
 import com.fasterxml.jackson.core.io.SerializedString;
 
 public class TestNextXxx
-    extends com.fasterxml.jackson.test.BaseTest
+    extends com.fasterxml.jackson.core.BaseTest
 {
     /*
     /********************************************************
@@ -40,6 +41,14 @@ public class TestNextXxx
         _testIssue38(false);
         _testIssue38(true);
     }
+
+    public void testNextNameWithLongContent() throws Exception
+    {
+        final JsonFactory jf = new JsonFactory();
+
+        _testLong(jf, false);
+        _testLong(jf, true);
+    }
     
     /*
     /********************************************************
@@ -54,10 +63,42 @@ public class TestNextXxx
         JsonParser jp = useStream ?
             jf.createParser(new ByteArrayInputStream(DOC.getBytes("UTF-8")))
             : jf.createParser(new StringReader(DOC));
-        SerializedString NAME = new SerializedString("name");
+        final SerializedString NAME = new SerializedString("name");
         assertFalse(jp.nextFieldName(NAME));
         assertToken(JsonToken.START_OBJECT, jp.getCurrentToken());
         assertTrue(jp.nextFieldName(NAME));
+        assertToken(JsonToken.FIELD_NAME, jp.getCurrentToken());
+        assertEquals(NAME.getValue(), jp.getCurrentName());
+        assertEquals(NAME.getValue(), jp.getText());
+        assertFalse(jp.nextFieldName(NAME));
+        assertToken(JsonToken.VALUE_NUMBER_INT, jp.getCurrentToken());
+        assertEquals(123, jp.getIntValue());
+
+        assertFalse(jp.nextFieldName(NAME));
+        assertToken(JsonToken.FIELD_NAME, jp.getCurrentToken());
+        assertEquals("name2", jp.getCurrentName());
+        assertToken(JsonToken.VALUE_NUMBER_INT, jp.nextToken());
+
+        assertFalse(jp.nextFieldName(NAME));
+        assertToken(JsonToken.FIELD_NAME, jp.getCurrentToken());
+        assertEquals("x", jp.getCurrentName());
+
+        assertFalse(jp.nextFieldName(NAME));
+        assertToken(JsonToken.VALUE_STRING, jp.getCurrentToken());
+
+        assertFalse(jp.nextFieldName(NAME));
+        assertToken(JsonToken.END_OBJECT, jp.getCurrentToken());
+
+        assertFalse(jp.nextFieldName(NAME));
+        assertNull(jp.getCurrentToken());
+
+        jp.close();
+
+        // Actually, try again with slightly different sequence...
+        jp = useStream ? jf.createParser(DOC.getBytes("UTF-8"))
+                : jf.createParser(DOC);
+        assertToken(JsonToken.START_OBJECT, jp.nextToken());
+        assertFalse(jp.nextFieldName(new SerializedString("Nam")));
         assertToken(JsonToken.FIELD_NAME, jp.getCurrentToken());
         assertEquals(NAME.getValue(), jp.getCurrentName());
         assertEquals(NAME.getValue(), jp.getText());
@@ -174,6 +215,45 @@ public class TestNextXxx
         assertEquals("value", parser.getText());
         assertEquals(JsonToken.END_OBJECT, parser.nextToken());
         assertNull(parser.nextToken());
+        parser.close();
+    }
+
+    private void _testLong(JsonFactory f, boolean useStream) throws Exception
+    {
+        // do 5 meg thingy
+        final int SIZE = 5 * 1024 * 1024;
+        StringBuilder sb = new StringBuilder(SIZE + 20);
+
+        sb.append("{");
+        Random rnd = new Random(1);
+        int count = 0;
+        while (sb.length() < SIZE) {
+            ++count;
+            if (sb.length() > 1) {
+                sb.append(", ");
+            }
+            int val = rnd.nextInt();
+            sb.append('"');
+            sb.append("f"+val);
+            sb.append("\":");
+            sb.append(String.valueOf(val % 1000));
+        }
+        sb.append("}");
+        final String DOC = sb.toString();
+    
+        JsonParser parser = useStream ?
+                f.createParser(new ByteArrayInputStream(DOC.getBytes("UTF-8")))
+                : f.createParser(new StringReader(DOC));
+        assertToken(JsonToken.START_OBJECT, parser.nextToken());
+        rnd = new Random(1);
+        for (int i = 0; i < count; ++i) {
+            int exp = rnd.nextInt();
+            SerializableString expName = new SerializedString("f"+exp);
+            assertTrue(parser.nextFieldName(expName));
+            assertToken(JsonToken.VALUE_NUMBER_INT, parser.nextToken());
+            assertEquals(exp % 1000, parser.getIntValue());
+        }
+        assertToken(JsonToken.END_OBJECT, parser.nextToken());
         parser.close();
     }
 }

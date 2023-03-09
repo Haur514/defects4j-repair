@@ -9,7 +9,7 @@ import java.io.*;
  * functionality works as expected.
  */
 public class TestJsonGenerator
-    extends com.fasterxml.jackson.test.BaseTest
+    extends com.fasterxml.jackson.core.BaseTest
 {
     // // // First, tests for primitive (non-structured) values
 
@@ -53,22 +53,19 @@ public class TestJsonGenerator
         }
     }
 
-    public void testIntWrite()
-        throws Exception
+    public void testIntWrite() throws Exception
     {
         doTestIntWrite(false);
         doTestIntWrite(true);
     }
 
-    public void testLongWrite()
-        throws Exception
+    public void testLongWrite() throws Exception
     {
         doTestLongWrite(false);
         doTestLongWrite(true);
     }
 
-    public void testBooleanWrite()
-        throws Exception
+    public void testBooleanWrite() throws Exception
     {
         for (int i = 0; i < 4; ++i) {
             boolean state = (i & 1) == 0;
@@ -240,7 +237,8 @@ public class TestJsonGenerator
         throws Exception
     {
         int[] VALUES = new int[] {
-            0, 1, -9, 32, -32, 57, 13240, -9999, Integer.MAX_VALUE, Integer.MAX_VALUE
+            0, 1, -9, 32, -32, 57, 189, 2017, -9999, 13240, 123456,
+            1111111, 22222222, 123456789, Integer.MAX_VALUE, Integer.MAX_VALUE
         };
         for (int i = 0; i < VALUES.length; ++i) {
             int VALUE = VALUES[i];

@@ -12,7 +12,7 @@ import com.fasterxml.jackson.core.sym.Name;
  * good at catching it...).
  */
 public class TestByteBasedSymbols
-    extends com.fasterxml.jackson.test.BaseTest
+    extends com.fasterxml.jackson.core.BaseTest
 {
     final static String[] FIELD_NAMES = new String[] {
         "a", "b", "c", "x", "y", "b13", "abcdefg", "a123",
@@ -27,8 +27,7 @@ public class TestByteBasedSymbols
      * This unit test checks that [JACKSON-5] is fixed; if not, a
      * symbol table corruption should result in odd problems.
      */
-    public void testSharedSymbols()
-        throws Exception
+    public void testSharedSymbols() throws Exception
     {
         // MUST share a single json factory
         JsonFactory jf = new JsonFactory();
@@ -84,7 +83,7 @@ public class TestByteBasedSymbols
         final int B_BYTES = 0x42424242; // "BBBB"
 
         BytesToNameCanonicalizer nc = BytesToNameCanonicalizer.createRoot()
-                .makeChild(true, true);
+                .makeChild(JsonFactory.Feature.collectDefaults());
         assertNull(nc.findName(A_BYTES));
         assertNull(nc.findName(A_BYTES, B_BYTES));
 

@@ -1,8 +1,10 @@
 package com.fasterxml.jackson.core.sym;
 
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.util.InternCache;
 
 /**
@@ -17,53 +19,47 @@ import com.fasterxml.jackson.core.util.InternCache;
  */
 public final class BytesToNameCanonicalizer
 {
-    protected static final int DEFAULT_TABLE_SIZE = 64;
+    private static final int DEFAULT_T_SIZE = 64;
 
     /**
      * Let's not expand symbol tables past some maximum size;
      * this should protected against OOMEs caused by large documents
      * with unique (~= random) names.
      */
-    protected static final int MAX_TABLE_SIZE = 0x10000; // 64k entries == 256k mem
+    private static final int MAX_T_SIZE = 0x10000; // 64k entries == 256k mem
     
     /**
      * Let's only share reasonably sized symbol tables. Max size set to 3/4 of 16k;
      * this corresponds to 64k main hash index. This should allow for enough distinct
      * names for almost any case.
      */
-    final static int MAX_ENTRIES_FOR_REUSE = 6000;
+    private final static int MAX_ENTRIES_FOR_REUSE = 6000;
 
     /**
      * Also: to thwart attacks based on hash collisions (which may or may not
      * be cheap to calculate), we will need to detect "too long"
-     * collision chains. Let's start with static value of 255 entries
-     * for the longest legal chain.
+     * collision chains.
      *<p>
      * Note: longest chain we have been able to produce without malicious
-     * intent has been 60 (with "com.fasterxml.jackson.core.main.TestWithTonsaSymbols");
-     * our setting should be reasonable here.
+     * intent has been 10 (with "com.fasterxml.jackson.core.sym.TestSymbolTables");
+     * our setting should be reasonable here. Also note that overflow
+     * chains are shared between multiple primary cells, which could cause
+     * problems for lower values.
+     *<p>
+     * Also note that value was lowered from 255 (2.3 and earlier) to 100 for 2.4
      * 
      * @since 2.1
      */
-    final static int MAX_COLL_CHAIN_LENGTH = 255;
+    private final static int MAX_COLL_CHAIN_LENGTH = 100;
 
     /**
-     * And to support reduce likelihood of accidental collisions causing
-     * exceptions, let's prevent reuse of tables with long collision
-     * overflow lists as well.
-     * 
-     * @since 2.1
-     */
-    final static int MAX_COLL_CHAIN_FOR_REUSE  = 63;
-
-    /**
-     * No point in trying to construct tiny tables, just need to resize
-     * soon.
+     * No point in trying to construct tiny tables, just need to resize soon.
      */
     final static int MIN_HASH_SIZE = 16;
 
     /**
-     * We will also need to defin
+     * We will also need to define initial size for collision list,
+     * when copying it.
      */
     final static int INITIAL_COLLISION_LEN = 32;
 
@@ -102,19 +98,36 @@ public final class BytesToNameCanonicalizer
      * 
      * @since 2.1
      */
-    final private int _hashSeed;
+    final private int _seed;
+    
+    /*
+    /**********************************************************
+    /* Configuration
+    /**********************************************************
+     */
+
+    /**
+     * Whether canonical symbol Strings are to be intern()ed before added
+     * to the table or not.
+     *<p>
+     * NOTE: non-final to allow disabling intern()ing in case of excessive
+     * collisions.
+     */
+    protected boolean _intern;
+
+    /**
+     * Flag that indicates whether we should throw an exception if enough 
+     * hash collisions are detected (true); or just worked around (false).
+     * 
+     * @since 2.4
+     */
+    protected final boolean _failOnDoS;
     
     /*
     /**********************************************************
     /* Main table state
     /**********************************************************
      */
-
-    /**
-     * Whether canonical symbol Strings are to be intern()ed before added
-     * to the table or not
-     */
-    protected final boolean _intern;
     
     // // // First, global information
 
@@ -141,7 +154,7 @@ public final class BytesToNameCanonicalizer
      * size; essentially, hash array size - 1 (since hash array sizes
      * are 2^N).
      */
-    protected int _mainHashMask;
+    protected int _hashMask;
 
     /**
      * Array of 2^N size, which contains combination
@@ -149,7 +162,7 @@ public final class BytesToNameCanonicalizer
      * and 8-bit collision bucket index (0 to indicate empty
      * collision bucket chain; otherwise subtract one from index)
      */
-    protected int[] _mainHash;
+    protected int[] _hash;
 
     /**
      * Array that contains <code>Name</code> instances matching
@@ -206,9 +219,9 @@ public final class BytesToNameCanonicalizer
      * and when adding new collision list queues (i.e. creating a new
      * collision list head entry)
      */
-    private boolean _mainHashShared;
+    private boolean _hashShared;
 
-    private boolean _mainNamesShared;
+    private boolean _namesShared;
 
     /**
      * Flag that indicates whether underlying data structures for
@@ -223,6 +236,22 @@ public final class BytesToNameCanonicalizer
 
     /*
     /**********************************************************
+    /* Bit of DoS detection goodness
+    /**********************************************************
+     */
+
+    /**
+     * Lazily constructed structure that is used to keep track of
+     * collision buckets that have overflowed once: this is used
+     * to detect likely attempts at denial-of-service attacks that
+     * uses hash collisions.
+     * 
+     * @since 2.4
+     */
+    protected BitSet _overflows;
+    
+    /*
+    /**********************************************************
     /* Life-cycle: constructors
     /**********************************************************
      */
@@ -231,49 +260,50 @@ public final class BytesToNameCanonicalizer
      * Constructor used for creating per-<code>JsonFactory</code> "root"
      * symbol tables: ones used for merging and sharing common symbols
      * 
-     * @param hashSize Initial hash area size
+     * @param sz Initial hash area size
      * @param intern Whether Strings contained should be {@link String#intern}ed
      * @param seed Random seed valued used to make it more difficult to cause
      *   collisions (used for collision-based DoS attacks).
      */
-    private BytesToNameCanonicalizer(int hashSize, boolean intern, int seed)
-    {
+    private BytesToNameCanonicalizer(int sz, boolean intern, int seed, boolean failOnDoS) {
         _parent = null;
-        _hashSeed = seed;
+        _seed = seed;
         _intern = intern;
+        _failOnDoS = failOnDoS;
         // Sanity check: let's now allow hash sizes below certain minimum value
-        if (hashSize < MIN_HASH_SIZE) {
-            hashSize = MIN_HASH_SIZE;
+        if (sz < MIN_HASH_SIZE) {
+            sz = MIN_HASH_SIZE;
         } else {
             /* Also; size must be 2^N; otherwise hash algorithm won't
              * work... so let's just pad it up, if so
              */
-            if ((hashSize & (hashSize - 1)) != 0) { // only true if it's 2^N
+            if ((sz & (sz - 1)) != 0) { // only true if it's 2^N
                 int curr = MIN_HASH_SIZE;
-                while (curr < hashSize) {
+                while (curr < sz) {
                     curr += curr;
                 }
-                hashSize = curr;
+                sz = curr;
             }
         }
-        _tableInfo = new AtomicReference<TableInfo>(initTableInfo(hashSize));
+        _tableInfo = new AtomicReference<TableInfo>(initTableInfo(sz));
     }
 
     /**
      * Constructor used when creating a child instance
      */
-    private BytesToNameCanonicalizer(BytesToNameCanonicalizer parent, boolean intern, int seed,
-            TableInfo state)
+    private BytesToNameCanonicalizer(BytesToNameCanonicalizer parent, boolean intern,
+            int seed, boolean failOnDoS, TableInfo state)
     {
         _parent = parent;
-        _hashSeed = seed;
+        _seed = seed;
         _intern = intern;
+        _failOnDoS = failOnDoS;
         _tableInfo = null; // not used by child tables
 
         // Then copy shared state
         _count = state.count;
-        _mainHashMask = state.mainHashMask;
-        _mainHash = state.mainHash;
+        _hashMask = state.mainHashMask;
+        _hash = state.mainHash;
         _mainNames = state.mainNames;
         _collList = state.collList;
         _collCount = state.collCount;
@@ -282,8 +312,8 @@ public final class BytesToNameCanonicalizer
 
         // and then set other state to reflect sharing status
         _needRehash = false;
-        _mainHashShared = true;
-        _mainNamesShared = true;
+        _hashShared = true;
+        _namesShared = true;
         _collListShared = true;
     }
 
@@ -291,12 +321,11 @@ public final class BytesToNameCanonicalizer
         public TableInfo(int count, int mainHashMask, int[] mainHash, Name[] mainNames,
                 Bucket[] collList, int collCount, int collEnd, int longestCollisionList)
      */
-    private TableInfo initTableInfo(int hashSize)
-    {
+    private TableInfo initTableInfo(int sz) {
         return new TableInfo(0, // count
-                hashSize - 1, // mainHashMask
-                new int[hashSize], // mainHash
-                new Name[hashSize], // mainNames
+                sz - 1, // mainHashMask
+                new int[sz], // mainHash
+                new Name[sz], // mainNames
                 null, // collList
                 0, // collCount,
                 0, // collEnd
@@ -314,8 +343,7 @@ public final class BytesToNameCanonicalizer
      * Factory method to call to create a symbol table instance with a
      * randomized seed value.
      */
-    public static BytesToNameCanonicalizer createRoot()
-    {
+    public static BytesToNameCanonicalizer createRoot() {
         /* [Issue-21]: Need to use a variable seed, to thwart hash-collision
          * based attacks.
          */
@@ -329,23 +357,29 @@ public final class BytesToNameCanonicalizer
      * Factory method that should only be called from unit tests, where seed
      * value should remain the same.
      */
-    protected static BytesToNameCanonicalizer createRoot(int hashSeed) {
-        return new BytesToNameCanonicalizer(DEFAULT_TABLE_SIZE, true, hashSeed);
+    protected static BytesToNameCanonicalizer createRoot(int seed) {
+        return new BytesToNameCanonicalizer(DEFAULT_T_SIZE, true, seed, true);
     }
     
     /**
      * Factory method used to create actual symbol table instance to
      * use for parsing.
-     * 
-     * @param intern Whether canonical symbol Strings should be interned
-     *   or not
      */
-    public BytesToNameCanonicalizer makeChild(boolean canonicalize,
-        boolean intern)
-    {
-        return new BytesToNameCanonicalizer(this, intern, _hashSeed, _tableInfo.get());
+    public BytesToNameCanonicalizer makeChild(int flags) {
+        return new BytesToNameCanonicalizer(this,
+                JsonFactory.Feature.INTERN_FIELD_NAMES.enabledIn(flags),
+                _seed,
+                JsonFactory.Feature.FAIL_ON_SYMBOL_HASH_OVERFLOW.enabledIn(flags),
+                _tableInfo.get());
     }
 
+    @Deprecated // since 2.4
+    public BytesToNameCanonicalizer makeChild(boolean canonicalize, boolean intern) {
+        return new BytesToNameCanonicalizer(this, intern, _seed,
+        		true, // JsonFactory.Feature.FAIL_ON_SYMBOL_HASH_OVERFLOW
+                _tableInfo.get());
+    }
+    
     /**
      * Method called by the using code to indicate it is done
      * with this instance. This lets instance merge accumulated
@@ -361,8 +395,8 @@ public final class BytesToNameCanonicalizer
             /* Let's also mark this instance as dirty, so that just in
              * case release was too early, there's no corruption of possibly shared data.
              */
-            _mainHashShared = true;
-            _mainNamesShared = true;
+            _hashShared = true;
+            _namesShared = true;
             _collListShared = true;
         }
     }
@@ -371,9 +405,12 @@ public final class BytesToNameCanonicalizer
     {
         final int childCount = childState.count;
         TableInfo currState = _tableInfo.get();
-        
-        // Only makes sense if child actually has more entries
-        if (childCount <= currState.count) {
+
+        /* Should usually grow; but occasionally could also shrink if
+         * (but only if) collision list overflow ends up clearing
+         * some collision lists.
+         */
+        if (childCount == currState.count) {
             return;
         }
 
@@ -383,14 +420,13 @@ public final class BytesToNameCanonicalizer
          * One way to do this is to just purge tables if they grow
          * too large, and that's what we'll do here.
          */
-        if (childCount > MAX_ENTRIES_FOR_REUSE
-                || childState.longestCollisionList > MAX_COLL_CHAIN_FOR_REUSE) {
+        if (childCount > MAX_ENTRIES_FOR_REUSE) {
             /* Should there be a way to get notified about this
              * event, to log it or such? (as it's somewhat abnormal
              * thing to happen)
              */
             // At any rate, need to clean up the tables
-            childState = initTableInfo(DEFAULT_TABLE_SIZE);
+            childState = initTableInfo(DEFAULT_T_SIZE);
         }
         _tableInfo.compareAndSet(currState, childState);
     }
@@ -413,21 +449,19 @@ public final class BytesToNameCanonicalizer
     /**
      * @since 2.1
      */
-    public int bucketCount() { return _mainHash.length; }
+    public int bucketCount() { return _hash.length; }
     
     /**
      * Method called to check to quickly see if a child symbol table
      * may have gotten additional entries. Used for checking to see
      * if a child table should be merged into shared table.
      */
-    public boolean maybeDirty() {
-        return !_mainHashShared;
-    }
+    public boolean maybeDirty() { return !_hashShared; }
 
     /**
      * @since 2.1
      */
-    public int hashSeed() { return _hashSeed; }
+    public int hashSeed() { return _seed; }
     
     /**
      * Method mostly needed by unit tests; calculates number of
@@ -436,9 +470,7 @@ public final class BytesToNameCanonicalizer
      * 
      * @since 2.1
      */
-    public int collisionCount() {
-        return _collCount;
-    }
+    public int collisionCount() { return _collCount; }
 
     /**
      * Method mostly needed by unit tests; calculates length of the
@@ -457,8 +489,7 @@ public final class BytesToNameCanonicalizer
     /**********************************************************
      */
     
-    public static Name getEmptyName()
-    {
+    public static Name getEmptyName() {
         return Name1.getEmptyName();
     }
 
@@ -470,18 +501,18 @@ public final class BytesToNameCanonicalizer
      * Note: separate methods to optimize common case of
      * short element/attribute names (4 or less ascii characters)
      *
-     * @param firstQuad int32 containing first 4 bytes of the name;
+     * @param q1 int32 containing first 4 bytes of the name;
      *   if the whole name less than 4 bytes, padded with zero bytes
      *   in front (zero MSBs, ie. right aligned)
      *
      * @return Name matching the symbol passed (or constructed for
      *   it)
      */
-    public Name findName(int firstQuad)
+    public Name findName(int q1)
     {
-        int hash = calcHash(firstQuad);
-        int ix = (hash & _mainHashMask);
-        int val = _mainHash[ix];
+        int hash = calcHash(q1);
+        int ix = (hash & _hashMask);
+        int val = _hash[ix];
         
         /* High 24 bits of the value are low 24 bits of hash (low 8 bits
          * are bucket index)... match?
@@ -492,7 +523,7 @@ public final class BytesToNameCanonicalizer
             if (name == null) { // main slot empty; can't find
                 return null;
             }
-            if (name.equals(firstQuad)) {
+            if (name.equals(q1)) {
                 return name;
             }
         } else if (val == 0) { // empty slot? no match
@@ -504,7 +535,7 @@ public final class BytesToNameCanonicalizer
             val -= 1; // to convert from 1-based to 0...
             Bucket bucket = _collList[val];
             if (bucket != null) {
-                return bucket.find(hash, firstQuad, 0);
+                return bucket.find(hash, q1, 0);
             }
         }
         // Nope, no match whatsoever
@@ -519,18 +550,18 @@ public final class BytesToNameCanonicalizer
      * Note: separate methods to optimize common case of relatively
      * short element/attribute names (8 or less ascii characters)
      *
-     * @param firstQuad int32 containing first 4 bytes of the name.
-     * @param secondQuad int32 containing bytes 5 through 8 of the
+     * @param q1 int32 containing first 4 bytes of the name.
+     * @param q2 int32 containing bytes 5 through 8 of the
      *   name; if less than 8 bytes, padded with up to 3 zero bytes
      *   in front (zero MSBs, ie. right aligned)
      *
      * @return Name matching the symbol passed (or constructed for it)
      */
-    public Name findName(int firstQuad, int secondQuad)
+    public Name findName(int q1, int q2)
     {
-        int hash = (secondQuad == 0) ? calcHash(firstQuad) : calcHash(firstQuad, secondQuad);
-        int ix = (hash & _mainHashMask);
-        int val = _mainHash[ix];
+        int hash = (q2 == 0) ? calcHash(q1) : calcHash(q1, q2);
+        int ix = (hash & _hashMask);
+        int val = _hash[ix];
         
         /* High 24 bits of the value are low 24 bits of hash (low 8 bits
          * are bucket index)... match?
@@ -541,7 +572,7 @@ public final class BytesToNameCanonicalizer
             if (name == null) { // main slot empty; can't find
                 return null;
             }
-            if (name.equals(firstQuad, secondQuad)) {
+            if (name.equals(q1, q2)) {
                 return name;
             }
         } else if (val == 0) { // empty slot? no match
@@ -553,7 +584,7 @@ public final class BytesToNameCanonicalizer
             val -= 1; // to convert from 1-based to 0...
             Bucket bucket = _collList[val];
             if (bucket != null) {
-                return bucket.find(hash, firstQuad, secondQuad);
+                return bucket.find(hash, q1, q2);
             }
         }
         // Nope, no match whatsoever
@@ -570,26 +601,26 @@ public final class BytesToNameCanonicalizer
      * it is preferable to call the version optimized for short
      * names.
      *
-     * @param quads Array of int32s, each of which contain 4 bytes of
+     * @param q Array of int32s, each of which contain 4 bytes of
      *   encoded name
      * @param qlen Number of int32s, starting from index 0, in quads
      *   parameter
      *
      * @return Name matching the symbol passed (or constructed for it)
      */
-    public Name findName(int[] quads, int qlen)
+    public Name findName(int[] q, int qlen)
     {
         if (qlen < 3) { // another sanity check
-            return findName(quads[0], (qlen < 2) ? 0 : quads[1]);
+            return findName(q[0], (qlen < 2) ? 0 : q[1]);
         }
-        int hash = calcHash(quads, qlen);
+        int hash = calcHash(q, qlen);
         // (for rest of comments regarding logic, see method above)
-        int ix = (hash & _mainHashMask);
-        int val = _mainHash[ix];
+        int ix = (hash & _hashMask);
+        int val = _hash[ix];
         if ((((val >> 8) ^ hash) << 8) == 0) {
             Name name = _mainNames[ix];
             if (name == null // main slot empty; no collision list then either
-                || name.equals(quads, qlen)) { // should be match, let's verify
+                || name.equals(q, qlen)) { // should be match, let's verify
                 return name;
             }
         } else if (val == 0) { // empty slot? no match
@@ -600,7 +631,7 @@ public final class BytesToNameCanonicalizer
             val -= 1; // to convert from 1-based to 0...
             Bucket bucket = _collList[val];
             if (bucket != null) {
-                return bucket.find(hash, quads, qlen);
+                return bucket.find(hash, q, qlen);
             }
         }
         return null;
@@ -612,29 +643,29 @@ public final class BytesToNameCanonicalizer
     /**********************************************************
      */
 
-    public Name addName(String symbolStr, int q1, int q2)
+    public Name addName(String name, int q1, int q2)
     {
         if (_intern) {
-            symbolStr = InternCache.instance.intern(symbolStr);
+            name = InternCache.instance.intern(name);
         }
         int hash = (q2 == 0) ? calcHash(q1) : calcHash(q1, q2);
-        Name symbol = constructName(hash, symbolStr, q1, q2);
+        Name symbol = constructName(hash, name, q1, q2);
         _addSymbol(hash, symbol);
         return symbol;
     }
     
-    public Name addName(String symbolStr, int[] quads, int qlen)
+    public Name addName(String name, int[] q, int qlen)
     {
         if (_intern) {
-            symbolStr = InternCache.instance.intern(symbolStr);
+            name = InternCache.instance.intern(name);
         }
         int hash;
         if (qlen < 3) {
-            hash = (qlen == 1) ? calcHash(quads[0]) : calcHash(quads[0], quads[1]);
+            hash = (qlen == 1) ? calcHash(q[0]) : calcHash(q[0], q[1]);
         } else {
-            hash = calcHash(quads, qlen);
+            hash = calcHash(q, qlen);
         }
-        Name symbol = constructName(hash, symbolStr, quads, qlen);
+        Name symbol = constructName(hash, name, q, qlen);
         _addSymbol(hash, symbol);
         return symbol;
     }
@@ -659,28 +690,28 @@ public final class BytesToNameCanonicalizer
     private final static int MULT2 = 65599;
     private final static int MULT3 = 31;
     
-    public int calcHash(int firstQuad)
+    public int calcHash(int q1)
     {
-        int hash = firstQuad ^ _hashSeed;
+        int hash = q1 ^ _seed;
         hash += (hash >>> 15); // to xor hi- and low- 16-bits
         hash ^= (hash >>> 9); // as well as lowest 2 bytes
         return hash;
     }
 
-    public int calcHash(int firstQuad, int secondQuad)
+    public int calcHash(int q1, int q2)
     {
         /* For two quads, let's change algorithm a bit, to spice
          * things up (can do bit more processing anyway)
          */
-        int hash = firstQuad;
+        int hash = q1;
         hash ^= (hash >>> 15); // try mixing first and second byte pairs first
-        hash += (secondQuad * MULT); // then add second quad
-        hash ^= _hashSeed;
+        hash += (q2 * MULT); // then add second quad
+        hash ^= _seed;
         hash += (hash >>> 7); // and shuffle some more
         return hash;
     }
 
-    public int calcHash(int[] quads, int qlen)
+    public int calcHash(int[] q, int qlen)
     {
         // Note: may be called for qlen < 3; but has at least one int
         if (qlen < 3) {
@@ -692,17 +723,17 @@ public final class BytesToNameCanonicalizer
          * add seed bit later in the game, and switch plus/xor around,
          * use different shift lengths.
          */
-        int hash = quads[0] ^ _hashSeed;
+        int hash = q[0] ^ _seed;
         hash += (hash >>> 9);
         hash *= MULT;
-        hash += quads[1];
+        hash += q[1];
         hash *= MULT2;
         hash += (hash >>> 15);
-        hash ^= quads[2];
+        hash ^= q[2];
         hash += (hash >>> 17);
         
         for (int i = 3; i < qlen; ++i) {
-            hash = (hash * MULT3) ^ quads[i];
+            hash = (hash * MULT3) ^ q[i];
             // for longer entries, mess a bit in-between too
             hash += (hash >>> 3);
             hash ^= (hash << 7);
@@ -714,8 +745,7 @@ public final class BytesToNameCanonicalizer
     }
 
     // Method only used by unit tests
-    protected static int[] calcQuads(byte[] wordBytes)
-    {
+    protected static int[] calcQuads(byte[] wordBytes) {
         int blen = wordBytes.length;
         int[] result = new int[(blen + 3) / 4];
         for (int i = 0; i < blen; ++i) {
@@ -788,7 +818,7 @@ public final class BytesToNameCanonicalizer
 
     private void _addSymbol(int hash, Name symbol)
     {
-        if (_mainHashShared) { // always have to modify main entry
+        if (_hashShared) { // always have to modify main entry
             unshareMain();
         }
         // First, do we need to rehash?
@@ -801,10 +831,10 @@ public final class BytesToNameCanonicalizer
         /* Ok, enough about set up: now we need to find the slot to add
          * symbol in:
          */
-        int ix = (hash & _mainHashMask);
+        int ix = (hash & _hashMask);
         if (_mainNames[ix] == null) { // primary empty?
-            _mainHash[ix] = (hash << 8);
-            if (_mainNamesShared) {
+            _hash[ix] = (hash << 8);
+            if (_namesShared) {
                 unshareNames();
             }
             _mainNames[ix] = symbol;
@@ -816,7 +846,7 @@ public final class BytesToNameCanonicalizer
                 unshareCollision(); // also allocates if list was null
             }
             ++_collCount;
-            int entryValue = _mainHash[ix];
+            int entryValue = _hash[ix];
             int bucket = entryValue & 0xFF;
             if (bucket == 0) { // first spill over?
                 if (_collEnd <= LAST_VALID_BUCKET) { // yup, still unshared bucket
@@ -830,18 +860,23 @@ public final class BytesToNameCanonicalizer
                     bucket = findBestBucket();
                 }
                 // Need to mark the entry... and the spill index is 1-based
-                _mainHash[ix] = (entryValue & ~0xFF) | (bucket + 1);
+                _hash[ix] = (entryValue & ~0xFF) | (bucket + 1);
             } else {
                 --bucket; // 1-based index in value
             }
             
             // And then just need to link the new bucket entry in
             Bucket newB = new Bucket(symbol, _collList[bucket]);
-            _collList[bucket] = newB;
-            // but, be careful wrt attacks
-            _longestCollisionList = Math.max(newB.length(), _longestCollisionList);
-            if (_longestCollisionList > MAX_COLL_CHAIN_LENGTH) {
-                reportTooManyCollisions(MAX_COLL_CHAIN_LENGTH);
+            int collLen = newB.length;
+            if (collLen > MAX_COLL_CHAIN_LENGTH) {
+                /* 23-May-2014, tatu: Instead of throwing an exception right away, let's handle
+                 *   in bit smarter way.
+                 */
+                _handleSpillOverflow(bucket, newB);
+            } else {
+                _collList[bucket] = newB;
+                // but, be careful wrt attacks
+                _longestCollisionList = Math.max(newB.length, _longestCollisionList);
             }
         }
 
@@ -849,7 +884,7 @@ public final class BytesToNameCanonicalizer
          * 50% fill rate no matter what:
          */
         {
-            int hashSize = _mainHash.length;
+            int hashSize = _hash.length;
             if (_count > (hashSize >> 1)) {
                 int hashQuarter = (hashSize >> 2);
                 /* And either strictly above 75% (the usual) or
@@ -864,30 +899,54 @@ public final class BytesToNameCanonicalizer
         }
     }
 
+    private void _handleSpillOverflow(int bindex, Bucket newBucket)
+    {
+        if (_overflows == null) {
+            _overflows = new BitSet();
+            _overflows.set(bindex);
+        } else {
+            if (_overflows.get(bindex)) {
+                // Has happened once already, so not a coincident...
+                if (_failOnDoS) {
+                    reportTooManyCollisions(MAX_COLL_CHAIN_LENGTH);
+                }
+                // but even if we don't fail, we will stop intern()ing
+                _intern = false;
+            } else {
+                _overflows.set(bindex);
+            }
+        }
+        // regardless, if we get this far, clear up the bucket, adjust size appropriately.
+        _collList[bindex] = null;
+        _count -= (newBucket.length);
+        // we could calculate longest; but for now just mark as invalid
+        _longestCollisionList = -1;
+    }
+    
     private void rehash()
     {
         _needRehash = false;        
         // Note: since we'll make copies, no need to unshare, can just mark as such:
-        _mainNamesShared = false;
+        _namesShared = false;
 
         /* And then we can first deal with the main hash area. Since we
          * are expanding linearly (double up), we know there'll be no
          * collisions during this phase.
          */
-        int[] oldMainHash = _mainHash;
+        int[] oldMainHash = _hash;
         int len = oldMainHash.length;
         int newLen = len+len;
 
         /* 13-Mar-2010, tatu: Let's guard against OOME that could be caused by
          *    large documents with unique (or mostly so) names
          */
-        if (newLen > MAX_TABLE_SIZE) {
+        if (newLen > MAX_T_SIZE) {
             nukeSymbols();
             return;
         }
         
-        _mainHash = new int[newLen];
-        _mainHashMask = (newLen - 1);
+        _hash = new int[newLen];
+        _hashMask = (newLen - 1);
         Name[] oldNames = _mainNames;
         _mainNames = new Name[newLen];
         int symbolsSeen = 0; // let's do a sanity check
@@ -896,9 +955,9 @@ public final class BytesToNameCanonicalizer
             if (symbol != null) {
                 ++symbolsSeen;
                 int hash = symbol.hashCode();
-                int ix = (hash & _mainHashMask);
+                int ix = (hash & _hashMask);
                 _mainNames[ix] = symbol;
-                _mainHash[ix] = hash << 8; // will clear spill index
+                _hash[ix] = hash << 8; // will clear spill index
             }
         }
 
@@ -921,14 +980,14 @@ public final class BytesToNameCanonicalizer
         Bucket[] oldBuckets = _collList;
         _collList = new Bucket[oldBuckets.length];
         for (int i = 0; i < oldEnd; ++i) {
-            for (Bucket curr = oldBuckets[i]; curr != null; curr = curr._next) {
+            for (Bucket curr = oldBuckets[i]; curr != null; curr = curr.next) {
                 ++symbolsSeen;
-                Name symbol = curr._name;
+                Name symbol = curr.name;
                 int hash = symbol.hashCode();
-                int ix = (hash & _mainHashMask);
-                int val = _mainHash[ix];
+                int ix = (hash & _hashMask);
+                int val = _hash[ix];
                 if (_mainNames[ix] == null) { // no primary entry?
-                    _mainHash[ix] = (hash << 8);
+                    _hash[ix] = (hash << 8);
                     _mainNames[ix] = symbol;
                 } else { // nope, it's a collision, need to spill over
                     ++_collCount;
@@ -945,14 +1004,14 @@ public final class BytesToNameCanonicalizer
                             bucket = findBestBucket();
                         }
                         // Need to mark the entry... and the spill index is 1-based
-                        _mainHash[ix] = (val & ~0xFF) | (bucket + 1);
+                        _hash[ix] = (val & ~0xFF) | (bucket + 1);
                     } else {
                         --bucket; // 1-based index in value
                     }
                     // And then just need to link the new bucket entry in
                     Bucket newB = new Bucket(symbol, _collList[bucket]);
                     _collList[bucket] = newB;
-                    maxColl = Math.max(maxColl, newB.length());
+                    maxColl = Math.max(maxColl, newB.length);
                 }
             } // for (... buckets in the chain ...)
         } // for (... list of bucket heads ... )
@@ -968,11 +1027,10 @@ public final class BytesToNameCanonicalizer
      * Helper method called to empty all shared symbols, but to leave
      * arrays allocated
      */
-    private void nukeSymbols()
-    {
+    private void nukeSymbols() {
         _count = 0;
         _longestCollisionList = 0;
-        Arrays.fill(_mainHash, 0);
+        Arrays.fill(_hash, 0);
         Arrays.fill(_mainNames, null);
         Arrays.fill(_collList, null);
         _collCount = 0;
@@ -984,14 +1042,18 @@ public final class BytesToNameCanonicalizer
      * usually the first bucket that has only one entry, but in general
      * first one of the buckets with least number of entries
      */
-    private int findBestBucket()
-    {
+    private int findBestBucket() {
         Bucket[] buckets = _collList;
         int bestCount = Integer.MAX_VALUE;
         int bestIx = -1;
 
         for (int i = 0, len = _collEnd; i < len; ++i) {
-            int count = buckets[i].length();
+            Bucket b = buckets[i];
+            // [#145] may become null due to long overflow chain
+            if (b == null) {
+                return i;
+            }
+            int count = b.length;
             if (count < bestCount) {
                 if (count == 1) { // best possible
                     return i;
@@ -1009,15 +1071,13 @@ public final class BytesToNameCanonicalizer
      * even if addition is to the collision list (since collision list
      * index comes from lowest 8 bits of the primary hash entry)
      */
-    private void unshareMain()
-    {
-        final int[] old = _mainHash;
-        _mainHash = Arrays.copyOf(old, old.length);
-        _mainHashShared = false;
+    private void unshareMain() {
+        final int[] old = _hash;
+        _hash = Arrays.copyOf(old, old.length);
+        _hashShared = false;
     }
 
-    private void unshareCollision()
-    {
+    private void unshareCollision() {
         Bucket[] old = _collList;
         if (old == null) {
             _collList = new Bucket[INITIAL_COLLISION_LEN];
@@ -1027,15 +1087,13 @@ public final class BytesToNameCanonicalizer
         _collListShared = false;
     }
 
-    private void unshareNames()
-    {
+    private void unshareNames() {
         final Name[] old = _mainNames;
         _mainNames = Arrays.copyOf(old, old.length);
-        _mainNamesShared = false;
+        _namesShared = false;
     }
 
-    private void expandCollision()
-    {
+    private void expandCollision() {
         final Bucket[] old = _collList;
         _collList = Arrays.copyOf(old, old.length * 2);
     }
@@ -1046,16 +1104,14 @@ public final class BytesToNameCanonicalizer
     /**********************************************************
      */
 
-    private static Name constructName(int hash, String name, int q1, int q2)
-    {     
+    private static Name constructName(int hash, String name, int q1, int q2) {
         if (q2 == 0) { // one quad only?
             return new Name1(name, hash, q1);
         }
         return new Name2(name, hash, q1, q2);
     }
 
-    private static Name constructName(int hash, String name, int[] quads, int qlen)
-    {
+    private static Name constructName(int hash, String name, int[] quads, int qlen) {
         if (qlen < 4) { // Need to check for 3 quad one, can do others too
             switch (qlen) {
             case 1:
@@ -1067,12 +1123,7 @@ public final class BytesToNameCanonicalizer
             default:
             }
         }
-        // Otherwise, need to copy the incoming buffer
-        int[] buf = new int[qlen];
-        for (int i = 0; i < qlen; ++i) {
-            buf[i] = quads[i];
-        }
-        return new NameN(name, hash, buf, qlen);
+        return NameN.construct(name, hash, quads, qlen);
     }
 
     /*
@@ -1130,45 +1181,39 @@ public final class BytesToNameCanonicalizer
         public TableInfo(BytesToNameCanonicalizer src)
         {
             count = src._count;
-            mainHashMask = src._mainHashMask;
-            mainHash = src._mainHash;
+            mainHashMask = src._hashMask;
+            mainHash = src._hash;
             mainNames = src._mainNames;
             collList = src._collList;
             collCount = src._collCount;
             collEnd = src._collEnd;
             longestCollisionList = src._longestCollisionList;
         }
-    
     }
     
-    /**
-     * 
-     */
-    final static class Bucket
+    final private static class Bucket
     {
-        protected final Name _name;
-        protected final Bucket _next;
-        private final int _length;
+        protected final Name name;
+        protected final Bucket next;
+        private final int hash;
+        private final int length;
 
-        Bucket(Name name, Bucket next)
-        {
-            _name = name;
-            _next = next;
-            _length = (next == null) ? 1 : next._length+1;
+        Bucket(Name name, Bucket next) {
+            this.name = name;
+            this.next = next;
+            length = (next == null) ? 1 : next.length+1;
+            hash = name.hashCode();
         }
 
-        public int length() { return _length; }
-
-        public Name find(int hash, int firstQuad, int secondQuad)
-        {
-            if (_name.hashCode() == hash) {
-                if (_name.equals(firstQuad, secondQuad)) {
-                    return _name;
+        public Name find(int h, int firstQuad, int secondQuad) {
+            if (hash == h) {
+                if (name.equals(firstQuad, secondQuad)) {
+                    return name;
                 }
             }
-            for (Bucket curr = _next; curr != null; curr = curr._next) {
-                Name currName = curr._name;
-                if (currName.hashCode() == hash) {
+            for (Bucket curr = next; curr != null; curr = curr.next) {
+                if (curr.hash == h) {
+                    Name currName = curr.name;
                     if (currName.equals(firstQuad, secondQuad)) {
                         return currName;
                     }
@@ -1177,16 +1222,15 @@ public final class BytesToNameCanonicalizer
             return null;
         }
 
-        public Name find(int hash, int[] quads, int qlen)
-        {
-            if (_name.hashCode() == hash) {
-                if (_name.equals(quads, qlen)) {
-                    return _name;
+        public Name find(int h, int[] quads, int qlen) {
+            if (hash == h) {
+                if (name.equals(quads, qlen)) {
+                    return name;
                 }
             }
-            for (Bucket curr = _next; curr != null; curr = curr._next) {
-                Name currName = curr._name;
-                if (currName.hashCode() == hash) {
+            for (Bucket curr = next; curr != null; curr = curr.next) {
+                if (curr.hash == h) {
+                    Name currName = curr.name;
                     if (currName.equals(quads, qlen)) {
                         return currName;
                     }

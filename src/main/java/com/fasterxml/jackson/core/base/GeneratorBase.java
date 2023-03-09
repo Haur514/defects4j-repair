@@ -1,28 +1,19 @@
 package com.fasterxml.jackson.core.base;
 
 import java.io.*;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 import com.fasterxml.jackson.core.*;
-import com.fasterxml.jackson.core.JsonParser.NumberType;
 import com.fasterxml.jackson.core.json.DupDetector;
 import com.fasterxml.jackson.core.json.JsonWriteContext;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.core.util.VersionUtil;
-
-import static com.fasterxml.jackson.core.JsonTokenId.*;
 
 /**
  * This base class implements part of API that a JSON generator exposes
  * to applications, adds shared internal methods that sub-classes
  * can use and adds some abstract methods sub-classes must implement.
  */
-public abstract class GeneratorBase
-    extends JsonGenerator
+public abstract class GeneratorBase extends JsonGenerator
 {
     /*
     /**********************************************************
@@ -71,8 +62,7 @@ public abstract class GeneratorBase
     /**********************************************************
      */
 
-    protected GeneratorBase(int features, ObjectCodec codec)
-    {
+    protected GeneratorBase(int features, ObjectCodec codec) {
         super();
         _features = features;
         DupDetector dups = Feature.STRICT_DUPLICATE_DETECTION.enabledIn(features)
@@ -86,10 +76,7 @@ public abstract class GeneratorBase
      * Implemented with detection that tries to find "VERSION.txt" in same
      * package as the implementation class.
      */
-    @Override
-    public Version version() {
-        return VersionUtil.versionFor(getClass());
-    }
+    @Override public Version version() { return VersionUtil.versionFor(getClass()); }
     
     /*
     /**********************************************************
@@ -121,24 +108,15 @@ public abstract class GeneratorBase
 
     //public JsonGenerator configure(Feature f, boolean state) { }
 
-    @Override
-    public final boolean isEnabled(Feature f) {
-        return (_features & f.getMask()) != 0;
-    }
+    @Override public final boolean isEnabled(Feature f) { return (_features & f.getMask()) != 0; }
+    @Override public int getFeatureMask() { return _features; }
 
-    @Override
-    public int getFeatureMask() {
-        return _features;
-    }
-
-    @Override
-    public JsonGenerator setFeatureMask(int mask) {
+    @Override public JsonGenerator setFeatureMask(int mask) {
         _features = mask;
         return this;
     }
     
-    @Override
-    public JsonGenerator useDefaultPrettyPrinter() {
+    @Override public JsonGenerator useDefaultPrettyPrinter() {
         /* 28-Sep-2012, tatu: As per [Issue#84], should not override a
          *  pretty printer if one already assigned.
          */
@@ -148,14 +126,12 @@ public abstract class GeneratorBase
         return setPrettyPrinter(new DefaultPrettyPrinter());
     }
     
-    @Override
-    public JsonGenerator setCodec(ObjectCodec oc) {
+    @Override public JsonGenerator setCodec(ObjectCodec oc) {
         _objectCodec = oc;
         return this;
     }
 
-    @Override
-    public final ObjectCodec getCodec() { return _objectCodec; }
+    @Override public final ObjectCodec getCodec() { return _objectCodec; }
 
     /*
     /**********************************************************
@@ -166,8 +142,7 @@ public abstract class GeneratorBase
     /**
      * Note: co-variant return type.
      */
-    @Override
-    public final JsonWriteContext getOutputContext() { return _writeContext; }
+    @Override public final JsonWriteContext getOutputContext() { return _writeContext; }
 
     /*
     /**********************************************************
@@ -175,10 +150,10 @@ public abstract class GeneratorBase
     /**********************************************************
      */
 
-    //public void writeStartArray() throws IOException, JsonGenerationException
-    //public void writeEndArray() throws IOException, JsonGenerationException
-    //public void writeStartObject() throws IOException, JsonGenerationException
-    //public void writeEndObject() throws IOException, JsonGenerationException
+    //public void writeStartArray() throws IOException
+    //public void writeEndArray() throws IOException
+    //public void writeStartObject() throws IOException
+    //public void writeEndObject() throws IOException
 
     /*
     /**********************************************************
@@ -186,50 +161,40 @@ public abstract class GeneratorBase
     /**********************************************************
      */
 
-    @Override
-    public void writeFieldName(SerializableString name) throws IOException, JsonGenerationException {
+    @Override public void writeFieldName(SerializableString name) throws IOException {
         writeFieldName(name.getValue());
     }
     
-    //public abstract void writeString(String text) throws IOException, JsonGenerationException;
+    //public abstract void writeString(String text) throws IOException;
 
-    //public abstract void writeString(char[] text, int offset, int len) throws IOException, JsonGenerationException;
+    //public abstract void writeString(char[] text, int offset, int len) throws IOException;
 
-    //public abstract void writeRaw(String text) throws IOException, JsonGenerationException;
+    //public abstract void writeRaw(String text) throws IOException,;
 
-    //public abstract void writeRaw(char[] text, int offset, int len) throws IOException, JsonGenerationException;
+    //public abstract void writeRaw(char[] text, int offset, int len) throws IOException;
 
     @Override
-    public void writeString(SerializableString text) throws IOException, JsonGenerationException {
+    public void writeString(SerializableString text) throws IOException {
         writeString(text.getValue());
     }
     
-    @Override
-    public void writeRawValue(String text) throws IOException, JsonGenerationException
-    {
+    @Override public void writeRawValue(String text) throws IOException {
         _verifyValueWrite("write raw value");
         writeRaw(text);
     }
 
-    @Override
-    public void writeRawValue(String text, int offset, int len)
-        throws IOException, JsonGenerationException
-    {
+    @Override public void writeRawValue(String text, int offset, int len) throws IOException {
+        _verifyValueWrite("write raw value");
+        writeRaw(text, offset, len);
+    }
+
+    @Override public void writeRawValue(char[] text, int offset, int len) throws IOException {
         _verifyValueWrite("write raw value");
         writeRaw(text, offset, len);
     }
 
     @Override
-    public void writeRawValue(char[] text, int offset, int len)
-        throws IOException, JsonGenerationException
-    {
-        _verifyValueWrite("write raw value");
-        writeRaw(text, offset, len);
-    }
-
-    @Override
-    public int writeBinary(Base64Variant b64variant, InputStream data, int dataLength)
-        throws IOException, JsonGenerationException {
+    public int writeBinary(Base64Variant b64variant, InputStream data, int dataLength) throws IOException {
         // Let's implement this as "unsupported" to make it easier to add new parser impls
         _reportUnsupportedOperation();
         return 0;
@@ -260,9 +225,7 @@ public abstract class GeneratorBase
      */
 
     @Override
-    public void writeObject(Object value)
-        throws IOException, JsonProcessingException
-    {
+    public void writeObject(Object value) throws IOException {
         if (value == null) {
             // important: call method that does check value write:
             writeNull();
@@ -281,9 +244,7 @@ public abstract class GeneratorBase
     }
 
     @Override
-    public void writeTree(TreeNode rootNode)
-        throws IOException, JsonProcessingException
-    {
+    public void writeTree(TreeNode rootNode) throws IOException {
         // As with 'writeObject()', we are not check if write would work
         if (rootNode == null) {
             writeNull();
@@ -301,135 +262,10 @@ public abstract class GeneratorBase
     /**********************************************************
      */
 
-    @Override
-    public abstract void flush() throws IOException;
+    @Override public abstract void flush() throws IOException;
+    @Override public void close() throws IOException { _closed = true; }
+    @Override public boolean isClosed() { return _closed; }
 
-    @Override
-    public void close() throws IOException
-    {
-        _closed = true;
-    }
-
-    @Override
-    public boolean isClosed() { return _closed; }
-
-    /*
-    /**********************************************************
-    /* Public API, copy-through methods
-    /**********************************************************
-     */
-
-    @Override
-    public final void copyCurrentEvent(JsonParser jp)
-        throws IOException, JsonProcessingException
-    {
-        JsonToken t = jp.getCurrentToken();
-        // sanity check; what to do?
-        if (t == null) {
-            _reportError("No current event to copy");
-        }
-        switch (t.id()) {
-        case ID_NOT_AVAILABLE:
-            _reportError("No current event to copy");
-        case ID_START_OBJECT:
-            writeStartObject();
-            break;
-        case ID_END_OBJECT:
-            writeEndObject();
-            break;
-        case ID_START_ARRAY:
-            writeStartArray();
-            break;
-        case ID_END_ARRAY:
-            writeEndArray();
-            break;
-        case ID_FIELD_NAME:
-            writeFieldName(jp.getCurrentName());
-            break;
-        case ID_STRING:
-            if (jp.hasTextCharacters()) {
-                writeString(jp.getTextCharacters(), jp.getTextOffset(), jp.getTextLength());
-            } else {
-                writeString(jp.getText());
-            }
-            break;
-        case ID_NUMBER_INT:
-        {
-            NumberType n = jp.getNumberType();
-            if (n == NumberType.INT) {
-                writeNumber(jp.getIntValue());
-            } else if (n == NumberType.BIG_INTEGER) {
-                writeNumber(jp.getBigIntegerValue());
-            } else {
-                writeNumber(jp.getLongValue());
-            }
-            break;
-        }
-        case ID_NUMBER_FLOAT:
-        {
-            NumberType n = jp.getNumberType();
-            if (n == NumberType.BIG_DECIMAL) {
-                writeNumber(jp.getDecimalValue());
-            } else if (n == NumberType.FLOAT) {
-                writeNumber(jp.getFloatValue());
-            } else {
-                writeNumber(jp.getDoubleValue());
-            }
-            break;
-        }
-        case ID_TRUE:
-            writeBoolean(true);
-            break;
-        case ID_FALSE:
-            writeBoolean(false);
-            break;
-        case ID_NULL:
-            writeNull();
-            break;
-        case ID_EMBEDDED_OBJECT:
-            writeObject(jp.getEmbeddedObject());
-            break;
-        default:
-            _throwInternal();
-        }
-    }
-
-    @Override
-    public final void copyCurrentStructure(JsonParser jp)
-        throws IOException, JsonProcessingException
-    {
-        JsonToken t = jp.getCurrentToken();
-        if (t == null) {
-            _reportError("No current event to copy");
-        }
-        // Let's handle field-name separately first
-        int id = t.id();
-        if (id == ID_FIELD_NAME) {
-            writeFieldName(jp.getCurrentName());
-            t = jp.nextToken();
-            id = t.id();
-            // fall-through to copy the associated value
-        }
-        switch (id) {
-        case ID_START_OBJECT:
-            writeStartObject();
-            while (jp.nextToken() != JsonToken.END_OBJECT) {
-                copyCurrentStructure(jp);
-            }
-            writeEndObject();
-            break;
-        case ID_START_ARRAY:
-            writeStartArray();
-            while (jp.nextToken() != JsonToken.END_ARRAY) {
-                copyCurrentStructure(jp);
-            }
-            writeEndArray();
-            break;
-        default:
-            copyCurrentEvent(jp);
-        }
-    }
-    
     /*
     /**********************************************************
     /* Package methods for this, sub-classes
@@ -450,99 +286,5 @@ public abstract class GeneratorBase
      * @param typeMsg Additional message used for generating exception message
      *   if value output is NOT legal in current generator output state.
      */
-    protected abstract void _verifyValueWrite(String typeMsg)
-        throws IOException, JsonGenerationException;
-
-    /**
-     * Helper method used for constructing and throwing
-     * {@link JsonGenerationException} with given base message.
-     *<p>
-     * Note that sub-classes may override this method to add more detail
-     * or use a {@link JsonGenerationException} sub-class.
-     */
-    protected void _reportError(String msg)
-        throws JsonGenerationException
-    {
-        throw new JsonGenerationException(msg);
-    }
-
-    /**
-     * Helper method to try to call appropriate write method for given
-     * untyped Object. At this point, no structural conversions should be done,
-     * only simple basic types are to be coerced as necessary.
-     *
-     * @param value Non-null value to write
-     */
-    protected void _writeSimpleObject(Object value) 
-        throws IOException, JsonGenerationException
-    {
-        /* 31-Dec-2009, tatu: Actually, we could just handle some basic
-         *    types even without codec. This can improve interoperability,
-         *    and specifically help with TokenBuffer.
-         */
-        if (value == null) {
-            writeNull();
-            return;
-        }
-        if (value instanceof String) {
-            writeString((String) value);
-            return;
-        }
-        if (value instanceof Number) {
-            Number n = (Number) value;
-            if (n instanceof Integer) {
-                writeNumber(n.intValue());
-                return;
-            } else if (n instanceof Long) {
-                writeNumber(n.longValue());
-                return;
-            } else if (n instanceof Double) {
-                writeNumber(n.doubleValue());
-                return;
-            } else if (n instanceof Float) {
-                writeNumber(n.floatValue());
-                return;
-            } else if (n instanceof Short) {
-                writeNumber(n.shortValue());
-                return;
-            } else if (n instanceof Byte) {
-                writeNumber(n.byteValue());
-                return;
-            } else if (n instanceof BigInteger) {
-                writeNumber((BigInteger) n);
-                return;
-            } else if (n instanceof BigDecimal) {
-                writeNumber((BigDecimal) n);
-                return;
-                
-            // then Atomic types
-                
-            } else if (n instanceof AtomicInteger) {
-                writeNumber(((AtomicInteger) n).get());
-                return;
-            } else if (n instanceof AtomicLong) {
-                writeNumber(((AtomicLong) n).get());
-                return;
-            }
-        } else if (value instanceof byte[]) {
-            writeBinary((byte[]) value);
-            return;
-        } else if (value instanceof Boolean) {
-            writeBoolean((Boolean) value);
-            return;
-        } else if (value instanceof AtomicBoolean) {
-            writeBoolean(((AtomicBoolean) value).get());
-            return;
-        }
-        throw new IllegalStateException("No ObjectCodec defined for the generator, can only serialize simple wrapper types (type passed "
-                +value.getClass().getName()+")");
-    }    
-
-    protected final void _throwInternal() {
-        VersionUtil.throwInternal();
-    }
-
-    protected void _reportUnsupportedOperation() {
-        throw new UnsupportedOperationException("Operation not supported by generator of type "+getClass().getName());
-    }
+    protected abstract void _verifyValueWrite(String typeMsg) throws IOException;
 }

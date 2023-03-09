@@ -95,7 +95,7 @@ public final class WriterBasedJsonGenerator
      */
 
     @Override
-    public void writeFieldName(String name)  throws IOException, JsonGenerationException
+    public void writeFieldName(String name)  throws IOException
     {
         int status = _writeContext.writeFieldName(name);
         if (status == JsonWriteContext.STATUS_EXPECT_VALUE) {
@@ -105,8 +105,7 @@ public final class WriterBasedJsonGenerator
     }
 
     @Override
-    public void writeFieldName(SerializableString name)
-        throws IOException, JsonGenerationException
+    public void writeFieldName(SerializableString name) throws IOException
     {
         // Object is a value, need to verify it's allowed
         int status = _writeContext.writeFieldName(name.getValue());
@@ -186,8 +185,7 @@ public final class WriterBasedJsonGenerator
         _writeContext = _writeContext.getParent();
     }
 
-    protected void _writeFieldName(String name, boolean commaBefore)
-        throws IOException, JsonGenerationException
+    protected void _writeFieldName(String name, boolean commaBefore) throws IOException
     {
         if (_cfgPrettyPrinter != null) {
             _writePPFieldName(name, commaBefore);
@@ -220,8 +218,7 @@ public final class WriterBasedJsonGenerator
         _outputBuffer[_outputTail++] = '"';
     }
 
-    public void _writeFieldName(SerializableString name, boolean commaBefore)
-        throws IOException, JsonGenerationException
+    protected void _writeFieldName(SerializableString name, boolean commaBefore) throws IOException
     {
         if (_cfgPrettyPrinter != null) {
             _writePPFieldName(name, commaBefore);
@@ -320,8 +317,7 @@ public final class WriterBasedJsonGenerator
      */
 
     @Override
-    public void writeString(String text)
-        throws IOException, JsonGenerationException
+    public void writeString(String text) throws IOException
     {
         _verifyValueWrite("write text value");
         if (text == null) {
@@ -341,8 +337,7 @@ public final class WriterBasedJsonGenerator
     }
 
     @Override
-    public void writeString(char[] text, int offset, int len)
-        throws IOException, JsonGenerationException
+    public void writeString(char[] text, int offset, int len) throws IOException
     {
         _verifyValueWrite("write text value");
         if (_outputTail >= _outputEnd) {
@@ -358,8 +353,7 @@ public final class WriterBasedJsonGenerator
     }
 
     @Override
-    public void writeString(SerializableString sstr)
-        throws IOException, JsonGenerationException
+    public void writeString(SerializableString sstr) throws IOException
     {
         _verifyValueWrite("write text value");
         if (_outputTail >= _outputEnd) {
@@ -389,17 +383,13 @@ public final class WriterBasedJsonGenerator
     }
 
     @Override
-    public void writeRawUTF8String(byte[] text, int offset, int length)
-        throws IOException, JsonGenerationException
-    {
+    public void writeRawUTF8String(byte[] text, int offset, int length) throws IOException {
         // could add support for buffering if we really want it...
         _reportUnsupportedOperation();
     }
 
     @Override
-    public void writeUTF8String(byte[] text, int offset, int length)
-        throws IOException, JsonGenerationException
-    {
+    public void writeUTF8String(byte[] text, int offset, int length) throws IOException {
         // could add support for buffering if we really want it...
         _reportUnsupportedOperation();
     }
@@ -411,8 +401,7 @@ public final class WriterBasedJsonGenerator
      */
 
     @Override
-    public void writeRaw(String text)
-        throws IOException, JsonGenerationException
+    public void writeRaw(String text) throws IOException
     {
         // Nothing to check, can just output as is
         int len = text.length();
@@ -432,8 +421,7 @@ public final class WriterBasedJsonGenerator
     }
 
     @Override
-    public void writeRaw(String text, int start, int len)
-        throws IOException, JsonGenerationException
+    public void writeRaw(String text, int start, int len) throws IOException
     {
         // Nothing to check, can just output as is
         int room = _outputEnd - _outputTail;
@@ -453,13 +441,12 @@ public final class WriterBasedJsonGenerator
 
     // @since 2.1
     @Override
-    public void writeRaw(SerializableString text) throws IOException, JsonGenerationException {
+    public void writeRaw(SerializableString text) throws IOException {
         writeRaw(text.getValue());
     }
     
     @Override
-    public void writeRaw(char[] text, int offset, int len)
-        throws IOException, JsonGenerationException
+    public void writeRaw(char[] text, int offset, int len) throws IOException
     {
         // Only worth buffering if it's a short write?
         if (len < SHORT_WRITE) {
@@ -477,8 +464,7 @@ public final class WriterBasedJsonGenerator
     }
 
     @Override
-    public void writeRaw(char c)
-        throws IOException, JsonGenerationException
+    public void writeRaw(char c) throws IOException
     {
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
@@ -486,8 +472,7 @@ public final class WriterBasedJsonGenerator
         _outputBuffer[_outputTail++] = c;
     }
 
-    private void writeRawLong(String text)
-        throws IOException, JsonGenerationException
+    private void writeRawLong(String text) throws IOException
     {
         int room = _outputEnd - _outputTail;
         // If not, need to do it by looping
@@ -577,8 +562,7 @@ public final class WriterBasedJsonGenerator
      */
 
     @Override
-    public void writeNumber(short s)
-        throws IOException, JsonGenerationException
+    public void writeNumber(short s) throws IOException
     {
         _verifyValueWrite("write number");
         if (_cfgNumbersAsStrings) {
@@ -602,8 +586,7 @@ public final class WriterBasedJsonGenerator
     }    
 
     @Override
-    public void writeNumber(int i)
-        throws IOException, JsonGenerationException
+    public void writeNumber(int i) throws IOException
     {
         _verifyValueWrite("write number");
         if (_cfgNumbersAsStrings) {
@@ -627,8 +610,7 @@ public final class WriterBasedJsonGenerator
     }    
 
     @Override
-    public void writeNumber(long l)
-        throws IOException, JsonGenerationException
+    public void writeNumber(long l) throws IOException
     {
         _verifyValueWrite("write number");
         if (_cfgNumbersAsStrings) {
@@ -654,8 +636,7 @@ public final class WriterBasedJsonGenerator
     // !!! 05-Aug-2008, tatus: Any ways to optimize these?
 
     @Override
-    public void writeNumber(BigInteger value)
-        throws IOException, JsonGenerationException
+    public void writeNumber(BigInteger value) throws IOException
     {
         _verifyValueWrite("write number");
         if (value == null) {
@@ -669,13 +650,11 @@ public final class WriterBasedJsonGenerator
 
     
     @Override
-    public void writeNumber(double d)
-        throws IOException, JsonGenerationException
+    public void writeNumber(double d) throws IOException
     {
         if (_cfgNumbersAsStrings ||
             // [JACKSON-139]
-            (((Double.isNaN(d) || Double.isInfinite(d))
-                && isEnabled(Feature.QUOTE_NON_NUMERIC_NUMBERS)))) {
+                (isEnabled(Feature.QUOTE_NON_NUMERIC_NUMBERS) && ((Double.isNaN(d) || Double.isInfinite(d))))) {
             writeString(String.valueOf(d));
             return;
         }
@@ -685,13 +664,11 @@ public final class WriterBasedJsonGenerator
     }
 
     @Override
-    public void writeNumber(float f)
-        throws IOException, JsonGenerationException
+    public void writeNumber(float f) throws IOException
     {
         if (_cfgNumbersAsStrings ||
             // [JACKSON-139]
-            (((Float.isNaN(f) || Float.isInfinite(f))
-                && isEnabled(Feature.QUOTE_NON_NUMERIC_NUMBERS)))) {
+                (isEnabled(Feature.QUOTE_NON_NUMERIC_NUMBERS) && ((Float.isNaN(f) || Float.isInfinite(f))))) {
             writeString(String.valueOf(f));
             return;
         }
@@ -701,8 +678,7 @@ public final class WriterBasedJsonGenerator
     }
 
     @Override
-    public void writeNumber(BigDecimal value)
-        throws IOException, JsonGenerationException
+    public void writeNumber(BigDecimal value) throws IOException
     {
         // Don't really know max length for big decimal, no point checking
         _verifyValueWrite("write number");
@@ -718,8 +694,7 @@ public final class WriterBasedJsonGenerator
     }
 
     @Override
-    public void writeNumber(String encodedValue)
-        throws IOException, JsonGenerationException
+    public void writeNumber(String encodedValue) throws IOException
     {
         _verifyValueWrite("write number");
         if (_cfgNumbersAsStrings) {
@@ -743,8 +718,7 @@ public final class WriterBasedJsonGenerator
     }
     
     @Override
-    public void writeBoolean(boolean state)
-        throws IOException, JsonGenerationException
+    public void writeBoolean(boolean state) throws IOException
     {
         _verifyValueWrite("write boolean value");
         if ((_outputTail + 5) >= _outputEnd) {
@@ -768,9 +742,7 @@ public final class WriterBasedJsonGenerator
     }
 
     @Override
-    public void writeNull()
-        throws IOException, JsonGenerationException
-    {
+    public void writeNull() throws IOException {
         _verifyValueWrite("write null value");
         _writeNull();
     }
@@ -782,45 +754,48 @@ public final class WriterBasedJsonGenerator
      */
 
     @Override
-    protected void _verifyValueWrite(String typeMsg)
-        throws IOException, JsonGenerationException
+    protected void _verifyValueWrite(String typeMsg) throws IOException
     {
-        int status = _writeContext.writeValue();
+        if (_cfgPrettyPrinter != null) {
+            // Otherwise, pretty printer knows what to do...
+            _verifyPrettyValueWrite(typeMsg);
+            return;
+        }
+        char c;
+        final int status = _writeContext.writeValue();
         if (status == JsonWriteContext.STATUS_EXPECT_NAME) {
             _reportError("Can not "+typeMsg+", expecting field name");
         }
-        if (_cfgPrettyPrinter == null) {
-            char c;
-            switch (status) {
-            case JsonWriteContext.STATUS_OK_AFTER_COMMA:
-                c = ',';
-                break;
-            case JsonWriteContext.STATUS_OK_AFTER_COLON:
-                c = ':';
-                break;
-            case JsonWriteContext.STATUS_OK_AFTER_SPACE: // root-value separator
-                if (_rootValueSeparator != null) {
-                    writeRaw(_rootValueSeparator.getValue());
-                }
-                return;
-            case JsonWriteContext.STATUS_OK_AS_IS:
-            default:
-                return;
+        switch (status) {
+        case JsonWriteContext.STATUS_OK_AFTER_COMMA:
+            c = ',';
+            break;
+        case JsonWriteContext.STATUS_OK_AFTER_COLON:
+            c = ':';
+            break;
+        case JsonWriteContext.STATUS_OK_AFTER_SPACE: // root-value separator
+            if (_rootValueSeparator != null) {
+                writeRaw(_rootValueSeparator.getValue());
             }
-            if (_outputTail >= _outputEnd) {
-                _flushBuffer();
-            }
-            _outputBuffer[_outputTail] = c;
-            ++_outputTail;
+            return;
+        case JsonWriteContext.STATUS_OK_AS_IS:
+        default:
             return;
         }
-        // Otherwise, pretty printer knows what to do...
-        _verifyPrettyValueWrite(typeMsg, status);
+        if (_outputTail >= _outputEnd) {
+            _flushBuffer();
+        }
+        _outputBuffer[_outputTail] = c;
+        ++_outputTail;
     }
 
-    protected void _verifyPrettyValueWrite(String typeMsg, int status)
-        throws IOException, JsonGenerationException
+    protected void _verifyPrettyValueWrite(String typeMsg) throws IOException
     {
+        final int status = _writeContext.writeValue();
+        if (status == JsonWriteContext.STATUS_EXPECT_NAME) {
+            _reportError("Can not "+typeMsg+", expecting field name");
+        }
+
         // If we have a pretty printer, it knows what to do:
         switch (status) {
         case JsonWriteContext.STATUS_OK_AFTER_COMMA: // array
@@ -853,8 +828,7 @@ public final class WriterBasedJsonGenerator
      */
 
     @Override
-    public void flush()
-        throws IOException
+    public void flush() throws IOException
     {
         _flushBuffer();
         if (_writer != null) {
@@ -923,8 +897,7 @@ public final class WriterBasedJsonGenerator
     /**********************************************************
      */
 
-    private void _writeString(String text)
-        throws IOException, JsonGenerationException
+    private void _writeString(String text) throws IOException
     {
         /* One check first: if String won't fit in the buffer, let's
          * segment writes. No point in extending buffer to huge sizes
@@ -953,11 +926,10 @@ public final class WriterBasedJsonGenerator
         }
     }
 
-    private void _writeString2(final int len)
-        throws IOException, JsonGenerationException
+    private void _writeString2(final int len) throws IOException
     {
         // And then we'll need to verify need for escaping etc:
-        int end = _outputTail + len;
+        final int end = _outputTail + len;
         final int[] escCodes = _outputEscapes;
         final int escLen = escCodes.length;
 
@@ -995,8 +967,7 @@ public final class WriterBasedJsonGenerator
      * Method called to write "long strings", strings whose length exceeds
      * output buffer length.
      */
-    private void _writeLongString(String text)
-        throws IOException, JsonGenerationException
+    private void _writeLongString(String text) throws IOException
     {
         // First things first: let's flush the buffer to get some more room
         _flushBuffer();
@@ -1029,8 +1000,7 @@ public final class WriterBasedJsonGenerator
      * buffer, right after buffered content (if any). That's why only
      * length of that text is passed, as buffer and offset are implied.
      */
-    private void _writeSegment(int end)
-        throws IOException, JsonGenerationException
+    private void _writeSegment(int end) throws IOException
     {
         final int[] escCodes = _outputEscapes;
         final int escLen = escCodes.length;
@@ -1073,8 +1043,7 @@ public final class WriterBasedJsonGenerator
      * This method called when the string content is already in
      * a char buffer, and need not be copied for processing.
      */
-    private void _writeString(char[] text, int offset, int len)
-        throws IOException, JsonGenerationException
+    private void _writeString(char[] text, int offset, int len) throws IOException
     {
         if (_characterEscapes != null) {
             _writeStringCustom(text, offset, len);
@@ -1635,7 +1604,7 @@ public final class WriterBasedJsonGenerator
     /**********************************************************
      */
     
-    private void _writeNull() throws IOException
+    private final void _writeNull() throws IOException
     {
         if ((_outputTail + 4) >= _outputEnd) {
             _flushBuffer();
@@ -1861,7 +1830,7 @@ public final class WriterBasedJsonGenerator
                 buf[ptr++] = '0';
             }
             buf[ptr++] = HEX_CHARS[ch >> 4];
-            buf[ptr] = HEX_CHARS[ch & 0xF];
+            buf[ptr++] = HEX_CHARS[ch & 0xF];
             _outputTail = ptr;
             return;
         }

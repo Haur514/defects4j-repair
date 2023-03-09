@@ -18,8 +18,7 @@ import com.fasterxml.jackson.core.util.TextBuffer;
  * implementations. Contains most common things that are independent
  * of actual underlying input source.
  */
-public abstract class ParserBase
-    extends ParserMinimalBase
+public abstract class ParserBase extends ParserMinimalBase
 {
     /*
     /**********************************************************
@@ -57,7 +56,7 @@ public abstract class ParserBase
      * Index of character after last available one in the buffer.
      */
     protected int _inputEnd = 0;
-    
+
     /*
     /**********************************************************
     /* Current input location information
@@ -281,22 +280,17 @@ public abstract class ParserBase
     /**********************************************************
      */
 
-    protected ParserBase(IOContext ctxt, int features)
-    {
+    protected ParserBase(IOContext ctxt, int features) {
         super();
         _features = features;
         _ioContext = ctxt;
         _textBuffer = ctxt.constructTextBuffer();
         DupDetector dups = Feature.STRICT_DUPLICATE_DETECTION.enabledIn(features)
                 ? DupDetector.rootDetector(this) : null;
-        JsonReadContext readCtxt = JsonReadContext.createRootContext(dups);
-        _parsingContext = readCtxt;
+        _parsingContext = JsonReadContext.createRootContext(dups);
     }
 
-    @Override
-    public Version version() {
-        return PackageVersion.VERSION;
-    }
+    @Override public Version version() { return PackageVersion.VERSION; }
 
     /*
     /**********************************************************
@@ -308,10 +302,7 @@ public abstract class ParserBase
      * Method that can be called to get the name associated with
      * the current event.
      */
-    @Override
-    public String getCurrentName()
-        throws IOException, JsonParseException
-    {
+    @Override public String getCurrentName() throws IOException {
         // [JACKSON-395]: start markers require information from parent
         if (_currToken == JsonToken.START_OBJECT || _currToken == JsonToken.START_ARRAY) {
             JsonReadContext parent = _parsingContext.getParent();
@@ -320,9 +311,7 @@ public abstract class ParserBase
         return _parsingContext.getCurrentName();
     }
 
-    @Override
-    public void overrideCurrentName(String name)
-    {
+    @Override public void overrideCurrentName(String name) {
         // Simple, but need to look for START_OBJECT/ARRAY's "off-by-one" thing:
         JsonReadContext ctxt = _parsingContext;
         if (_currToken == JsonToken.START_OBJECT || _currToken == JsonToken.START_ARRAY) {
@@ -338,9 +327,7 @@ public abstract class ParserBase
         }
     }
     
-    @Override
-    public void close() throws IOException
-    {
+    @Override public void close() throws IOException {
         if (!_closed) {
             _closed = true;
             try {
@@ -353,14 +340,8 @@ public abstract class ParserBase
         }
     }
 
-    @Override
-    public boolean isClosed() { return _closed; }
-
-    @Override
-    public JsonReadContext getParsingContext()
-    {
-        return _parsingContext;
-    }
+    @Override public boolean isClosed() { return _closed; }
+    @Override public JsonReadContext getParsingContext() { return _parsingContext; }
 
     /**
      * Method that return the <b>starting</b> location of the current
@@ -368,8 +349,7 @@ public abstract class ParserBase
      * that starts the current token.
      */
     @Override
-    public JsonLocation getTokenLocation()
-    {
+    public JsonLocation getTokenLocation() {
         return new JsonLocation(_ioContext.getSourceReference(),
                 -1L, getTokenCharacterOffset(), // bytes, chars
                 getTokenLineNr(),
@@ -381,8 +361,7 @@ public abstract class ParserBase
      * usually for error reporting purposes
      */
     @Override
-    public JsonLocation getCurrentLocation()
-    {
+    public JsonLocation getCurrentLocation() {
         int col = _inputPtr - _currInputRowStart + 1; // 1-based
         return new JsonLocation(_ioContext.getSourceReference(),
                 -1L, _currInputProcessed + _inputPtr, // bytes, chars
@@ -396,22 +375,14 @@ public abstract class ParserBase
      */
 
     @Override
-    public boolean hasTextCharacters()
-    {
-        if (_currToken == JsonToken.VALUE_STRING) {
-            return true; // usually true
-        }        
-        if (_currToken == JsonToken.FIELD_NAME) {
-            return _nameCopied;
-        }
+    public boolean hasTextCharacters() {
+        if (_currToken == JsonToken.VALUE_STRING) { return true; } // usually true        
+        if (_currToken == JsonToken.FIELD_NAME) { return _nameCopied; }
         return false;
     }
 
     // No embedded objects with base impl...
-    @Override
-    public Object getEmbeddedObject() throws IOException, JsonParseException {
-        return null;
-    }
+    @Override public Object getEmbeddedObject() throws IOException { return null; }
     
     /*
     /**********************************************************
@@ -433,12 +404,8 @@ public abstract class ParserBase
     /**********************************************************
      */
 
-    protected final void loadMoreGuaranteed()
-        throws IOException
-    {
-        if (!loadMore()) {
-            _reportInvalidEOF();
-        }
+    protected final void loadMoreGuaranteed() throws IOException {
+        if (!loadMore()) { _reportInvalidEOF(); }
     }
     
     /*
@@ -448,9 +415,7 @@ public abstract class ParserBase
      */
 
     protected abstract boolean loadMore() throws IOException;
-    
-    protected abstract void _finishString() throws IOException, JsonParseException;
-
+    protected abstract void _finishString() throws IOException;
     protected abstract void _closeInput() throws IOException;
     
     /*
@@ -465,8 +430,7 @@ public abstract class ParserBase
      * example, when explicitly closing this reader instance), or
      * separately (if need be).
      */
-    protected void _releaseBuffers() throws IOException
-    {
+    protected void _releaseBuffers() throws IOException {
         _textBuffer.releaseBuffers();
         char[] buf = _nameCopyBuffer;
         if (buf != null) {
@@ -481,22 +445,27 @@ public abstract class ParserBase
      * is no open non-root context.
      */
     @Override
-    protected void _handleEOF() throws JsonParseException
-    {
+    protected void _handleEOF() throws JsonParseException {
         if (!_parsingContext.inRoot()) {
             _reportInvalidEOF(": expected close marker for "+_parsingContext.getTypeDesc()+" (from "+_parsingContext.getStartLocation(_ioContext.getSourceReference())+")");
         }
     }
 
+    /**
+     * @since 2.4
+     */
+    protected final int _eofAsNextChar() throws JsonParseException {
+        _handleEOF();
+        return -1;
+    }
+    
     /*
     /**********************************************************
     /* Internal/package methods: Error reporting
     /**********************************************************
      */
     
-    protected void _reportMismatchedEndMarker(int actCh, char expCh)
-        throws JsonParseException
-    {
+    protected void _reportMismatchedEndMarker(int actCh, char expCh) throws JsonParseException {
         String startDesc = ""+_parsingContext.getStartLocation(_ioContext.getSourceReference());
         _reportError("Unexpected close marker '"+((char) actCh)+"': expected '"+expCh+"' (for "+_parsingContext.getTypeDesc()+" starting at "+startDesc+")");
     }
@@ -568,7 +537,7 @@ public abstract class ParserBase
      */
     
     @Override
-    public Number getNumberValue() throws IOException, JsonParseException
+    public Number getNumberValue() throws IOException
     {
         if (_numTypesValid == NR_UNKNOWN) {
             _parseNumericValue(NR_UNKNOWN); // will also check event type
@@ -601,7 +570,7 @@ public abstract class ParserBase
     }
     
     @Override
-    public NumberType getNumberType() throws IOException, JsonParseException
+    public NumberType getNumberType() throws IOException
     {
         if (_numTypesValid == NR_UNKNOWN) {
             _parseNumericValue(NR_UNKNOWN); // will also check event type
@@ -629,7 +598,7 @@ public abstract class ParserBase
     }
     
     @Override
-    public int getIntValue() throws IOException, JsonParseException
+    public int getIntValue() throws IOException
     {
         if ((_numTypesValid & NR_INT) == 0) {
             if (_numTypesValid == NR_UNKNOWN) { // not parsed at all
@@ -643,7 +612,7 @@ public abstract class ParserBase
     }
     
     @Override
-    public long getLongValue() throws IOException, JsonParseException
+    public long getLongValue() throws IOException
     {
         if ((_numTypesValid & NR_LONG) == 0) {
             if (_numTypesValid == NR_UNKNOWN) {
@@ -657,7 +626,7 @@ public abstract class ParserBase
     }
     
     @Override
-    public BigInteger getBigIntegerValue() throws IOException, JsonParseException
+    public BigInteger getBigIntegerValue() throws IOException
     {
         if ((_numTypesValid & NR_BIGINT) == 0) {
             if (_numTypesValid == NR_UNKNOWN) {
@@ -671,7 +640,7 @@ public abstract class ParserBase
     }
     
     @Override
-    public float getFloatValue() throws IOException, JsonParseException
+    public float getFloatValue() throws IOException
     {
         double value = getDoubleValue();
         /* 22-Jan-2009, tatu: Bounds/range checks would be tricky
@@ -686,7 +655,7 @@ public abstract class ParserBase
     }
     
     @Override
-    public double getDoubleValue() throws IOException, JsonParseException
+    public double getDoubleValue() throws IOException
     {
         if ((_numTypesValid & NR_DOUBLE) == 0) {
             if (_numTypesValid == NR_UNKNOWN) {
@@ -700,7 +669,7 @@ public abstract class ParserBase
     }
     
     @Override
-    public BigDecimal getDecimalValue() throws IOException, JsonParseException
+    public BigDecimal getDecimalValue() throws IOException
     {
         if ((_numTypesValid & NR_BIGDECIMAL) == 0) {
             if (_numTypesValid == NR_UNKNOWN) {
@@ -728,8 +697,7 @@ public abstract class ParserBase
      * @param expType Numeric type that we will immediately need, if any;
      *   mostly necessary to optimize handling of floating point numbers
      */
-    protected void _parseNumericValue(int expType)
-        throws IOException, JsonParseException
+    protected void _parseNumericValue(int expType) throws IOException
     {
         // Int or float?
         if (_currToken == JsonToken.VALUE_NUMBER_INT) {
@@ -780,8 +748,7 @@ public abstract class ParserBase
         _reportError("Current token ("+_currToken+") not numeric, can not use numeric value accessors");
     }
     
-    private void _parseSlowFloat(int expType)
-        throws IOException, JsonParseException
+    private void _parseSlowFloat(int expType) throws IOException
     {
         /* Nope: floating point. Here we need to be careful to get
          * optimal parsing strategy: choice is between accurate but
@@ -805,8 +772,7 @@ public abstract class ParserBase
         }
     }
     
-    private void _parseSlowInt(int expType, char[] buf, int offset, int len)
-        throws IOException, JsonParseException
+    private void _parseSlowInt(int expType, char[] buf, int offset, int len) throws IOException
     {
         String numStr = _textBuffer.contentsAsString();
         try {
@@ -832,8 +798,7 @@ public abstract class ParserBase
     /**********************************************************
      */    
     
-    protected void convertNumberToInt()
-        throws IOException, JsonParseException
+    protected void convertNumberToInt() throws IOException
     {
         // First, converting from long ought to be easy
         if ((_numTypesValid & NR_LONG) != 0) {
@@ -867,8 +832,7 @@ public abstract class ParserBase
         _numTypesValid |= NR_INT;
     }
     
-    protected void convertNumberToLong()
-        throws IOException, JsonParseException
+    protected void convertNumberToLong() throws IOException
     {
         if ((_numTypesValid & NR_INT) != 0) {
             _numberLong = (long) _numberInt;
@@ -896,8 +860,7 @@ public abstract class ParserBase
         _numTypesValid |= NR_LONG;
     }
     
-    protected void convertNumberToBigInteger()
-        throws IOException, JsonParseException
+    protected void convertNumberToBigInteger() throws IOException
     {
         if ((_numTypesValid & NR_BIGDECIMAL) != 0) {
             // here it'll just get truncated, no exceptions thrown
@@ -914,8 +877,7 @@ public abstract class ParserBase
         _numTypesValid |= NR_BIGINT;
     }
     
-    protected void convertNumberToDouble()
-        throws IOException, JsonParseException
+    protected void convertNumberToDouble() throws IOException
     {
         /* 05-Aug-2008, tatus: Important note: this MUST start with
          *   more accurate representations, since we don't know which
@@ -937,8 +899,7 @@ public abstract class ParserBase
         _numTypesValid |= NR_DOUBLE;
     }
     
-    protected void convertNumberToBigDecimal()
-        throws IOException, JsonParseException
+    protected void convertNumberToBigDecimal() throws IOException
     {
         /* 05-Aug-2008, tatus: Important note: this MUST start with
          *   more accurate representations, since we don't know which
@@ -970,9 +931,7 @@ public abstract class ParserBase
     /**********************************************************
      */    
     
-    protected void reportUnexpectedNumberChar(int ch, String comment)
-        throws JsonParseException
-    {
+    protected void reportUnexpectedNumberChar(int ch, String comment) throws JsonParseException {
         String msg = "Unexpected character ("+_getCharDesc(ch)+") in numeric value";
         if (comment != null) {
             msg += ": "+comment;
@@ -980,21 +939,15 @@ public abstract class ParserBase
         _reportError(msg);
     }
     
-    protected void reportInvalidNumber(String msg)
-        throws JsonParseException
-    {
+    protected void reportInvalidNumber(String msg) throws JsonParseException {
         _reportError("Invalid numeric value: "+msg);
     }
-    
-    protected void reportOverflowInt()
-        throws IOException, JsonParseException
-    {
+
+    protected void reportOverflowInt() throws IOException {
         _reportError("Numeric value ("+getText()+") out of range of int ("+Integer.MIN_VALUE+" - "+Integer.MAX_VALUE+")");
     }
     
-    protected void reportOverflowLong()
-        throws IOException, JsonParseException
-    {
+    protected void reportOverflowLong() throws IOException {
         _reportError("Numeric value ("+getText()+") out of range of long ("+Long.MIN_VALUE+" - "+Long.MAX_VALUE+")");
     }    
 
@@ -1009,13 +962,11 @@ public abstract class ParserBase
      * in base64-encoded sections.
      * Sub-classes that do not need base64 support can leave this as is
      */
-    protected char _decodeEscaped()
-        throws IOException, JsonParseException {
+    protected char _decodeEscaped() throws IOException {
         throw new UnsupportedOperationException();
     }
     
-    protected final int _decodeBase64Escape(Base64Variant b64variant, int ch, int index)
-        throws IOException, JsonParseException
+    protected final int _decodeBase64Escape(Base64Variant b64variant, int ch, int index) throws IOException
     {
         // 17-May-2011, tatu: As per [JACKSON-xxx], need to handle escaped chars
         if (ch != '\\') {
@@ -1036,8 +987,7 @@ public abstract class ParserBase
         return bits;
     }
     
-    protected final int _decodeBase64Escape(Base64Variant b64variant, char ch, int index)
-        throws IOException, JsonParseException
+    protected final int _decodeBase64Escape(Base64Variant b64variant, char ch, int index) throws IOException
     {
         // 17-May-2011, tatu: As per [JACKSON-xxx], need to handle escaped chars
         if (ch != '\\') {
@@ -1058,9 +1008,7 @@ public abstract class ParserBase
         return bits;
     }
     
-    protected IllegalArgumentException reportInvalidBase64Char(Base64Variant b64variant, int ch, int bindex)
-        throws IllegalArgumentException
-    {
+    protected IllegalArgumentException reportInvalidBase64Char(Base64Variant b64variant, int ch, int bindex) throws IllegalArgumentException {
         return reportInvalidBase64Char(b64variant, ch, bindex, null);
     }
 
@@ -1068,9 +1016,7 @@ public abstract class ParserBase
      * @param bindex Relative index within base64 character unit; between 0
      *   and 3 (as unit has exactly 4 characters)
      */
-    protected IllegalArgumentException reportInvalidBase64Char(Base64Variant b64variant, int ch, int bindex, String msg)
-        throws IllegalArgumentException
-    {
+    protected IllegalArgumentException reportInvalidBase64Char(Base64Variant b64variant, int ch, int bindex, String msg) throws IllegalArgumentException {
         String base;
         if (ch <= INT_SPACE) {
             base = "Illegal white space character (code 0x"+Integer.toHexString(ch)+") as character #"+(bindex+1)+" of 4-char base64 unit: can only used between units";

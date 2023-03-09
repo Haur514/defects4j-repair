@@ -1,63 +1,12 @@
 package com.fasterxml.jackson.core.sym;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 
-public class TestSymbolTables extends com.fasterxml.jackson.test.BaseTest
+import com.fasterxml.jackson.core.JsonFactory;
+
+public class TestSymbolTables extends com.fasterxml.jackson.core.BaseTest
 {
-    // 11 3-char snippets that hash to 0xFFFF (with default JDK hashCode() calc),
-    // and which can be combined as
-    // sequences, like, say, 11x11x11 (1331) 9-character thingies
-    final static String[] CHAR_COLLISION_SNIPPETS_31 = {
-        "@~}", "@\u007f^", "A_}", "A`^", 
-        "Aa?", "B@}", "BA^", "BB?", 
-        "C!}", "C\"^", "C#?"
-    };
-
-    final static String[] CHAR_COLLISIONS;
-    static {
-        final String[] SNIPPETS = CHAR_COLLISION_SNIPPETS_31;
-        
-        final int len = SNIPPETS.length;
-        CHAR_COLLISIONS = new String[len*len*len];
-        int ix = 0;
-        for (int i1 = 0; i1 < len; ++i1) {
-            for (int i2 = 0; i2 < len; ++i2) {
-                for (int i3 = 0; i3 < len; ++i3) {
-                    CHAR_COLLISIONS[ix++] = SNIPPETS[i1]+SNIPPETS[i2] + SNIPPETS[i3];
-                }
-            }
-        }
-    }
-
-    /*
-    public void testCharBasedCollisions()
-    {
-        CharsToNameCanonicalizer sym = CharsToNameCanonicalizer.createRoot(0);
-
-        // first, verify that we'd get a few collisions...
-        try {
-            int firstHash = 0;
-            for (String str : CHAR_COLLISIONS) {
-                int hash = sym.calcHash(str);
-                if (firstHash == 0) {
-                    firstHash = hash;
-                } else {
-                    assertEquals(firstHash, hash); 
-                }
-                sym.findSymbol(str.toCharArray(), 0, str.length(), hash);
-            }
-            fail("Should have thrown exception");
-        } catch (IllegalStateException e) {
-            verifyException(e, "exceeds maximum");
-            // should fail right after addition:
-            assertEquals(CharsToNameCanonicalizer.MAX_COLL_CHAIN_LENGTH+1, sym.maxCollisionLength());
-            assertEquals(CharsToNameCanonicalizer.MAX_COLL_CHAIN_LENGTH+1, sym.collisionCount());
-            // one "non-colliding" entry (head of collision chain), thus:
-            assertEquals(CharsToNameCanonicalizer.MAX_COLL_CHAIN_LENGTH+2, sym.size());
-        }
-    }
-    */
-
     // Test for verifying stability of hashCode, wrt collisions, using
     // synthetic field name generation and character-based input
     public void testSyntheticWithChars()
@@ -78,9 +27,15 @@ public class TestSymbolTables extends com.fasterxml.jackson.test.BaseTest
         
         // holy guacamoley... there are way too many. 31 gives 3567 (!), 33 gives 2747
         // ... at least before shuffling. Shuffling helps quite a lot, so:
-        assertEquals(1401, symbols.collisionCount());
-        // esp. with collisions; first got about 30
-        assertEquals(4, symbols.maxCollisionLength());
+
+        assertEquals(1401, symbols.collisionCount()); // with 33
+//        assertEquals(1858, symbols.collisionCount()); // with 31
+
+        // esp. with collisions; first got about 30;
+        // with fixes 4 (for 33), 5 (for 31)
+
+        assertEquals(4, symbols.maxCollisionLength()); // 33
+//        assertEquals(5, symbols.maxCollisionLength()); // 31
     }
 
     // Test for verifying stability of hashCode, wrt collisions, using
@@ -88,8 +43,9 @@ public class TestSymbolTables extends com.fasterxml.jackson.test.BaseTest
     public void testSyntheticWithBytes() throws IOException
     {
         // pass seed, to keep results consistent:
+        final int SEED = 33333;
         BytesToNameCanonicalizer symbols =
-                BytesToNameCanonicalizer.createRoot(33333).makeChild(true, true);
+                BytesToNameCanonicalizer.createRoot(SEED).makeChild(JsonFactory.Feature.collectDefaults());
         final int COUNT = 6000;
         for (int i = 0; i < COUNT; ++i) {
             String id = fieldNameFor(i);
@@ -105,5 +61,35 @@ public class TestSymbolTables extends com.fasterxml.jackson.test.BaseTest
         assertEquals(1686, symbols.collisionCount());
         // but not super long collision chains:
         assertEquals(9, symbols.maxCollisionLength());
+    }
+
+    // [Issue#145]
+    public void testThousandsOfSymbols() throws IOException
+    {
+        final int SEED = 33333;
+
+        BytesToNameCanonicalizer symbolsBRoot = BytesToNameCanonicalizer.createRoot(SEED);
+        CharsToNameCanonicalizer symbolsCRoot = CharsToNameCanonicalizer.createRoot(SEED);
+        final Charset utf8 = Charset.forName("UTF-8");
+        
+        for (int doc = 0; doc < 100; ++doc) {
+            CharsToNameCanonicalizer symbolsC =
+                    symbolsCRoot.makeChild(JsonFactory.Feature.collectDefaults());
+            BytesToNameCanonicalizer symbolsB =
+                    symbolsBRoot.makeChild(JsonFactory.Feature.collectDefaults());
+            for (int i = 0; i < 250; ++i) {
+                String name = "f_"+doc+"_"+i;
+
+                int[] quads = BytesToNameCanonicalizer.calcQuads(name.getBytes(utf8));
+                symbolsB.addName(name, quads, quads.length);
+
+                char[] ch = name.toCharArray();
+                String str = symbolsC.findSymbol(ch, 0, ch.length,
+                        symbolsC.calcHash(name));
+                assertNotNull(str);
+            }
+            symbolsB.release();
+            symbolsC.release();
+        }
     }
 }

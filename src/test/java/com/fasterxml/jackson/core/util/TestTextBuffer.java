@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.util.BufferRecycler;
 import com.fasterxml.jackson.core.util.TextBuffer;
 
 public class TestTextBuffer
-    extends com.fasterxml.jackson.test.BaseTest
+    extends com.fasterxml.jackson.core.BaseTest
 {
     /**
      * Trivially simple basic test to ensure all basic append
@@ -61,5 +61,20 @@ public class TestTextBuffer
          tb.append('c');
          assertEquals(len+2, tb.size());
          assertEquals(EXP, tb.contentsAsString());
+      }
+
+      // [Core#152]
+      public void testExpand()
+      {
+          TextBuffer tb = new TextBuffer(new BufferRecycler());
+          char[] buf = tb.getCurrentSegment();
+
+          while (buf.length < 500 * 1000) {
+              char[] old = buf;
+              buf = tb.expandCurrentSegment();
+              if (old.length >= buf.length) {
+                  fail("Expected buffer of "+old.length+" to expand, did not, length now "+buf.length);
+              }
+          }
       }
 }

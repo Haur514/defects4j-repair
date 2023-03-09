@@ -1,7 +1,59 @@
 Project: jackson-core
-Version: 2.3.0 (xx-xxx-2013)
+Version: 2.5.0 (xx-xxx-2014)
 
-New minor version.
+#148: BytesToNameCanonicalizer can mishandle leading null byte(s).
+ (reported by rjmac@github)
+
+------------------------------------------------------------------------
+=== History: ===
+------------------------------------------------------------------------
+
+2.4.2 (xx-Aug-2014)
+
+#146: Error while parsing negative floats at the end of the input buffer
+ (reported by rjmac@github)
+
+2.4.1.1 (09-Jul-2014)
+
+NOTE: this is a "micro-release", which does NOT contain all versions of
+components but only individual components with critical fix(es).
+
+#145: NPE at BytesToNameCanonicalizer
+ (reported by Shay B)
+
+2.4.1 (16-Jun-2014)
+
+#143: Flaw in `BufferRecycler.allocByteBuffer(int,int)` that results in
+ performance regression
+
+2.4.0 (29-May-2014)
+
+#121: Increase size of low-level byte[]/char[] input/output buffers
+ (from 4k->8k for bytes, 2k->4k for chars)
+#127: Add `JsonGenerator.writeStartArray(int size)` for binary formats
+#138: Add support for using `char[]` as input source; optimize handling
+  of `String` input as well.
+- Refactor `BufferRecycler` to eliminate helper enums
+
+2.3.3 (10-Apr-2014)
+
+No changes since 2.3.2.
+
+2.3.2 (01-Mar-2014)
+
+#126: Revert some 1.6 back to make core lib work with Android 2.2 (FroYo)
+ (contributed by Goncalo S)
+#129: Missing delegation method, `JsonParserDelegate.isExpectedStartArrayToken()`
+ (Pascal G)
+#133: Prevent error on JsonPointer expressions for properties that have numeric
+  ids above 32-bit range
+ (reported by mrstlee@github)
+
+2.3.1 (28-Dec-2013)
+
+No functional changes.
+
+2.3.0 (13-Nov-2013)
 
 #8: Add methods in `JsonParser`/`JsonGenerator` for reading/writing Object Ids
 #47: Support YAML-style comments with `JsonParser.Feature.ALLOW_YAML_COMMENTS`
@@ -24,8 +76,14 @@ New minor version.
  to let databind module detect level of support for binary data.
 #105: Parser parsers numbers eagerly; does not report error with missing space
 #106: Add `JsonGenerator.Feature.STRICT_DUPLICATE_DETECTION` for preventing dup names
+#110: Improve overridability of `JsonGeneratorDelegate`
+ (suggested by qpliu@github)
 #111: _currInputRowStart isn't initialized in UTF8StreamJsonParser() constructor
  (reported by dreamershl@github)
+#115: JsonGenerator writeRawValue problem with surrogate UTF-8 characters
+ (reported by Marcin Z)
+#116: WriterBasedJsonGenerator produces truncated Unicode escape sequences
+ (reported by Steve L-S)
 - Improve `DefaultPrettyPrinter`, `Lf2SpacesIndenter` (from databind #276)
 - Add `JsonGenerator.canOmitFields()` method to support discovery of
   positional formats, needed for handling of filtering for CSV
@@ -35,9 +93,15 @@ New minor version.
 - Add `JsonPointer` implementation, to be used by tree model, streaming
 - Make `UTF8StreamJsonParser` non-final, for potential sub-classing
 
-------------------------------------------------------------------------
-=== History: ===
-------------------------------------------------------------------------
+2.2.3 (23-Aug-2013)
+
+#78: ArrayIndexOutOfBoundsException for very long numbers (>500 digits)
+ (reported by boothen@github)
+#81: CharTypes.appendQuoted misencodes first 32 Unicode values as '\0000'
+ (reported by githubaff0@github)
+#84: Support for parsing 'Infinity' when feature ALLOW_NON_NUMERIC_NUMBERS is on
+ (contributed by ebrevdo@github)
+- Add `Base64Variant.decode()` convenience methods
 
 2.2.2 (26-May-2013)
 

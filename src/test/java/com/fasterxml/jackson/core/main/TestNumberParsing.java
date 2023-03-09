@@ -1,5 +1,8 @@
 package com.fasterxml.jackson.core.main;
 
+import java.io.*;
+
+import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.core.io.NumberInput;
 
 /**
@@ -7,7 +10,7 @@ import com.fasterxml.jackson.core.io.NumberInput;
  * handling methods work as expected.
  */
 public class TestNumberParsing
-    extends com.fasterxml.jackson.test.BaseTest
+    extends com.fasterxml.jackson.core.BaseTest
 {
     public void testIntParsing() throws Exception
     {
@@ -79,5 +82,40 @@ public class TestNumberParsing
         assertFalse(NumberInput.inLongRange(cbuf, 0, cbuf.length, true));
         assertFalse(NumberInput.inLongRange(cbuf, 0, cbuf.length, false));
     }
-    
+
+    public void testFloatBoundary146Chars() throws Exception
+    {
+        final char[] arr = new char[50005];
+        final JsonFactory f = new JsonFactory();
+        for(int i = 500; i != 9000; ++i) {
+          java.util.Arrays.fill(arr, 0, i, ' ');
+          arr[i] = '-';
+          arr[i + 1] = '1';
+          arr[i + 2] = 'e';
+          arr[i + 3] = '-';
+          arr[i + 4] = '1';
+          CharArrayReader r = new CharArrayReader(arr, 0, i+5);
+          JsonParser p = f.createParser(r);
+          assertToken(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
+          p.close();
+        }        
+    }
+
+    public void testFloatBoundary146Bytes() throws Exception
+    {
+        final byte[] arr = new byte[50005];
+        final JsonFactory f = new JsonFactory();
+        for(int i = 500; i != 9000; ++i) {
+          java.util.Arrays.fill(arr, 0, i, (byte) 0x20);
+          arr[i] = '-';
+          arr[i + 1] = '1';
+          arr[i + 2] = 'e';
+          arr[i + 3] = '-';
+          arr[i + 4] = '1';
+          ByteArrayInputStream in = new ByteArrayInputStream(arr, 0, i+5);
+          JsonParser p = f.createParser(in);
+          assertToken(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
+          p.close();
+        }        
+    }
 }

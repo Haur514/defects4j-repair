@@ -27,7 +27,7 @@ public class SerializedString
      *   enough to omit volatiles here, given how simple lazy initialization is.
      *   This can be compared to how {@link String#intern} works; lazily and
      *   without synchronization or use of volatile keyword.
-     *   
+     *
      *   Change to remove volatile was a request by implementors of a high-throughput
      *   search framework; and they believed this is an important optimization for
      *   heaviest, multi-core deployed use cases.
@@ -35,6 +35,7 @@ public class SerializedString
     /*
      * 22-Sep-2013, tatu: FWIW, there have been no reports of problems in this
      *   area, or anything pointing to it. So I think we are safe up to JDK7
+     *   and hopefully beyond.
      */
     
     protected /*volatile*/ byte[] _quotedUTF8Ref;
@@ -92,8 +93,7 @@ public class SerializedString
     public final int charLength() { return _value.length(); }
     
     @Override
-    public final char[] asQuotedChars()
-    {
+    public final char[] asQuotedChars() {
         char[] result = _quotedChars;
         if (result == null) {
             result = JsonStringEncoder.getInstance().quoteAsString(_value);
@@ -107,8 +107,7 @@ public class SerializedString
      * quoting rules, and encoded using UTF-8 encoding.
      */
     @Override
-    public final byte[] asUnquotedUTF8()
-    {
+    public final byte[] asUnquotedUTF8() {
         byte[] result = _unquotedUTF8Ref;
         if (result == null) {
             result = JsonStringEncoder.getInstance().encodeAsUTF8(_value);
@@ -122,8 +121,7 @@ public class SerializedString
      * encoded using UTF-8 encoding.
      */
     @Override
-    public final byte[] asQuotedUTF8()
-    {
+    public final byte[] asQuotedUTF8() {
         byte[] result = _quotedUTF8Ref;
         if (result == null) {
             result = JsonStringEncoder.getInstance().quoteAsUTF8(_value);
@@ -139,8 +137,7 @@ public class SerializedString
      */
 
     @Override
-    public int appendQuotedUTF8(byte[] buffer, int offset)
-    {
+    public int appendQuotedUTF8(byte[] buffer, int offset) {
         byte[] result = _quotedUTF8Ref;
         if (result == null) {
             result = JsonStringEncoder.getInstance().quoteAsUTF8(_value);
@@ -155,8 +152,7 @@ public class SerializedString
     }
 
     @Override
-    public int appendQuoted(char[] buffer, int offset)
-    {
+    public int appendQuoted(char[] buffer, int offset) {
         char[] result = _quotedChars;
         if (result == null) {
             result = JsonStringEncoder.getInstance().quoteAsString(_value);
@@ -171,8 +167,7 @@ public class SerializedString
     }
 
     @Override
-    public int appendUnquotedUTF8(byte[] buffer, int offset)
-    {
+    public int appendUnquotedUTF8(byte[] buffer, int offset) {
         byte[] result = _unquotedUTF8Ref;
         if (result == null) {
             result = JsonStringEncoder.getInstance().encodeAsUTF8(_value);
@@ -187,8 +182,7 @@ public class SerializedString
     }
 
     @Override
-    public int appendUnquoted(char[] buffer, int offset)
-    {
+    public int appendUnquoted(char[] buffer, int offset) {
         String str = _value;
         final int length = str.length();
         if ((offset + length) > buffer.length) {
@@ -199,8 +193,7 @@ public class SerializedString
     }
 
     @Override
-    public int writeQuotedUTF8(OutputStream out) throws IOException
-    {
+    public int writeQuotedUTF8(OutputStream out) throws IOException {
         byte[] result = _quotedUTF8Ref;
         if (result == null) {
             result = JsonStringEncoder.getInstance().quoteAsUTF8(_value);
@@ -212,8 +205,7 @@ public class SerializedString
     }
 
     @Override
-    public int writeUnquotedUTF8(OutputStream out) throws IOException
-    {
+    public int writeUnquotedUTF8(OutputStream out) throws IOException {
         byte[] result = _unquotedUTF8Ref;
         if (result == null) {
             result = JsonStringEncoder.getInstance().encodeAsUTF8(_value);
@@ -225,8 +217,7 @@ public class SerializedString
     }
 
     @Override
-    public int putQuotedUTF8(ByteBuffer buffer)
-    {
+    public int putQuotedUTF8(ByteBuffer buffer) {
         byte[] result = _quotedUTF8Ref;
         if (result == null) {
             result = JsonStringEncoder.getInstance().quoteAsUTF8(_value);
@@ -241,8 +232,7 @@ public class SerializedString
     }
 
     @Override
-    public int putUnquotedUTF8(ByteBuffer buffer)
-    {
+    public int putUnquotedUTF8(ByteBuffer buffer) {
         byte[] result = _unquotedUTF8Ref;
         if (result == null) {
             result = JsonStringEncoder.getInstance().encodeAsUTF8(_value);
@@ -270,8 +260,7 @@ public class SerializedString
     public final int hashCode() { return _value.hashCode(); }
 
     @Override
-    public final boolean equals(Object o)
-    {
+    public final boolean equals(Object o) {
         if (o == this) return true;
         if (o == null || o.getClass() != getClass()) return false;
         SerializedString other = (SerializedString) o;

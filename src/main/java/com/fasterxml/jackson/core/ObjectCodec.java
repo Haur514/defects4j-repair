@@ -28,9 +28,7 @@ public abstract class ObjectCodec
 
     // Since 2.3: need baseline implementation to avoid backwards compatibility
     @Override
-    public Version version() {
-        return Version.unknownVersion();
-    }
+    public Version version() { return Version.unknownVersion(); }
     
     /*
     /**********************************************************
@@ -115,7 +113,10 @@ public abstract class ObjectCodec
      * using set of {@link TreeNode} instances. Returns
      * root of the resulting tree (where root can consist
      * of just a single node if the current event is a
-     * value event, not container).
+     * value event, not container). Empty or whitespace
+     * documents return null.
+     *
+     * @return next tree from jp, or null if empty.
      */
     @Override
     public abstract <T extends TreeNode> T readTree(JsonParser jp)
@@ -171,7 +172,7 @@ public abstract class ObjectCodec
      * @deprecated Since 2.1: Use {@link #getFactory} instead.
      */
     @Deprecated
-    public abstract JsonFactory getJsonFactory();
+    public JsonFactory getJsonFactory() { return getFactory(); }
 
     /**
      * Accessor for finding underlying data format factory
@@ -179,7 +180,5 @@ public abstract class ObjectCodec
      * 
      * @since 2.1
      */
-    public JsonFactory getFactory() {
-        return getJsonFactory();
-    }
+    public JsonFactory getFactory() { return getJsonFactory(); }
 }

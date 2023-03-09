@@ -10,7 +10,7 @@ import com.fasterxml.jackson.core.io.CharacterEscapes;
  * functionality works as expected.
  */
 public class TestCharEscaping
-    extends com.fasterxml.jackson.test.BaseTest
+    extends com.fasterxml.jackson.core.BaseTest
 {
     // for [JACKSON-627]
     @SuppressWarnings("serial")
@@ -30,7 +30,8 @@ public class TestCharEscaping
         public SerializableString getEscapeSequence(int ch) {
           throw new UnsupportedOperationException("Not implemented for test");
         }
-      };
+    };
+
     /*
     /**********************************************************
     /* Unit tests
@@ -147,6 +148,17 @@ public class TestCharEscaping
         jgen.setHighestNonEscapedChar(127); // must set to trigger bug
         jgen.writeString(longString.toString());
         jgen.close();
+    }
+
+    // [Issue#116]
+    public void testEscapesForCharArrays() throws Exception {
+        JsonFactory jf = new JsonFactory();
+        StringWriter writer = new StringWriter();
+        JsonGenerator jgen = jf.createGenerator(writer);
+        // must call #writeString(char[],int,int) and not #writeString(String)
+        jgen.writeString(new char[] { '\0' }, 0, 1);
+        jgen.close();
+        assertEquals("\"\\u0000\"", writer.toString());
     }
 }
 

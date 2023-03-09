@@ -102,7 +102,11 @@ public class UTF8JsonGenerator
     /**********************************************************
      */
 
-    protected final boolean _cfgQuoteNames;
+    /**
+     * Flag that is set if quoting is not to be added around
+     * JSON Object property names.
+     */
+    protected boolean _cfgUnqNames;
 
     /*
     /**********************************************************
@@ -131,7 +135,7 @@ public class UTF8JsonGenerator
         if (isEnabled(Feature.ESCAPE_NON_ASCII)) {
             setHighestNonEscapedChar(127);
         }
-        _cfgQuoteNames = Feature.QUOTE_FIELD_NAMES.enabledIn(features);
+        _cfgUnqNames = !Feature.QUOTE_FIELD_NAMES.enabledIn(features);
     }
     
     public UTF8JsonGenerator(IOContext ctxt, int features, ObjectCodec codec,
@@ -149,7 +153,7 @@ public class UTF8JsonGenerator
         _outputMaxContiguous = _outputEnd >> 3;
         _charBuffer = ctxt.allocConcatBuffer();
         _charBufferLength = _charBuffer.length;
-        _cfgQuoteNames = Feature.QUOTE_FIELD_NAMES.enabledIn(features);
+        _cfgUnqNames = !Feature.QUOTE_FIELD_NAMES.enabledIn(features);
     }
 
     /*
@@ -170,15 +174,15 @@ public class UTF8JsonGenerator
      */
 
     @Override
-    public void writeFieldName(String name)  throws IOException, JsonGenerationException
+    public void writeFieldName(String name)  throws IOException
     {
-        int status = _writeContext.writeFieldName(name);
+        if (_cfgPrettyPrinter != null) {
+            _writePPFieldName(name);
+            return;
+        }
+        final int status = _writeContext.writeFieldName(name);
         if (status == JsonWriteContext.STATUS_EXPECT_VALUE) {
             _reportError("Can not write a field name, expecting a value");
-        }
-        if (_cfgPrettyPrinter != null) {
-            _writePPFieldName(name, (status == JsonWriteContext.STATUS_OK_AFTER_COMMA));
-            return;
         }
         if (status == JsonWriteContext.STATUS_OK_AFTER_COMMA) { // need comma
             if (_outputTail >= _outputEnd) {
@@ -186,40 +190,33 @@ public class UTF8JsonGenerator
             }
             _outputBuffer[_outputTail++] = BYTE_COMMA;
         }
-        _writeFieldName(name);
-    }
-
-    protected final void _writeFieldName(String name)
-        throws IOException, JsonGenerationException
-    {
         /* To support [JACKSON-46], we'll do this:
          * (Question: should quoting of spaces (etc) still be enabled?)
          */
-        if (!_cfgQuoteNames) {
-            _writeStringSegments(name);
+        if (_cfgUnqNames) {
+            _writeStringSegments(name, false);
+            return;
+        }
+        final int len = name.length();
+        // Does it fit in buffer?
+        if (len > _charBufferLength) { // no, offline
+            _writeStringSegments(name, true);
             return;
         }
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
         _outputBuffer[_outputTail++] = BYTE_QUOTE;
-        // The beef:
-        final int len = name.length();
-        if (len <= _charBufferLength) { // yes, fits right in
-            name.getChars(0, len, _charBuffer, 0);
-            // But as one segment, or multiple?
-            if (len <= _outputMaxContiguous) {
-                if ((_outputTail + len) > _outputEnd) { // caller must ensure enough space
-                    _flushBuffer();
-                }
-                _writeStringSegment(_charBuffer, 0, len);
-            } else {
-                _writeStringSegments(_charBuffer, 0, len);
+        name.getChars(0, len, _charBuffer, 0);
+        // But as one segment, or multiple?
+        if (len <= _outputMaxContiguous) {
+            if ((_outputTail + len) > _outputEnd) { // caller must ensure enough space
+                _flushBuffer();
             }
+            _writeStringSegment(_charBuffer, 0, len);
         } else {
-            _writeStringSegments(name);
+            _writeStringSegments(_charBuffer, 0, len);
         }
-
         // and closing quotes; need room for one more char:
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
@@ -228,17 +225,15 @@ public class UTF8JsonGenerator
     }
     
     @Override
-    public void writeFieldName(SerializableString name)
-        throws IOException, JsonGenerationException
+    public void writeFieldName(SerializableString name) throws IOException
     {
-        // Object is a value, need to verify it's allowed
-        int status = _writeContext.writeFieldName(name.getValue());
+        if (_cfgPrettyPrinter != null) {
+            _writePPFieldName(name);
+            return;
+        }
+        final int status = _writeContext.writeFieldName(name.getValue());
         if (status == JsonWriteContext.STATUS_EXPECT_VALUE) {
             _reportError("Can not write a field name, expecting a value");
-        }
-        if (_cfgPrettyPrinter != null) {
-            _writePPFieldName(name, (status == JsonWriteContext.STATUS_OK_AFTER_COMMA));
-            return;
         }
         if (status == JsonWriteContext.STATUS_OK_AFTER_COMMA) {
             if (_outputTail >= _outputEnd) {
@@ -246,19 +241,8 @@ public class UTF8JsonGenerator
             }
             _outputBuffer[_outputTail++] = BYTE_COMMA;
         }
-        _writeFieldName(name);
-    }
-
-    protected final void _writeFieldName(SerializableString name)
-        throws IOException, JsonGenerationException
-    {
-        if (!_cfgQuoteNames) {
-            int len = name.appendQuotedUTF8(_outputBuffer, _outputTail); // different quoting (escaping)
-            if (len < 0) {
-                _writeBytes(name.asQuotedUTF8());
-            } else {
-                _outputTail += len;
-            }
+        if (_cfgUnqNames) {
+            _writeUnq(name);
             return;
         }
         if (_outputTail >= _outputEnd) {
@@ -277,6 +261,15 @@ public class UTF8JsonGenerator
         _outputBuffer[_outputTail++] = BYTE_QUOTE;
     }    
 
+    private final void _writeUnq(SerializableString name) throws IOException {
+        int len = name.appendQuotedUTF8(_outputBuffer, _outputTail);
+        if (len < 0) {
+            _writeBytes(name.asQuotedUTF8());
+        } else {
+            _outputTail += len;
+        }
+    }
+    
     /*
     /**********************************************************
     /* Output method implementations, structural
@@ -284,7 +277,7 @@ public class UTF8JsonGenerator
      */
 
     @Override
-    public final void writeStartArray() throws IOException, JsonGenerationException
+    public final void writeStartArray() throws IOException
     {
         _verifyValueWrite("start an array");
         _writeContext = _writeContext.createChildArrayContext();
@@ -299,7 +292,7 @@ public class UTF8JsonGenerator
     }
 
     @Override
-    public final void writeEndArray() throws IOException, JsonGenerationException
+    public final void writeEndArray() throws IOException
     {
         if (!_writeContext.inArray()) {
             _reportError("Current context not an ARRAY but "+_writeContext.getTypeDesc());
@@ -316,7 +309,7 @@ public class UTF8JsonGenerator
     }
 
     @Override
-    public final void writeStartObject() throws IOException, JsonGenerationException
+    public final void writeStartObject() throws IOException
     {
         _verifyValueWrite("start an object");
         _writeContext = _writeContext.createChildObjectContext();
@@ -331,7 +324,7 @@ public class UTF8JsonGenerator
     }
 
     @Override
-    public final void writeEndObject() throws IOException, JsonGenerationException
+    public final void writeEndObject() throws IOException
     {
         if (!_writeContext.inObject()) {
             _reportError("Current context not an object but "+_writeContext.getTypeDesc());
@@ -351,54 +344,59 @@ public class UTF8JsonGenerator
      * Specialized version of <code>_writeFieldName</code>, off-lined
      * to keep the "fast path" as simple (and hopefully fast) as possible.
      */
-    protected final void _writePPFieldName(String name, boolean commaBefore)
-        throws IOException, JsonGenerationException
+    protected final void _writePPFieldName(String name) throws IOException
     {
-        if (commaBefore) {
+        int status = _writeContext.writeFieldName(name);
+        if (status == JsonWriteContext.STATUS_EXPECT_VALUE) {
+            _reportError("Can not write a field name, expecting a value");
+        }
+        if ((status == JsonWriteContext.STATUS_OK_AFTER_COMMA)) {
             _cfgPrettyPrinter.writeObjectEntrySeparator(this);
         } else {
             _cfgPrettyPrinter.beforeObjectEntries(this);
         }
-
-        if (_cfgQuoteNames) { // standard
-            if (_outputTail >= _outputEnd) {
-                _flushBuffer();
-            }
-            _outputBuffer[_outputTail++] = BYTE_QUOTE;
-            final int len = name.length();
-            if (len <= _charBufferLength) { // yes, fits right in
-                name.getChars(0, len, _charBuffer, 0);
-                // But as one segment, or multiple?
-                if (len <= _outputMaxContiguous) {
-                    if ((_outputTail + len) > _outputEnd) { // caller must ensure enough space
-                        _flushBuffer();
-                    }
-                    _writeStringSegment(_charBuffer, 0, len);
-                } else {
-                    _writeStringSegments(_charBuffer, 0, len);
-                }
-            } else {
-                _writeStringSegments(name);
-            }
-            if (_outputTail >= _outputEnd) {
-                _flushBuffer();
-            }
-            _outputBuffer[_outputTail++] = BYTE_QUOTE;
-        } else { // non-standard, omit quotes
-            _writeStringSegments(name);
+        if (_cfgUnqNames) {
+            _writeStringSegments(name, false);
+            return;
         }
+        final int len = name.length();
+        if (len > _charBufferLength) {
+            _writeStringSegments(name, true);
+            return;
+        }
+        if (_outputTail >= _outputEnd) {
+            _flushBuffer();
+        }
+        _outputBuffer[_outputTail++] = BYTE_QUOTE;
+        name.getChars(0, len, _charBuffer, 0);
+        // But as one segment, or multiple?
+        if (len <= _outputMaxContiguous) {
+            if ((_outputTail + len) > _outputEnd) { // caller must ensure enough space
+                _flushBuffer();
+            }
+            _writeStringSegment(_charBuffer, 0, len);
+        } else {
+            _writeStringSegments(_charBuffer, 0, len);
+        }
+        if (_outputTail >= _outputEnd) {
+            _flushBuffer();
+        }
+        _outputBuffer[_outputTail++] = BYTE_QUOTE;
     }
 
-    protected final void _writePPFieldName(SerializableString name, boolean commaBefore)
-        throws IOException, JsonGenerationException
+    protected final void _writePPFieldName(SerializableString name) throws IOException
     {
-        if (commaBefore) {
+        final int status = _writeContext.writeFieldName(name.getValue());
+        if (status == JsonWriteContext.STATUS_EXPECT_VALUE) {
+            _reportError("Can not write a field name, expecting a value");
+        }
+        if (status == JsonWriteContext.STATUS_OK_AFTER_COMMA) {
             _cfgPrettyPrinter.writeObjectEntrySeparator(this);
         } else {
             _cfgPrettyPrinter.beforeObjectEntries(this);
         }
 
-        final boolean addQuotes = _cfgQuoteNames; // standard
+        final boolean addQuotes = !_cfgUnqNames; // standard
         if (addQuotes) {
             if (_outputTail >= _outputEnd) {
                 _flushBuffer();
@@ -421,8 +419,7 @@ public class UTF8JsonGenerator
      */
 
     @Override
-    public void writeString(String text)
-        throws IOException, JsonGenerationException
+    public void writeString(String text) throws IOException
     {
         _verifyValueWrite("write text value");
         if (text == null) {
@@ -432,7 +429,7 @@ public class UTF8JsonGenerator
         // First: can we make a local copy of chars that make up text?
         final int len = text.length();
         if (len > _charBufferLength) { // nope: off-line handling
-            _writeLongString(text);
+            _writeStringSegments(text, true);
             return;
         }
         // yes: good.
@@ -455,23 +452,8 @@ public class UTF8JsonGenerator
         }
         _outputBuffer[_outputTail++] = BYTE_QUOTE;
     }
-    
-    private void _writeLongString(String text)
-        throws IOException, JsonGenerationException
-    {
-        if (_outputTail >= _outputEnd) {
-            _flushBuffer();
-        }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
-        _writeStringSegments(text);
-        if (_outputTail >= _outputEnd) {
-            _flushBuffer();
-        }
-        _outputBuffer[_outputTail++] = BYTE_QUOTE;
-    }
 
-    private void _writeLongString(char[] text, int offset, int len)
-        throws IOException, JsonGenerationException
+    private void _writeLongString(char[] text, int offset, int len) throws IOException
     {
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
@@ -485,8 +467,7 @@ public class UTF8JsonGenerator
     }
 
     @Override
-    public void writeString(char[] text, int offset, int len)
-        throws IOException, JsonGenerationException
+    public void writeString(char[] text, int offset, int len) throws IOException
     {
         _verifyValueWrite("write text value");
         if (_outputTail >= _outputEnd) {
@@ -510,8 +491,7 @@ public class UTF8JsonGenerator
     }
 
     @Override
-    public final void writeString(SerializableString text)
-        throws IOException, JsonGenerationException
+    public final void writeString(SerializableString text) throws IOException
     {
         _verifyValueWrite("write text value");
         if (_outputTail >= _outputEnd) {
@@ -531,8 +511,7 @@ public class UTF8JsonGenerator
     }
 
     @Override
-    public void writeRawUTF8String(byte[] text, int offset, int length)
-        throws IOException, JsonGenerationException
+    public void writeRawUTF8String(byte[] text, int offset, int length) throws IOException
     {
         _verifyValueWrite("write text value");
         if (_outputTail >= _outputEnd) {
@@ -547,8 +526,7 @@ public class UTF8JsonGenerator
     }
 
     @Override
-    public void writeUTF8String(byte[] text, int offset, int len)
-        throws IOException, JsonGenerationException
+    public void writeUTF8String(byte[] text, int offset, int len) throws IOException
     {
         _verifyValueWrite("write text value");
         if (_outputTail >= _outputEnd) {
@@ -653,7 +631,7 @@ public class UTF8JsonGenerator
                 _outputBuffer[_outputTail++] = (byte) (0xc0 | (ch >> 6));
                 _outputBuffer[_outputTail++] = (byte) (0x80 | (ch & 0x3f));
             } else {
-                _outputRawMultiByteChar(ch, cbuf, offset, len);
+                offset = _outputRawMultiByteChar(ch, cbuf, offset, len);
             }
         }
     }
@@ -672,7 +650,7 @@ public class UTF8JsonGenerator
             bbuf[_outputTail++] = (byte) (0xc0 | (ch >> 6));
             bbuf[_outputTail++] = (byte) (0x80 | (ch & 0x3f));
         } else {
-            _outputRawMultiByteChar(ch, null, 0, 0);
+            /*offset =*/ _outputRawMultiByteChar(ch, null, 0, 0);
         }
     }
 
@@ -711,7 +689,7 @@ public class UTF8JsonGenerator
                 bbuf[_outputTail++] = (byte) (0xc0 | (ch >> 6));
                 bbuf[_outputTail++] = (byte) (0x80 | (ch & 0x3f));
             } else {
-                _outputRawMultiByteChar(ch, cbuf, offset, len);
+                offset = _outputRawMultiByteChar(ch, cbuf, offset, len);
             }
         }
     }
@@ -1167,9 +1145,15 @@ public class UTF8JsonGenerator
      * to single-segment writes (instead of maximum slices that
      * would fit in copy buffer)
      */
-    private final void _writeStringSegments(String text)
-        throws IOException, JsonGenerationException
+    private final void _writeStringSegments(String text, boolean addQuotes) throws IOException
     {
+        if (addQuotes) {
+            if (_outputTail >= _outputEnd) {
+                _flushBuffer();
+            }
+            _outputBuffer[_outputTail++] = BYTE_QUOTE;        
+        }
+
         int left = text.length();
         int offset = 0;
         final char[] cbuf = _charBuffer;
@@ -1183,6 +1167,13 @@ public class UTF8JsonGenerator
             _writeStringSegment(cbuf, 0, len);
             offset += len;
             left -= len;
+        }
+
+        if (addQuotes) {
+            if (_outputTail >= _outputEnd) {
+                _flushBuffer();
+            }
+            _outputBuffer[_outputTail++] = BYTE_QUOTE;
         }
     }
 
@@ -1751,7 +1742,7 @@ public class UTF8JsonGenerator
         if (ch >= SURR1_FIRST) {
             if (ch <= SURR2_LAST) { // yes, outside of BMP
                 // Do we have second part?
-                if (inputOffset >= inputLen) { // nope... have to note down
+                if (inputOffset >= inputLen || cbuf == null) { // nope... have to note down
                     _reportError("Split surrogate on writeRaw() input (last character)");
                 }
                 _outputSurrogates(ch, cbuf[inputOffset]);
