@@ -2,7 +2,11 @@ package org.jsoup.parser;
 
 import org.jsoup.Jsoup;
 import org.jsoup.TextUtil;
+import org.jsoup.helper.StringUtil;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -11,6 +15,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URISyntaxException;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotSame;
@@ -91,5 +96,24 @@ public class XmlTreeBuilderTest {
 
         Document xmlDoc = Jsoup.parse("<br>one</br>", "", Parser.xmlParser());
         assertEquals("<br>one</br>", xmlDoc.html());
+    }
+
+    @Test public void handlesXmlDeclarationAsDeclaration() {
+        String html = "<?xml encoding='UTF-8' ?><body>One</body><!-- comment -->";
+        Document doc = Jsoup.parse(html, "", Parser.xmlParser());
+        assertEquals("<?xml encoding='UTF-8' ?> <body> One </body> <!-- comment -->",
+                StringUtil.normaliseWhitespace(doc.outerHtml()));
+        assertEquals("#declaration", doc.childNode(0).nodeName());
+        assertEquals("#comment", doc.childNode(2).nodeName());
+    }
+
+    @Test public void xmlFragment() {
+        String xml = "<one src='/foo/' />Two<three><four /></three>";
+        List<Node> nodes = Parser.parseXmlFragment(xml, "http://example.com/");
+        assertEquals(3, nodes.size());
+
+        assertEquals("http://example.com/foo/", nodes.get(0).absUrl("src"));
+        assertEquals("one", nodes.get(0).nodeName());
+        assertEquals("Two", ((TextNode)nodes.get(1)).text());
     }
 }

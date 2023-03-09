@@ -17,8 +17,6 @@ import java.io.IOException;
  * Request configuration can be made using either the shortcut methods in Connection (e.g. {@link #userAgent(String)}),
  * or by methods in the Connection.Request object directly. All request configuration must be made before the request
  * is executed.
- * <p>
- * The Connection interface is <b>currently in beta</b> and subject to change. Comments, suggestions, and bug reports are welcome.
  */
 public interface Connection {
 
@@ -57,6 +55,15 @@ public interface Connection {
      * @return this Connection, for chaining
      */
     public Connection timeout(int millis);
+
+    /**
+     * Set the maximum bytes to read from the (uncompressed) connection into the body, before the connection is closed,
+     * and the input truncated. The default maximum is 1MB. A max size of zero is treated as an infinite amount (bounded
+     * only by your patience and the memory available on your machine).
+     * @param bytes number of bytes to read from the input before truncating
+     * @return this Connection, for chaining
+     */
+    public Connection maxBodySize(int bytes);
 
     /**
      * Set the request referrer (aka "referer") header.
@@ -109,6 +116,13 @@ public interface Connection {
 
     /**
      * Adds all of the supplied data to the request data parameters
+     * @param data collection of data parameters
+     * @return this Connection, for chaining
+     */
+    public Connection data(Collection<KeyVal> data);
+
+    /**
+     * Adds all of the supplied data to the request data parameters
      * @param data map of data parameters
      * @return this Connection, for chaining
      */
@@ -157,6 +171,10 @@ public interface Connection {
     /**
      * Execute the request as a GET, and parse the result.
      * @return parsed Document
+     * @throws java.net.MalformedURLException if the request URL is not a HTTP or HTTPS URL, or is otherwise malformed
+     * @throws HttpStatusException if the response is not OK and HTTP response errors are not ignored
+     * @throws UnsupportedMimeTypeException if the response mime type is not supported and those errors are not ignored
+     * @throws java.net.SocketTimeoutException if the connection times out
      * @throws IOException on error
      */
     public Document get() throws IOException;
@@ -164,6 +182,10 @@ public interface Connection {
     /**
      * Execute the request as a POST, and parse the result.
      * @return parsed Document
+     * @throws java.net.MalformedURLException if the request URL is not a HTTP or HTTPS URL, or is otherwise malformed
+     * @throws HttpStatusException if the response is not OK and HTTP response errors are not ignored
+     * @throws UnsupportedMimeTypeException if the response mime type is not supported and those errors are not ignored
+     * @throws java.net.SocketTimeoutException if the connection times out
      * @throws IOException on error
      */
     public Document post() throws IOException;
@@ -171,6 +193,10 @@ public interface Connection {
     /**
      * Execute the request.
      * @return a response object
+     * @throws java.net.MalformedURLException if the request URL is not a HTTP or HTTPS URL, or is otherwise malformed
+     * @throws HttpStatusException if the response is not OK and HTTP response errors are not ignored
+     * @throws UnsupportedMimeTypeException if the response mime type is not supported and those errors are not ignored
+     * @throws java.net.SocketTimeoutException if the connection times out
      * @throws IOException on error
      */
     public Response execute() throws IOException;
@@ -329,6 +355,19 @@ public interface Connection {
          * @return this Request, for chaining
          */
         public Request timeout(int millis);
+
+        /**
+         * Get the maximum body size, in milliseconds.
+         * @return the maximum body size, in milliseconds.
+         */
+        public int maxBodySize();
+
+        /**
+         * Update the maximum body size, in milliseconds.
+         * @param bytes maximum body size, in milliseconds.
+         * @return this Request, for chaining
+         */
+        public Request maxBodySize(int bytes);
 
         /**
          * Get the current followRedirects configuration.
