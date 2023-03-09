@@ -1,5 +1,6 @@
 package org.jsoup.nodes;
 
+import org.jsoup.helper.StringUtil;
 import org.jsoup.helper.Validate;
 import org.jsoup.parser.Tag;
 import org.jsoup.select.Elements;
@@ -16,6 +17,7 @@ import java.util.List;
 public class Document extends Element {
     private OutputSettings outputSettings = new OutputSettings();
     private QuirksMode quirksMode = QuirksMode.noQuirks;
+    private String location;
 
     /**
      Create a new, empty Document.
@@ -25,6 +27,7 @@ public class Document extends Element {
      */
     public Document(String baseUri) {
         super(Tag.valueOf("#root"), baseUri);
+        this.location = baseUri;
     }
 
     /**
@@ -43,6 +46,15 @@ public class Document extends Element {
         return doc;
     }
 
+    /**
+     * Get the URL this Document was parsed from. If the starting URL is a redirect,
+     * this will return the final URL from which the document was served from.
+     * @return location
+     */
+    public String location() {
+     return location;
+    }
+    
     /**
      Accessor to the document's {@code head} element.
      @return {@code head}
@@ -64,8 +76,9 @@ public class Document extends Element {
      @return Trimmed title, or empty string if none set.
      */
     public String title() {
+        // title is a preserve whitespace tag (for document output), but normalised here
         Element titleEl = getElementsByTag("title").first();
-        return titleEl != null ? titleEl.text().trim() : "";
+        return titleEl != null ? StringUtil.normaliseWhitespace(titleEl.text()).trim() : "";
     }
 
     /**
@@ -209,6 +222,7 @@ public class Document extends Element {
         private Charset charset = Charset.forName("UTF-8");
         private CharsetEncoder charsetEncoder = charset.newEncoder();
         private boolean prettyPrint = true;
+        private boolean outline = false;
         private int indentAmount = 1;
 
         public OutputSettings() {}
@@ -291,6 +305,25 @@ public class Document extends Element {
             prettyPrint = pretty;
             return this;
         }
+        
+        /**
+         * Get if outline mode is enabled. Default is false. If enabled, the HTML output methods will consider
+         * all tags as block.
+         * @return if outline mode is enabled.
+         */
+        public boolean outline() {
+            return outline;
+        }
+        
+        /**
+         * Enable or disable HTML outline mode.
+         * @param outlineMode new outline setting
+         * @return this, for chaining
+         */
+        public OutputSettings outline(boolean outlineMode) {
+            outline = outlineMode;
+            return this;
+        }
 
         /**
          * Get the current tag indent amount, used when pretty printing.
@@ -356,6 +389,11 @@ public class Document extends Element {
     public Document quirksMode(QuirksMode quirksMode) {
         this.quirksMode = quirksMode;
         return this;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return super.equals(o);
     }
 }
 
