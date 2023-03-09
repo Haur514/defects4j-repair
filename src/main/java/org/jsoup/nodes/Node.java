@@ -239,11 +239,22 @@ public abstract class Node implements Cloneable {
     }
 
     /**
-     Gets this node's parent node. Node overridable by extending classes, so useful if you really just need the Node type.
+     Gets this node's parent node. Not overridable by extending classes, so useful if you really just need the Node type.
      @return parent node; or null if no parent.
      */
     public final Node parentNode() {
         return parentNode;
+    }
+
+    /**
+     * Get this node's root node; that is, its topmost ancestor. If this node is the top ancestor, returns {@code this}.
+     * @return topmost ancestor.
+     */
+    public Node root() {
+        Node node = this;
+        while (node.parentNode != null)
+            node = node.parentNode;
+        return node;
     }
     
     /**
@@ -251,12 +262,8 @@ public abstract class Node implements Cloneable {
      * @return the Document associated with this Node, or null if there is no such Document.
      */
     public Document ownerDocument() {
-        if (this instanceof Document)
-            return (Document) this;
-        else if (parentNode == null)
-            return null;
-        else
-            return parentNode.ownerDocument();
+        Node root = root();
+        return (root instanceof Document) ? (Document) root : null;
     }
     
     /**
@@ -554,7 +561,8 @@ public abstract class Node implements Cloneable {
 
     // if this node has no document (or parent), retrieve the default output settings
     Document.OutputSettings getOutputSettings() {
-        return ownerDocument() != null ? ownerDocument().outputSettings() : (new Document("")).outputSettings();
+        Document owner = ownerDocument();
+        return owner != null ? owner.outputSettings() : (new Document("")).outputSettings();
     }
 
     /**

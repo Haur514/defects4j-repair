@@ -723,4 +723,77 @@ public class UrlConnectTest {
         assertEquals("Cost is €100", doc3.select("p").text());
         assertTrue(res3.body().contains("€"));
     }
+
+    @Test
+    public void handlesUnescapedRedirects() throws IOException {
+        // URL locations should be url safe (ascii) but are often not, so we should try to guess
+        // in this case the location header is utf-8, but defined in spec as iso8859, so detect, convert, encode
+        String url = "http://direct.infohound.net/tools/302-utf.pl";
+        String urlEscaped = "http://direct.infohound.net/tools/test%F0%9F%92%A9.html";
+
+        Connection.Response res = Jsoup.connect(url).execute();
+        Document doc = res.parse();
+        assertEquals(doc.body().text(), "\uD83D\uDCA9!");
+        assertEquals(doc.location(), urlEscaped);
+
+        Connection.Response res2 = Jsoup.connect(url).followRedirects(false).execute();
+        assertEquals("/tools/test\uD83D\uDCA9.html", res2.header("Location"));
+        // if we didn't notice it was utf8, would look like: Location: /tools/testð©.html
+    }
+
+    @Test
+    public void handlesUt8fInUrl() throws IOException {
+        String url = "http://direct.infohound.net/tools/test\uD83D\uDCA9.html";
+        String urlEscaped = "http://direct.infohound.net/tools/test%F0%9F%92%A9.html";
+
+        Connection.Response res = Jsoup.connect(url).execute();
+        Document doc = res.parse();
+        assertEquals("\uD83D\uDCA9!", doc.body().text());
+        assertEquals(urlEscaped, doc.location());
+    }
+
+    @Test
+    public void inWildUtfRedirect() throws IOException {
+        Connection.Response res = Jsoup.connect("http://brabantn.ws/Q4F").execute();
+        Document doc = res.parse();
+        assertEquals(
+            "http://www.omroepbrabant.nl/?news/2474781303/Gestrande+ree+in+Oss+niet+verdoofd,+maar+doodgeschoten+%E2%80%98Dit+kan+gewoon+niet,+bizar%E2%80%99+[VIDEO].aspx",
+            doc.location()
+            );
+    }
+
+    @Test
+    public void inWildUtfRedirect2() throws IOException {
+        Connection.Response res = Jsoup.connect("https://ssl.souq.com/sa-en/2724288604627/s").execute();
+        Document doc = res.parse();
+        assertEquals(
+            "http://saudi.souq.com/sa-en/%D8%AE%D8%B2%D9%86%D8%A9-%D8%A2%D9%85%D9%86%D8%A9-3-%D8%B7%D8%A8%D9%82%D8%A7%D8%AA-%D8%A8%D9%86%D8%B8%D8%A7%D9%85-%D9%82%D9%81%D9%84-%D8%A5%D9%84%D9%83%D8%AA%D8%B1%D9%88%D9%86%D9%8A-bsd11523-6831477/i/?ctype=dsrch",
+            doc.location()
+        );
+    }
+
+    @Test public void canInterruptRead() throws IOException, InterruptedException {
+        final String[] body = new String[1];
+        Thread runner = new Thread(new Runnable() {
+            public void run() {
+                try {
+                    Connection.Response res = Jsoup.connect("http://jsscxml.org/serverload.stream")
+                        .timeout(10 * 1000)
+                        .execute();
+                    body[0] = res.body();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+
+            }
+        });
+
+        runner.start();
+        Thread.sleep(1000 * 5);
+        runner.interrupt();
+        assertTrue(runner.isInterrupted());
+        runner.join();
+
+        assertTrue(body[0].length() > 0);
+    }
 }

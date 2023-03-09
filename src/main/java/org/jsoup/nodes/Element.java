@@ -10,6 +10,7 @@ import org.jsoup.select.Elements;
 import org.jsoup.select.Evaluator;
 import org.jsoup.select.NodeTraversor;
 import org.jsoup.select.NodeVisitor;
+import org.jsoup.select.QueryParser;
 import org.jsoup.select.Selector;
 
 import java.io.IOException;
@@ -36,6 +37,14 @@ public class Element extends Node {
     private Tag tag;
 
     private static final Pattern classSplit = Pattern.compile("\\s+");
+
+    /**
+     * Create a new, standalone element.
+     * @param tag tag name
+     */
+    public Element(String tag) {
+        this(Tag.valueOf(tag), "", new Attributes());
+    }
 
     /**
      * Create a new, standalone Element. (Standalone in that is has no parent.)
@@ -285,6 +294,24 @@ public class Element extends Node {
      */
     public Elements select(String cssQuery) {
         return Selector.select(cssQuery, this);
+    }
+
+    /**
+     * Check if this element matches the given {@link Selector} CSS query.
+     * @param cssQuery a {@link Selector} CSS query
+     * @return if this element matches the query
+     */
+    public boolean is(String cssQuery) {
+        return is(QueryParser.parse(cssQuery));
+    }
+
+    /**
+     * Check if this element matches the given evaluator.
+     * @param evaluator an element evaluator
+     * @return if this element matches
+     */
+    public boolean is(Evaluator evaluator) {
+        return evaluator.matches((Element)this.root(), this);
     }
     
     /**
@@ -1009,6 +1036,9 @@ public class Element extends Node {
             if (childNode instanceof DataNode) {
                 DataNode data = (DataNode) childNode;
                 sb.append(data.getWholeData());
+            } else if (childNode instanceof Comment) {
+                Comment comment = (Comment) childNode;
+                sb.append(comment.getData());
             } else if (childNode instanceof Element) {
                 Element element = (Element) childNode;
                 String elementData = element.data();

@@ -1,10 +1,19 @@
 package org.jsoup.safety;
 
 import org.jsoup.helper.Validate;
-import org.jsoup.nodes.*;
+import org.jsoup.nodes.Attribute;
+import org.jsoup.nodes.Attributes;
+import org.jsoup.nodes.DataNode;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+import org.jsoup.parser.ParseErrorList;
+import org.jsoup.parser.Parser;
 import org.jsoup.parser.Tag;
 import org.jsoup.select.NodeTraversor;
 import org.jsoup.select.NodeVisitor;
+
 
 
 /**
@@ -51,10 +60,10 @@ public class Cleaner {
     }
 
     /**
-     Determines if the input document is valid, against the whitelist. It is considered valid if all the tags and attributes
-     in the input HTML are allowed by the whitelist.
+     Determines if the input document <b>body</b>is valid, against the whitelist. It is considered valid if all the tags and attributes
+     in the input HTML are allowed by the whitelist, and that there is no content in the <code>head</code>.
      <p>
-     This method can be used as a validator for user input forms. An invalid document will still be cleaned successfully
+     This method can be used as a validator for user input. An invalid document will still be cleaned successfully
      using the {@link #clean(Document)} document. If using as a validator, it is recommended to still clean the document
      to ensure enforced attributes are set correctly, and that the output is tidied.
      </p>
@@ -68,6 +77,7 @@ public class Cleaner {
         int numDiscarded = copySafeNodes(dirtyDocument.body(), clean.body());
         return numDiscarded == 0;
     }
+
 
     /**
      Iterates the input and copies trusted nodes (tags, attributes, text) into the destination.

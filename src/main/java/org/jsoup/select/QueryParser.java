@@ -12,7 +12,7 @@ import org.jsoup.parser.TokenQueue;
 /**
  * Parses a CSS selector into an Evaluator tree.
  */
-class QueryParser {
+public class QueryParser {
     private final static String[] combinators = {",", ">", "+", "~", " "};
     private static final String[] AttributeEvals = new String[]{"=", "!=", "^=", "$=", "*=", "~="};
 
@@ -162,6 +162,8 @@ class QueryParser {
             contains(false);
         else if (tq.matches(":containsOwn("))
             contains(true);
+        else if (tq.matches(":containsData("))
+            containsData();
         else if (tq.matches(":matches("))
             matches(false);
         else if (tq.matches(":matchesOwn("))
@@ -337,6 +339,14 @@ class QueryParser {
             evals.add(new Evaluator.ContainsOwnText(searchText));
         else
             evals.add(new Evaluator.ContainsText(searchText));
+    }
+
+    // pseudo selector :containsData(data)
+    private void containsData() {
+        tq.consume(":containsData");
+        String searchText = TokenQueue.unescape(tq.chompBalanced('(', ')'));
+        Validate.notEmpty(searchText, ":containsData(text) query must not be empty");
+        evals.add(new Evaluator.ContainsData(searchText));
     }
 
     // :matches(regex), matchesOwn(regex)
