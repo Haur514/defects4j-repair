@@ -6,8 +6,8 @@ import java.math.BigDecimal;
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.core.json.DupDetector;
 import com.fasterxml.jackson.core.json.JsonWriteContext;
+import com.fasterxml.jackson.core.json.PackageVersion;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
-import com.fasterxml.jackson.core.util.VersionUtil;
 
 /**
  * This base class implements part of API that a JSON generator exposes
@@ -125,7 +125,7 @@ public abstract class GeneratorBase extends JsonGenerator
      * a simple generated class, with information extracted from Maven project file
      * during build.
      */
-    @Override public Version version() { return VersionUtil.versionFor(getClass()); }
+    @Override public Version version() { return PackageVersion.VERSION; }
 
     @Override
     public Object getCurrentValue() {
@@ -262,9 +262,11 @@ public abstract class GeneratorBase extends JsonGenerator
      */
 
     /**
-     * Note: co-variant return type.
+     * Note: type was co-variant until Jackson 2.7; reverted back to
+     * base type in 2.8 to allow for overriding by subtypes that use
+     * custom context type.
      */
-    @Override public JsonWriteContext getOutputContext() { return _writeContext; }
+    @Override public JsonStreamContext getOutputContext() { return _writeContext; }
 
     /*
     /**********************************************************
@@ -276,6 +278,16 @@ public abstract class GeneratorBase extends JsonGenerator
     //public void writeEndArray() throws IOException
     //public void writeStartObject() throws IOException
     //public void writeEndObject() throws IOException
+
+    @Override // since 2.8
+    public void writeStartObject(Object forValue) throws IOException
+    {
+        writeStartObject();
+        if ((_writeContext != null) && (forValue != null)) {
+            _writeContext.setCurrentValue(forValue);
+        }
+        setCurrentValue(forValue);
+    }
 
     /*
     /**********************************************************

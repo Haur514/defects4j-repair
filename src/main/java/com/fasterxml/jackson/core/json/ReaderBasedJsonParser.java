@@ -163,39 +163,16 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
     @Override public Object getInputSource() { return _reader; }
 
-    @Override
-    protected boolean loadMore() throws IOException
-    {
-        final int bufSize = _inputEnd;
-
-        _currInputProcessed += bufSize;
-        _currInputRowStart -= bufSize;
-
-        // 26-Nov-2015, tatu: Since name-offset requires it too, must offset
-        //   this increase to avoid "moving" name-offset, resulting most likely
-        //   in negative value, which is fine as combine value remains unchanged.
-        _nameStartOffset -= bufSize;
-
-        if (_reader != null) {
-            int count = _reader.read(_inputBuffer, 0, _inputBuffer.length);
-            if (count > 0) {
-                _inputPtr = 0;
-                _inputEnd = count;
-                return true;
-            }
-            // End of input
-            _closeInput();
-            // Should never return 0, so let's fail
-            if (count == 0) {
-                throw new IOException("Reader returned 0 characters when trying to read "+_inputEnd);
-            }
-        }
-        return false;
-    }
-
+    @Deprecated // since 2.8
     protected char getNextChar(String eofMsg) throws IOException {
+        return getNextChar(eofMsg, null);
+    }
+    
+    protected char getNextChar(String eofMsg, JsonToken forToken) throws IOException {
         if (_inputPtr >= _inputEnd) {
-            if (!loadMore()) { _reportInvalidEOF(eofMsg); }
+            if (!_loadMore()) {
+                _reportInvalidEOF(eofMsg, forToken);
+            }
         }
         return _inputBuffer[_inputPtr++];
     }
@@ -240,6 +217,45 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
     /*
     /**********************************************************
+    /* Low-level access, supporting
+    /**********************************************************
+     */
+
+    protected void _loadMoreGuaranteed() throws IOException {
+        if (!_loadMore()) { _reportInvalidEOF(); }
+    }
+    
+    protected boolean _loadMore() throws IOException
+    {
+        final int bufSize = _inputEnd;
+
+        _currInputProcessed += bufSize;
+        _currInputRowStart -= bufSize;
+
+        // 26-Nov-2015, tatu: Since name-offset requires it too, must offset
+        //   this increase to avoid "moving" name-offset, resulting most likely
+        //   in negative value, which is fine as combine value remains unchanged.
+        _nameStartOffset -= bufSize;
+
+        if (_reader != null) {
+            int count = _reader.read(_inputBuffer, 0, _inputBuffer.length);
+            if (count > 0) {
+                _inputPtr = 0;
+                _inputEnd = count;
+                return true;
+            }
+            // End of input
+            _closeInput();
+            // Should never return 0, so let's fail
+            if (count == 0) {
+                throw new IOException("Reader returned 0 characters when trying to read "+_inputEnd);
+            }
+        }
+        return false;
+    }
+
+    /*
+    /**********************************************************
     /* Public API, data access
     /**********************************************************
      */
@@ -264,6 +280,33 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         return _getText2(t);
     }
 
+    @Override // since 2.8
+    public int getText(Writer writer) throws IOException
+    {
+        JsonToken t = _currToken;
+        if (t == JsonToken.VALUE_STRING) {
+            if (_tokenIncomplete) {
+                _tokenIncomplete = false;
+                _finishString(); // only strings can be incomplete
+            }
+            return _textBuffer.contentsToWriter(writer);
+        }
+        if (t == JsonToken.FIELD_NAME) {
+            String n = _parsingContext.getCurrentName();
+            writer.write(n);
+            return n.length();
+        }
+        if (t != null) {
+            if (t.isNumeric()) {
+                return _textBuffer.contentsToWriter(writer);
+            }
+            char[] ch = t.asCharArray();
+            writer.write(ch);
+            return ch.length;
+        }
+        return 0;
+    }
+    
     // // // Let's override default impls for improved performance
 
     // @since 2.1
@@ -457,7 +500,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             char ch;
             do {
                 if (_inputPtr >= _inputEnd) {
-                    loadMoreGuaranteed();
+                    _loadMoreGuaranteed();
                 }
                 ch = _inputBuffer[_inputPtr++];
             } while (ch <= INT_SPACE);
@@ -484,7 +527,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             // then second base64 char; can't get padding yet, nor ws
 
             if (_inputPtr >= _inputEnd) {
-                loadMoreGuaranteed();
+                _loadMoreGuaranteed();
             }
             ch = _inputBuffer[_inputPtr++];
             bits = b64variant.decodeBase64Char(ch);
@@ -495,7 +538,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
             // third base64 char; can be padding, but not ws
             if (_inputPtr >= _inputEnd) {
-                loadMoreGuaranteed();
+                _loadMoreGuaranteed();
             }
             ch = _inputBuffer[_inputPtr++];
             bits = b64variant.decodeBase64Char(ch);
@@ -514,7 +557,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                 if (bits == Base64Variant.BASE64_VALUE_PADDING) {
                     // Ok, must get padding
                     if (_inputPtr >= _inputEnd) {
-                        loadMoreGuaranteed();
+                        _loadMoreGuaranteed();
                     }
                     ch = _inputBuffer[_inputPtr++];
                     if (!b64variant.usesPaddingChar(ch)) {
@@ -530,7 +573,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             decodedData = (decodedData << 6) | bits;
             // fourth and last base64 char; can be padding, but not ws
             if (_inputPtr >= _inputEnd) {
-                loadMoreGuaranteed();
+                _loadMoreGuaranteed();
             }
             ch = _inputBuffer[_inputPtr++];
             bits = b64variant.decodeBase64Char(ch);
@@ -600,9 +643,8 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         }
         int i = _skipWSOrEnd();
         if (i < 0) { // end-of-input
-            /* 19-Feb-2009, tatu: Should actually close/release things
-             *    like input source, symbol table and recyclable buffers now.
-             */
+            // Should actually close/release things
+            // like input source, symbol table and recyclable buffers now.
             close();
             return (_currToken = null);
         }
@@ -667,9 +709,8 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             }
             t = JsonToken.START_OBJECT;
             break;
-        case ']':
         case '}':
-            // Error: neither is valid at this point; valid closers have
+            // Error: } is not valid at this point; valid closers have
             // been handled earlier
             _reportUnexpectedChar(i, "expected a value");
         case 't':
@@ -732,6 +773,14 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             _parsingContext = _parsingContext.createChildObjectContext(_tokenInputRow, _tokenInputCol);
         }
         return (_currToken = t);
+    }
+
+    @Override
+    public void finishToken() throws IOException {
+        if (_tokenIncomplete) {
+            _tokenIncomplete = false;
+            _finishString(); // only strings can be incomplete
+        }
     }
 
     /*
@@ -1070,6 +1119,20 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         case '8':
         case '9':
             return (_currToken = _parsePosNumber(i));
+        /*
+         * This check proceeds only if the Feature.ALLOW_MISSING_VALUES is enabled
+         * The Check is for missing values. Incase of missing values in an array, the next token will be either ',' or ']'.
+         * This case, decrements the already incremented _inputPtr in the buffer in case of comma(,) 
+         * so that the existing flow goes back to checking the next token which will be comma again and
+         * it continues the parsing.
+         * Also the case returns NULL as current token in case of ',' or ']'.    
+         */
+        case ',':
+        case ']':
+        	if(isEnabled(Feature.ALLOW_MISSING_VALUES)) {
+        		_inputPtr--;
+        		return (_currToken = JsonToken.VALUE_NULL);  
+        	}    
         }
         return (_currToken = _handleOddValue(i));
     }
@@ -1384,7 +1447,8 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
         // This is the place to do leading-zero check(s) too:
         int intLen = 0;
-        char c = (_inputPtr < _inputEnd) ? _inputBuffer[_inputPtr++] : getNextChar("No digit following minus sign");
+        char c = (_inputPtr < _inputEnd) ? _inputBuffer[_inputPtr++]
+                : getNextChar("No digit following minus sign", JsonToken.VALUE_NUMBER_INT);
         if (c == '0') {
             c = _verifyNoLeadingZeroes();
         }
@@ -1399,7 +1463,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                 outPtr = 0;
             }
             outBuf[outPtr++] = c;
-            if (_inputPtr >= _inputEnd && !loadMore()) {
+            if (_inputPtr >= _inputEnd && !_loadMore()) {
                 // EOF is legal for main level int values
                 c = CHAR_NULL;
                 eof = true;
@@ -1415,11 +1479,15 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         int fractLen = 0;
         // And then see if we get other parts
         if (c == '.') { // yes, fraction
+            if (outPtr >= outBuf.length) {
+                outBuf = _textBuffer.finishCurrentSegment();
+                outPtr = 0;
+            }
             outBuf[outPtr++] = c;
 
             fract_loop:
             while (true) {
-                if (_inputPtr >= _inputEnd && !loadMore()) {
+                if (_inputPtr >= _inputEnd && !_loadMore()) {
                     eof = true;
                     break fract_loop;
                 }
@@ -1470,7 +1538,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                     outPtr = 0;
                 }
                 outBuf[outPtr++] = c;
-                if (_inputPtr >= _inputEnd && !loadMore()) {
+                if (_inputPtr >= _inputEnd && !_loadMore()) {
                     eof = true;
                     break exp_loop;
                 }
@@ -1514,7 +1582,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
     private char _verifyNLZ2() throws IOException
     {
-        if (_inputPtr >= _inputEnd && !loadMore()) {
+        if (_inputPtr >= _inputEnd && !_loadMore()) {
             return '0';
         }
         char ch = _inputBuffer[_inputPtr];
@@ -1527,7 +1595,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         // if so, just need to skip either all zeroes (if followed by number); or all but one (if non-number)
         ++_inputPtr; // Leading zero to be skipped
         if (ch == INT_0) {
-            while (_inputPtr < _inputEnd || loadMore()) {
+            while (_inputPtr < _inputEnd || _loadMore()) {
                 ch = _inputBuffer[_inputPtr];
                 if (ch < '0' || ch > '9') { // followed by non-number; retain one zero
                     return '0';
@@ -1549,7 +1617,9 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     {
         if (ch == 'I') {
             if (_inputPtr >= _inputEnd) {
-                if (!loadMore()) { _reportInvalidEOFInValue(); }
+                if (!_loadMore()) {
+                    _reportInvalidEOFInValue(JsonToken.VALUE_NUMBER_INT);
+                }
             }
             ch = _inputBuffer[_inputPtr++];
             if (ch == 'N') {
@@ -1642,8 +1712,8 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
         while (true) {
             if (_inputPtr >= _inputEnd) {
-                if (!loadMore()) {
-                    _reportInvalidEOF(": was expecting closing '"+((char) endChar)+"' for name");
+                if (!_loadMore()) {
+                    _reportInvalidEOF(" in field name", JsonToken.FIELD_NAME);
                 }
             }
             char c = _inputBuffer[_inputPtr++];
@@ -1782,15 +1852,28 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         // Most likely an error, unless we are to allow single-quote-strings
         switch (i) {
         case '\'':
-            /* [JACKSON-173]: allow single quotes. Unlike with regular
-             * Strings, we'll eagerly parse contents; this so that there's
-             * no need to store information on quote char used.
-             *
+            /* Allow single quotes? Unlike with regular Strings, we'll eagerly parse
+             * contents; this so that there'sno need to store information on quote char used.
              * Also, no separation to fast/slow parsing; we'll just do
              * one regular (~= slowish) parsing, to keep code simple
              */
             if (isEnabled(Feature.ALLOW_SINGLE_QUOTES)) {
                 return _handleApos();
+            }
+            break;
+        case ']':
+            /* 28-Mar-2016: [core#116]: If Feature.ALLOW_MISSING_VALUES is enabled
+             *   we may allow "missing values", that is, encountering a trailing
+             *   comma or closing marker where value would be expected
+             */
+            if (!_parsingContext.inArray()) {
+                break;
+            }
+            // fall through
+        case ',':
+            if (isEnabled(Feature.ALLOW_MISSING_VALUES)) {
+                --_inputPtr;
+                return JsonToken.VALUE_NULL;
             }
             break;
         case 'N':
@@ -1809,8 +1892,8 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             break;
         case '+': // note: '-' is taken as number
             if (_inputPtr >= _inputEnd) {
-                if (!loadMore()) {
-                    _reportInvalidEOFInValue();
+                if (!_loadMore()) {
+                    _reportInvalidEOFInValue(JsonToken.VALUE_NUMBER_INT);
                 }
             }
             return _handleInvalidNumberStart(_inputBuffer[_inputPtr++], false);
@@ -1831,8 +1914,9 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
         while (true) {
             if (_inputPtr >= _inputEnd) {
-                if (!loadMore()) {
-                    _reportInvalidEOF(": was expecting closing quote for a string value");
+                if (!_loadMore()) {
+                    _reportInvalidEOF(": was expecting closing quote for a string value",
+                            JsonToken.VALUE_STRING);
                 }
             }
             char c = _inputBuffer[_inputPtr++];
@@ -1874,7 +1958,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
         while (true) {
             if (_inputPtr >= _inputEnd) {
-                if (!loadMore()) { // acceptable for now (will error out later)
+                if (!_loadMore()) { // acceptable for now (will error out later)
                     break;
                 }
             }
@@ -1955,8 +2039,9 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
         while (true) {
             if (_inputPtr >= _inputEnd) {
-                if (!loadMore()) {
-                    _reportInvalidEOF(": was expecting closing quote for a string value");
+                if (!_loadMore()) {
+                    _reportInvalidEOF(": was expecting closing quote for a string value",
+                            JsonToken.VALUE_STRING);
                 }
             }
             char c = _inputBuffer[_inputPtr++];
@@ -2001,8 +2086,9 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         while (true) {
             if (inPtr >= inLen) {
                 _inputPtr = inPtr;
-                if (!loadMore()) {
-                    _reportInvalidEOF(": was expecting closing quote for a string value");
+                if (!_loadMore()) {
+                    _reportInvalidEOF(": was expecting closing quote for a string value",
+                            JsonToken.VALUE_STRING);
                 }
                 inPtr = _inputPtr;
                 inLen = _inputEnd;
@@ -2042,7 +2128,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
      * (to see if we have \n following \r).
      */
     protected final void _skipCR() throws IOException {
-        if (_inputPtr < _inputEnd || loadMore()) {
+        if (_inputPtr < _inputEnd || _loadMore()) {
             if (_inputBuffer[_inputPtr] == '\n') {
                 ++_inputPtr;
             }
@@ -2107,10 +2193,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
     private final int _skipColon2(boolean gotColon) throws IOException
     {
-        while (true) {
-            if (_inputPtr >= _inputEnd) {
-                loadMoreGuaranteed();
-            }
+        while (_inputPtr < _inputEnd || _loadMore()) {
             int i = (int) _inputBuffer[_inputPtr++];
             if (i > INT_SPACE) {
                 if (i == INT_SLASH) {
@@ -2142,6 +2225,9 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                 }
             }
         }
+        _reportInvalidEOF(" within/between "+_parsingContext.typeDesc()+" entries",
+                null);
+        return -1;
     }
 
     // Variant called when we know there's at least 4 more bytes available
@@ -2196,7 +2282,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     private final int _skipComma(int i) throws IOException
     {
         if (i != INT_COMMA) {
-            _reportUnexpectedChar(i, "was expecting comma to separate "+_parsingContext.getTypeDesc()+" entries");
+            _reportUnexpectedChar(i, "was expecting comma to separate "+_parsingContext.typeDesc()+" entries");
         }
         while (_inputPtr < _inputEnd) {
             i = (int) _inputBuffer[_inputPtr++];
@@ -2223,7 +2309,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
     private final int _skipAfterComma2() throws IOException
     {
-        while (_inputPtr < _inputEnd || loadMore()) {
+        while (_inputPtr < _inputEnd || _loadMore()) {
             int i = (int) _inputBuffer[_inputPtr++];
             if (i > INT_SPACE) {
                 if (i == INT_SLASH) {
@@ -2248,7 +2334,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                 }
             }
         }
-        throw _constructError("Unexpected end-of-input within/between "+_parsingContext.getTypeDesc()+" entries");
+        throw _constructError("Unexpected end-of-input within/between "+_parsingContext.typeDesc()+" entries");
     }
 
     private final int _skipWSOrEnd() throws IOException
@@ -2256,7 +2342,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         // Let's handle first character separately since it is likely that
         // it is either non-whitespace; or we have longer run of white space
         if (_inputPtr >= _inputEnd) {
-            if (!loadMore()) {
+            if (!_loadMore()) {
                 return _eofAsNextChar();
             }
         }
@@ -2306,7 +2392,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     {
         while (true) {
             if (_inputPtr >= _inputEnd) {
-                if (!loadMore()) { // We ran out of input...
+                if (!_loadMore()) { // We ran out of input...
                     return _eofAsNextChar();
                 }
             }
@@ -2341,8 +2427,8 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             _reportUnexpectedChar('/', "maybe a (non-standard) comment? (not recognized as one since Feature 'ALLOW_COMMENTS' not enabled for parser)");
         }
         // First: check which comment (if either) it is:
-        if (_inputPtr >= _inputEnd && !loadMore()) {
-            _reportInvalidEOF(" in a comment");
+        if (_inputPtr >= _inputEnd && !_loadMore()) {
+            _reportInvalidEOF(" in a comment", null);
         }
         char c = _inputBuffer[_inputPtr++];
         if (c == '/') {
@@ -2357,11 +2443,11 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     private void _skipCComment() throws IOException
     {
         // Ok: need the matching '*/'
-        while ((_inputPtr < _inputEnd) || loadMore()) {
+        while ((_inputPtr < _inputEnd) || _loadMore()) {
             int i = (int) _inputBuffer[_inputPtr++];
             if (i <= '*') {
                 if (i == '*') { // end?
-                    if ((_inputPtr >= _inputEnd) && !loadMore()) {
+                    if ((_inputPtr >= _inputEnd) && !_loadMore()) {
                         break;
                     }
                     if (_inputBuffer[_inputPtr] == INT_SLASH) {
@@ -2382,7 +2468,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                 }
             }
         }
-        _reportInvalidEOF(" in a comment");
+        _reportInvalidEOF(" in a comment", null);
     }
 
     private boolean _skipYAMLComment() throws IOException
@@ -2397,7 +2483,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     private void _skipLine() throws IOException
     {
         // Ok: need to find EOF or linefeed
-        while ((_inputPtr < _inputEnd) || loadMore()) {
+        while ((_inputPtr < _inputEnd) || _loadMore()) {
             int i = (int) _inputBuffer[_inputPtr++];
             if (i < INT_SPACE) {
                 if (i == INT_LF) {
@@ -2418,8 +2504,8 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
     protected char _decodeEscaped() throws IOException
     {
         if (_inputPtr >= _inputEnd) {
-            if (!loadMore()) {
-                _reportInvalidEOF(" in character escape sequence");
+            if (!_loadMore()) {
+                _reportInvalidEOF(" in character escape sequence", JsonToken.VALUE_STRING);
             }
         }
         char c = _inputBuffer[_inputPtr++];
@@ -2454,8 +2540,8 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
         int value = 0;
         for (int i = 0; i < 4; ++i) {
             if (_inputPtr >= _inputEnd) {
-                if (!loadMore()) {
-                    _reportInvalidEOF(" in character escape sequence");
+                if (!_loadMore()) {
+                    _reportInvalidEOF(" in character escape sequence", JsonToken.VALUE_STRING);
                 }
             }
             int ch = (int) _inputBuffer[_inputPtr++];
@@ -2525,7 +2611,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
         do {
             if (_inputPtr >= _inputEnd) {
-                if (!loadMore()) {
+                if (!_loadMore()) {
                     _reportInvalidToken(matchStr.substring(0, i));
                 }
             }
@@ -2537,7 +2623,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
         // but let's also ensure we either get EOF, or non-alphanum char...
         if (_inputPtr >= _inputEnd) {
-            if (!loadMore()) {
+            if (!_loadMore()) {
                 return;
             }
         }
@@ -2573,7 +2659,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             char ch;
             do {
                 if (_inputPtr >= _inputEnd) {
-                    loadMoreGuaranteed();
+                    _loadMoreGuaranteed();
                 }
                 ch = _inputBuffer[_inputPtr++];
             } while (ch <= INT_SPACE);
@@ -2592,7 +2678,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             // then second base64 char; can't get padding yet, nor ws
 
             if (_inputPtr >= _inputEnd) {
-                loadMoreGuaranteed();
+                _loadMoreGuaranteed();
             }
             ch = _inputBuffer[_inputPtr++];
             bits = b64variant.decodeBase64Char(ch);
@@ -2603,7 +2689,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
 
             // third base64 char; can be padding, but not ws
             if (_inputPtr >= _inputEnd) {
-                loadMoreGuaranteed();
+                _loadMoreGuaranteed();
             }
             ch = _inputBuffer[_inputPtr++];
             bits = b64variant.decodeBase64Char(ch);
@@ -2622,7 +2708,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
                 if (bits == Base64Variant.BASE64_VALUE_PADDING) {
                     // Ok, must get more padding chars, then
                     if (_inputPtr >= _inputEnd) {
-                        loadMoreGuaranteed();
+                        _loadMoreGuaranteed();
                     }
                     ch = _inputBuffer[_inputPtr++];
                     if (!b64variant.usesPaddingChar(ch)) {
@@ -2639,7 +2725,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
             decodedData = (decodedData << 6) | bits;
             // fourth and last base64 char; can be padding, but not ws
             if (_inputPtr >= _inputEnd) {
-                loadMoreGuaranteed();
+                _loadMoreGuaranteed();
             }
             ch = _inputBuffer[_inputPtr++];
             bits = b64variant.decodeBase64Char(ch);
@@ -2735,7 +2821,7 @@ public class ReaderBasedJsonParser // final in 2.3, earlier
          */
         while (true) {
             if (_inputPtr >= _inputEnd) {
-                if (!loadMore()) {
+                if (!_loadMore()) {
                     break;
                 }
             }

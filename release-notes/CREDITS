@@ -78,6 +78,12 @@ Michael Lehenbauer (mikelehen@github)
 Lokesh Kumar N (LokeshN@github)
   * Contributed #209: Make use of `_allowMultipleMatches` in `FilteringParserDelegate`
    (2.7.4)
+  * Contributed fix for #117: Support for missing values (non-compliant JSON)
+   (2.8.0)
+  * Contributed implementation for #86: Allow inclusion of request body for JsonParseException
+   (2.8.0)
+  * Contributed implementation for #285: Allow inclusion of request body for JsonParseException
+   (2.8.0)
 
 Tanguy Leroux (tlrx@github)
   * Reported, contributed fix for #280: FilteringGeneratorDelegate.writeUTF8String()
@@ -93,3 +99,11 @@ Allar Haav (haav@github)
   * Reportef #317: ArrayIndexOutOfBoundsException: 200 on floating point number with exactly
   200-length decimal part
    (2.7.8)
+
+Mikael Staldal (mikaelstaldal@github)
+  * Contributed fix for #265: `JsonStringEncoder` should allow passing `CharSequence`
+   (2.8.0)
+
+Kevin Gallardo (newkek@github)
+  * Reported #296: JsonParserSequence skips a token on a switched Parser
+   (2.8.0)

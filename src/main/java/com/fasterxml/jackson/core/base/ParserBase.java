@@ -465,9 +465,6 @@ public abstract class ParserBase extends ParserMinimalBase
         return false;
     }
 
-    // No embedded objects with base impl...
-    @Override public Object getEmbeddedObject() throws IOException { return null; }
-
     @SuppressWarnings("resource")
     @Override // since 2.7
     public byte[] getBinaryValue(Base64Variant variant) throws IOException
@@ -499,22 +496,10 @@ public abstract class ParserBase extends ParserMinimalBase
 
     /*
     /**********************************************************
-    /* Low-level reading, other
-    /**********************************************************
-     */
-
-    protected final void loadMoreGuaranteed() throws IOException {
-        if (!loadMore()) { _reportInvalidEOF(); }
-    }
-    
-    /*
-    /**********************************************************
     /* Abstract methods needed from sub-classes
     /**********************************************************
      */
 
-    protected abstract boolean loadMore() throws IOException;
-    protected abstract void _finishString() throws IOException;
     protected abstract void _closeInput() throws IOException;
     
     /*
@@ -546,7 +531,12 @@ public abstract class ParserBase extends ParserMinimalBase
     @Override
     protected void _handleEOF() throws JsonParseException {
         if (!_parsingContext.inRoot()) {
-            _reportInvalidEOF(": expected close marker for "+_parsingContext.getTypeDesc()+" (from "+_parsingContext.getStartLocation(_ioContext.getSourceReference())+")");
+            String marker = _parsingContext.inArray() ? "Array" : "Object";
+            _reportInvalidEOF(String.format(
+                    ": expected close marker for %s (start marker at %s)",
+                    marker,
+                    _parsingContext.getStartLocation(_ioContext.getSourceReference())),
+                    null);
         }
     }
 
@@ -566,7 +556,7 @@ public abstract class ParserBase extends ParserMinimalBase
     
     protected void _reportMismatchedEndMarker(int actCh, char expCh) throws JsonParseException {
         String startDesc = ""+_parsingContext.getStartLocation(_ioContext.getSourceReference());
-        _reportError("Unexpected close marker '"+((char) actCh)+"': expected '"+expCh+"' (for "+_parsingContext.getTypeDesc()+" starting at "+startDesc+")");
+        _reportError("Unexpected close marker '"+((char) actCh)+"': expected '"+expCh+"' (for "+_parsingContext.typeDesc()+" starting at "+startDesc+")");
     }
 
     /*
@@ -1038,9 +1028,8 @@ public abstract class ParserBase extends ParserMinimalBase
          */
     
         if ((_numTypesValid & NR_DOUBLE) != 0) {
-            /* Let's actually parse from String representation,
-             * to avoid rounding errors that non-decimal floating operations
-             * would incur
+            /* Let's actually parse from String representation, to avoid
+             * rounding errors that non-decimal floating operations could incur
              */
             _numberBigDecimal = NumberInput.parseBigDecimal(getText());
         } else if ((_numTypesValid & NR_BIGINT) != 0) {
@@ -1074,11 +1063,13 @@ public abstract class ParserBase extends ParserMinimalBase
     }
 
     protected void reportOverflowInt() throws IOException {
-        _reportError("Numeric value ("+getText()+") out of range of int ("+Integer.MIN_VALUE+" - "+Integer.MAX_VALUE+")");
+        _reportError(String.format("Numeric value (%s) out of range of int (%d - %s)",
+                getText(), Integer.MIN_VALUE, Integer.MAX_VALUE));
     }
     
     protected void reportOverflowLong() throws IOException {
-        _reportError("Numeric value ("+getText()+") out of range of long ("+Long.MIN_VALUE+" - "+Long.MAX_VALUE+")");
+        _reportError(String.format("Numeric value (%s) out of range of long (%d - %s)",
+                getText(), Long.MIN_VALUE, Long.MAX_VALUE));
     }    
 
     /*
@@ -1119,7 +1110,6 @@ public abstract class ParserBase extends ParserMinimalBase
     
     protected final int _decodeBase64Escape(Base64Variant b64variant, char ch, int index) throws IOException
     {
-        // 17-May-2011, tatu: As per [JACKSON-xxx], need to handle escaped chars
         if (ch != '\\') {
             throw reportInvalidBase64Char(b64variant, ch, index);
         }
@@ -1163,4 +1153,22 @@ public abstract class ParserBase extends ParserMinimalBase
         }
         return new IllegalArgumentException(base);
     }
+
+    /*
+    /**********************************************************
+    /* Stuff that was abstract and required before 2.8, but that
+    /* is not mandatory in 2.8 or above.
+    /**********************************************************
+     */
+
+    @Deprecated // since 2.8
+    protected void loadMoreGuaranteed() throws IOException {
+        if (!loadMore()) { _reportInvalidEOF(); }
+    }
+
+    @Deprecated // since 2.8
+    protected boolean loadMore() throws IOException { return false; }
+
+    // Can't declare as deprecated, for now, but shouldn't be needed
+    protected void _finishString() throws IOException { }
 }

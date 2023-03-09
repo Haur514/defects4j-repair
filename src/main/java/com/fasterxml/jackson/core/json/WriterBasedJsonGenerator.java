@@ -20,12 +20,26 @@ public final class WriterBasedJsonGenerator
 
     /*
     /**********************************************************
-    /* Output buffering
+    /* Configuration
     /**********************************************************
      */
 
     final protected Writer _writer;
 
+    /**
+     * Character used for quoting JSON Object property names
+     * and String values.
+     *
+     * @since 2.8
+     */
+    protected char _quoteChar = '"'; // TODO: make configurable
+
+    /*
+    /**********************************************************
+    /* Output buffering
+    /**********************************************************
+     */
+    
     /**
      * Intermediate buffer in which contents are buffered before
      * being written using {@link #_writer}.
@@ -60,8 +74,7 @@ public final class WriterBasedJsonGenerator
      * internally to hold a reference to currently used escape
      */
     protected SerializableString _currentEscape;
-    
-    
+
     /*
     /**********************************************************
     /* Life-cycle
@@ -79,7 +92,7 @@ public final class WriterBasedJsonGenerator
     
     /*
     /**********************************************************
-    /* Overridden configuration methods
+    /* Overridden configuration, introspection methods
     /**********************************************************
      */
     
@@ -94,6 +107,10 @@ public final class WriterBasedJsonGenerator
         int len = _outputTail - _outputHead;
         return Math.max(0, len);
     }
+
+    // json does allow this so
+    @Override
+    public boolean canWriteFormattedNumbers() { return true; }
 
     /*
     /**********************************************************
@@ -141,16 +158,16 @@ public final class WriterBasedJsonGenerator
             return;
         }
         // we know there's room for at least one more char
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
         // The beef:
         _writeString(name);
         // and closing quotes; need room for one more char:
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
-    
+
     protected void _writeFieldName(SerializableString name, boolean commaBefore) throws IOException
     {
         if (_cfgPrettyPrinter != null) {
@@ -171,7 +188,7 @@ public final class WriterBasedJsonGenerator
             return;
         }
         // we know there's room for at least one more char
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
         // The beef:
         final int qlen = quoted.length;
         if ((_outputTail + qlen + 1) >= _outputEnd) {
@@ -180,11 +197,11 @@ public final class WriterBasedJsonGenerator
             if (_outputTail >= _outputEnd) {
                 _flushBuffer();
             }
-            _outputBuffer[_outputTail++] = '"';
+            _outputBuffer[_outputTail++] = _quoteChar;
         } else {
             System.arraycopy(quoted, 0, _outputBuffer, _outputTail, qlen);
             _outputTail += qlen;
-            _outputBuffer[_outputTail++] = '"';
+            _outputBuffer[_outputTail++] = _quoteChar;
         }
     }
     
@@ -195,7 +212,7 @@ public final class WriterBasedJsonGenerator
      */
 
     @Override
-    public void writeStartArray() throws IOException, JsonGenerationException
+    public void writeStartArray() throws IOException
     {
         _verifyValueWrite("start an array");
         _writeContext = _writeContext.createChildArrayContext();
@@ -210,10 +227,10 @@ public final class WriterBasedJsonGenerator
     }
 
     @Override
-    public void writeEndArray() throws IOException, JsonGenerationException
+    public void writeEndArray() throws IOException
     {
         if (!_writeContext.inArray()) {
-            _reportError("Current context not an ARRAY but "+_writeContext.getTypeDesc());
+            _reportError("Current context not Array but "+_writeContext.typeDesc());
         }
         if (_cfgPrettyPrinter != null) {
             _cfgPrettyPrinter.writeEndArray(this, _writeContext.getEntryCount());
@@ -226,8 +243,27 @@ public final class WriterBasedJsonGenerator
         _writeContext = _writeContext.clearAndGetParent();
     }
 
+    @Override // since 2.8
+    public void writeStartObject(Object forValue) throws IOException
+    {
+        _verifyValueWrite("start an object");
+        JsonWriteContext ctxt = _writeContext.createChildObjectContext();
+        _writeContext = ctxt;
+        if (forValue != null) {
+            ctxt.setCurrentValue(forValue);
+        }
+        if (_cfgPrettyPrinter != null) {
+            _cfgPrettyPrinter.writeStartObject(this);
+        } else {
+            if (_outputTail >= _outputEnd) {
+                _flushBuffer();
+            }
+            _outputBuffer[_outputTail++] = '{';
+        }
+    }
+    
     @Override
-    public void writeStartObject() throws IOException, JsonGenerationException
+    public void writeStartObject() throws IOException
     {
         _verifyValueWrite("start an object");
         _writeContext = _writeContext.createChildObjectContext();
@@ -242,10 +278,10 @@ public final class WriterBasedJsonGenerator
     }
 
     @Override
-    public void writeEndObject() throws IOException, JsonGenerationException
+    public void writeEndObject() throws IOException
     {
         if (!_writeContext.inObject()) {
-            _reportError("Current context not an object but "+_writeContext.getTypeDesc());
+            _reportError("Current context not Object but "+_writeContext.typeDesc());
         }
         if (_cfgPrettyPrinter != null) {
             _cfgPrettyPrinter.writeEndObject(this, _writeContext.getEntryCount());
@@ -276,12 +312,12 @@ public final class WriterBasedJsonGenerator
             if (_outputTail >= _outputEnd) {
                 _flushBuffer();
             }
-            _outputBuffer[_outputTail++] = '"';
+            _outputBuffer[_outputTail++] = _quoteChar;
             _writeString(name);
             if (_outputTail >= _outputEnd) {
                 _flushBuffer();
             }
-            _outputBuffer[_outputTail++] = '"';
+            _outputBuffer[_outputTail++] = _quoteChar;
         }
     }
 
@@ -300,12 +336,12 @@ public final class WriterBasedJsonGenerator
             if (_outputTail >= _outputEnd) {
                 _flushBuffer();
             }
-            _outputBuffer[_outputTail++] = '"';
+            _outputBuffer[_outputTail++] = _quoteChar;
             writeRaw(quoted, 0, quoted.length);
             if (_outputTail >= _outputEnd) {
                 _flushBuffer();
             }
-            _outputBuffer[_outputTail++] = '"';
+            _outputBuffer[_outputTail++] = _quoteChar;
         }
     }
 
@@ -326,13 +362,13 @@ public final class WriterBasedJsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
         _writeString(text);
         // And finally, closing quotes
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
 
     @Override
@@ -342,13 +378,13 @@ public final class WriterBasedJsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
         _writeString(text, offset, len);
         // And finally, closing quotes
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
 
     @Override
@@ -358,7 +394,7 @@ public final class WriterBasedJsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
         // Note: copied from writeRaw:
         char[] text = sstr.asQuotedChars();
         final int len = text.length;
@@ -378,7 +414,7 @@ public final class WriterBasedJsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
 
     @Override
@@ -511,13 +547,13 @@ public final class WriterBasedJsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
         _writeBinary(b64variant, data, offset, offset+len);
         // and closing quotes
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
 
     @Override
@@ -530,7 +566,7 @@ public final class WriterBasedJsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
         byte[] encodingBuffer = _ioContext.allocBase64Buffer();
         int bytes;
         try {
@@ -550,7 +586,7 @@ public final class WriterBasedJsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
         return bytes;
     }
     
@@ -579,9 +615,9 @@ public final class WriterBasedJsonGenerator
         if ((_outputTail + 8) >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
         _outputTail = NumberOutput.outputInt(s, _outputBuffer, _outputTail);
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
     }    
 
     @Override
@@ -603,9 +639,9 @@ public final class WriterBasedJsonGenerator
         if ((_outputTail + 13) >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
         _outputTail = NumberOutput.outputInt(i, _outputBuffer, _outputTail);
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
     }    
 
     @Override
@@ -627,9 +663,9 @@ public final class WriterBasedJsonGenerator
         if ((_outputTail + 23) >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
         _outputTail = NumberOutput.outputLong(l, _outputBuffer, _outputTail);
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
 
     // !!! 05-Aug-2008, tatus: Any ways to optimize these?
@@ -706,14 +742,14 @@ public final class WriterBasedJsonGenerator
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
         writeRaw(value);
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail++] = '"';
+        _outputBuffer[_outputTail++] = _quoteChar;
     }
-    
+
     @Override
     public void writeBoolean(boolean state) throws IOException
     {
@@ -753,17 +789,17 @@ public final class WriterBasedJsonGenerator
     @Override
     protected void _verifyValueWrite(String typeMsg) throws IOException
     {
+        final int status = _writeContext.writeValue();
         if (_cfgPrettyPrinter != null) {
             // Otherwise, pretty printer knows what to do...
-            _verifyPrettyValueWrite(typeMsg);
+            _verifyPrettyValueWrite(typeMsg, status);
             return;
         }
         char c;
-        final int status = _writeContext.writeValue();
-        if (status == JsonWriteContext.STATUS_EXPECT_NAME) {
-            _reportError("Can not "+typeMsg+", expecting field name");
-        }
         switch (status) {
+        case JsonWriteContext.STATUS_OK_AS_IS:
+        default:
+            return;
         case JsonWriteContext.STATUS_OK_AFTER_COMMA:
             c = ',';
             break;
@@ -775,47 +811,14 @@ public final class WriterBasedJsonGenerator
                 writeRaw(_rootValueSeparator.getValue());
             }
             return;
-        case JsonWriteContext.STATUS_OK_AS_IS:
-        default:
+        case JsonWriteContext.STATUS_EXPECT_NAME:
+            _reportCantWriteValueExpectName(typeMsg);
             return;
         }
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
-        _outputBuffer[_outputTail] = c;
-        ++_outputTail;
-    }
-
-    protected void _verifyPrettyValueWrite(String typeMsg) throws IOException
-    {
-        final int status = _writeContext.writeValue();
-        if (status == JsonWriteContext.STATUS_EXPECT_NAME) {
-            _reportError("Can not "+typeMsg+", expecting field name");
-        }
-
-        // If we have a pretty printer, it knows what to do:
-        switch (status) {
-        case JsonWriteContext.STATUS_OK_AFTER_COMMA: // array
-            _cfgPrettyPrinter.writeArrayValueSeparator(this);
-            break;
-        case JsonWriteContext.STATUS_OK_AFTER_COLON:
-            _cfgPrettyPrinter.writeObjectFieldValueSeparator(this);
-            break;
-        case JsonWriteContext.STATUS_OK_AFTER_SPACE:
-            _cfgPrettyPrinter.writeRootValueSeparator(this);
-            break;
-        case JsonWriteContext.STATUS_OK_AS_IS:
-            // First entry, but of which context?
-            if (_writeContext.inArray()) {
-                _cfgPrettyPrinter.beforeArrayValues(this);
-            } else if (_writeContext.inObject()) {
-                _cfgPrettyPrinter.beforeObjectEntries(this);
-            }
-            break;
-        default:
-            _throwInternal();
-            break;
-        }
+        _outputBuffer[_outputTail++] = c;
     }
 
     /*

@@ -1,8 +1,8 @@
 package com.fasterxml.jackson.core.util;
 
+import java.io.*;
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.*;
 
 import com.fasterxml.jackson.core.io.NumberInput;
 
@@ -397,6 +397,45 @@ public final class TextBuffer
      */
     public double contentsAsDouble() throws NumberFormatException {
         return NumberInput.parseDouble(contentsAsString());
+    }
+
+    /**
+     * @since 2.8
+     */
+    public int contentsToWriter(Writer w) throws IOException
+    {
+        if (_resultArray != null) {
+            w.write(_resultArray);
+            return _resultArray.length;
+        }
+        if (_resultString != null) { // Can take a shortcut...
+            w.write(_resultString);
+            return _resultString.length();
+        }
+        // Do we use shared array?
+        if (_inputStart >= 0) {
+            final int len = _inputLen;
+            if (len > 0) {
+                w.write(_inputBuffer, _inputStart, len);
+            }
+            return len;
+        }
+        // nope, not shared
+        int total = 0;
+        if (_segments != null) {
+            for (int i = 0, end = _segments.size(); i < end; ++i) {
+                char[] curr = _segments.get(i);
+                int currLen = curr.length;
+                w.write(curr, 0, currLen);
+                total += currLen;
+            }
+        }
+        int len = _currentSize;
+        if (len > 0) {
+            w.write(_currentSegment, 0, len);
+            total += len;
+        }
+        return total;
     }
 
     /*
