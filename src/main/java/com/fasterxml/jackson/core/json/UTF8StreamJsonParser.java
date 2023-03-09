@@ -20,25 +20,14 @@ public class UTF8StreamJsonParser
 {
     final static byte BYTE_LF = (byte) '\n';
 
-    @SuppressWarnings("deprecation")
-    private final static int FEAT_MASK_TRAILING_COMMA = Feature.ALLOW_TRAILING_COMMA.getMask();
-    @SuppressWarnings("deprecation")
-    private final static int FEAT_MASK_LEADING_ZEROS = Feature.ALLOW_NUMERIC_LEADING_ZEROS.getMask();
-    @SuppressWarnings("deprecation")
-    private final static int FEAT_MASK_NON_NUM_NUMBERS = Feature.ALLOW_NON_NUMERIC_NUMBERS.getMask();
-    @SuppressWarnings("deprecation")
-    private final static int FEAT_MASK_ALLOW_MISSING = Feature.ALLOW_MISSING_VALUES.getMask();
-    private final static int FEAT_MASK_ALLOW_SINGLE_QUOTES = Feature.ALLOW_SINGLE_QUOTES.getMask();
-    private final static int FEAT_MASK_ALLOW_UNQUOTED_NAMES = Feature.ALLOW_UNQUOTED_FIELD_NAMES.getMask();
-    private final static int FEAT_MASK_ALLOW_JAVA_COMMENTS = Feature.ALLOW_COMMENTS.getMask();
-    private final static int FEAT_MASK_ALLOW_YAML_COMMENTS = Feature.ALLOW_YAML_COMMENTS.getMask();
-
     // This is the main input-code lookup table, fetched eagerly
     private final static int[] _icUTF8 = CharTypes.getInputCodeUtf8();
 
     // Latin1 encoding is not supported, but we do use 8-bit subset for
     // pre-processing task, to simplify first pass, keep it fast.
     protected final static int[] _icLatin1 = CharTypes.getInputCodeLatin1();
+
+    protected final static int FEAT_MASK_TRAILING_COMMA = Feature.ALLOW_TRAILING_COMMA.getMask();
 
     /*
     /**********************************************************
@@ -1502,7 +1491,7 @@ public class UTF8StreamJsonParser
             return INT_0;
         }
         // [JACKSON-358]: we may want to allow them, after all...
-        if ((_features & FEAT_MASK_LEADING_ZEROS) == 0) {
+        if (!isEnabled(Feature.ALLOW_NUMERIC_LEADING_ZEROS)) {
             reportInvalidNumber("Leading zeroes not allowed");
         }
         // if so, just need to skip either all zeroes (if followed by number); or all but one (if non-number)
@@ -1998,11 +1987,11 @@ public class UTF8StreamJsonParser
     protected String _handleOddName(int ch) throws IOException
     {
         // First: may allow single quotes
-        if (ch == INT_APOS && (_features & FEAT_MASK_ALLOW_SINGLE_QUOTES) != 0) {
+        if (ch == INT_APOS && isEnabled(Feature.ALLOW_SINGLE_QUOTES)) {
             return _parseAposName();
         }
         // Allow unquoted names if feature enabled:
-        if ((_features & FEAT_MASK_ALLOW_UNQUOTED_NAMES) == 0) {
+        if (!isEnabled(Feature.ALLOW_UNQUOTED_FIELD_NAMES)) {
             char c = (char) _decodeCharForError(ch);
             _reportUnexpectedChar(c, "was expecting double-quote to start field name");
         }
@@ -2597,7 +2586,7 @@ public class UTF8StreamJsonParser
             // 28-Mar-2016: [core#116]: If Feature.ALLOW_MISSING_VALUES is enabled
             //   we may allow "missing values", that is, encountering a trailing
             //   comma or closing marker where value would be expected
-            if ((_features & FEAT_MASK_ALLOW_MISSING) != 0) {
+            if (isEnabled(Feature.ALLOW_MISSING_VALUES)) {
                 --_inputPtr;
                 return JsonToken.VALUE_NULL;
             }
@@ -2607,20 +2596,20 @@ public class UTF8StreamJsonParser
             // been handled earlier
             _reportUnexpectedChar(c, "expected a value");
         case '\'':
-            if ((_features & FEAT_MASK_ALLOW_SINGLE_QUOTES) != 0) {
+            if (isEnabled(Feature.ALLOW_SINGLE_QUOTES)) {
                 return _handleApos();
             }
             break;
         case 'N':
             _matchToken("NaN", 1);
-            if ((_features & FEAT_MASK_NON_NUM_NUMBERS) != 0) {
+            if (isEnabled(Feature.ALLOW_NON_NUMERIC_NUMBERS)) {
                 return resetAsNaN("NaN", Double.NaN);
             }
             _reportError("Non-standard token 'NaN': enable JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS to allow");
             break;
         case 'I':
             _matchToken("Infinity", 1);
-            if ((_features & FEAT_MASK_NON_NUM_NUMBERS) != 0) {
+            if (isEnabled(Feature.ALLOW_NON_NUMERIC_NUMBERS)) {
                 return resetAsNaN("Infinity", Double.POSITIVE_INFINITY);
             }
             _reportError("Non-standard token 'Infinity': enable JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS to allow");
@@ -2759,7 +2748,7 @@ public class UTF8StreamJsonParser
                 break;
             }
             _matchToken(match, 3);
-            if ((_features & FEAT_MASK_NON_NUM_NUMBERS) != 0) {
+            if (isEnabled(Feature.ALLOW_NON_NUMERIC_NUMBERS)) {
                 return resetAsNaN(match, neg ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
             }
             _reportError("Non-standard token '%s': enable JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS to allow",
@@ -3111,7 +3100,7 @@ public class UTF8StreamJsonParser
 
     private final void _skipComment() throws IOException
     {
-        if ((_features & FEAT_MASK_ALLOW_JAVA_COMMENTS) == 0) {
+        if (!isEnabled(Feature.ALLOW_COMMENTS)) {
             _reportUnexpectedChar('/', "maybe a (non-standard) comment? (not recognized as one since Feature 'ALLOW_COMMENTS' not enabled for parser)");
         }
         // First: check which comment (if either) it is:
@@ -3176,7 +3165,7 @@ public class UTF8StreamJsonParser
 
     private final boolean _skipYAMLComment() throws IOException
     {
-        if ((_features & FEAT_MASK_ALLOW_YAML_COMMENTS) == 0) {
+        if (!isEnabled(Feature.ALLOW_YAML_COMMENTS)) {
             return false;
         }
         _skipLine();

@@ -74,9 +74,8 @@ public class TestLocation extends BaseTest
     // for [jackson-core#356]
     public void testDisableSourceInclusion() throws Exception
     {
-        JsonFactory f = JsonFactory.builder()
-                .disable(StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION)
-                .build();
+        JsonFactory f = new JsonFactory();
+        f.disable(JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION);
 
         JsonParser p = f.createParser("[ foobar ]");
         assertToken(JsonToken.START_ARRAY, p.nextToken());

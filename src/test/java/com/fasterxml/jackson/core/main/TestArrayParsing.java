@@ -1,7 +1,6 @@
 package com.fasterxml.jackson.core.main;
 
 import com.fasterxml.jackson.core.*;
-import com.fasterxml.jackson.core.json.JsonReadFeature;
 
 /**
  * Set of additional unit for verifying array parsing, specifically
@@ -102,16 +101,16 @@ public class TestArrayParsing
      */
     public void testNotMissingValueByEnablingFeature() throws Exception
     {
-        _testNotMissingValueByEnablingFeature(true);
-        _testNotMissingValueByEnablingFeature(false);
+    	_testNotMissingValueByEnablingFeature(true);
+    	_testNotMissingValueByEnablingFeature(false);
     }
     
     private void _testMissingValueByEnablingFeature(boolean useStream) throws Exception {
         String DOC = "[ \"a\",,,,\"abc\", ] ";
 
-        JsonFactory f = JsonFactory.builder()
-                .enable(JsonReadFeature.ALLOW_MISSING_VALUES)
-                .build();
+        JsonFactory f = new JsonFactory();
+        f.configure(JsonParser.Feature.ALLOW_MISSING_VALUES, true);
+    	
         JsonParser jp = useStream ? createParserUsingStream(f, DOC, "UTF-8")
    			          : createParserUsingReader(f, DOC);
         
@@ -165,11 +164,11 @@ public class TestArrayParsing
     }
     
     private void _testNotMissingValueByEnablingFeature(boolean useStream) throws Exception {
-        final String DOC = "[ \"a\",\"abc\"] ";
+    	final String DOC = "[ \"a\",\"abc\"] ";
 
-        JsonFactory f = JsonFactory.builder()
-                .enable(JsonReadFeature.ALLOW_MISSING_VALUES)
-                .build();
+    	JsonFactory f = new JsonFactory();
+    	f.configure(JsonParser.Feature.ALLOW_MISSING_VALUES, true);
+    	
         JsonParser jp = useStream ? createParserUsingStream(f, DOC, "UTF-8")
    			          : createParserUsingReader(f, DOC);
         

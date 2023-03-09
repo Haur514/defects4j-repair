@@ -71,47 +71,45 @@ public class TestDecorators extends com.fasterxml.jackson.core.BaseTest
 
     public void testInputDecoration() throws IOException
     {
-        JsonFactory f = JsonFactory.builder()
-                .inputDecorator(new SimpleInputDecorator())
-                .build();
-        JsonParser p;
+        JsonFactory f = new JsonFactory();
+        f.setInputDecorator(new SimpleInputDecorator());
+        JsonParser jp;
         // first test with Reader
-        p = f.createParser(new StringReader("{ }"));
+        jp = f.createParser(new StringReader("{ }"));
         // should be overridden;
-        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
-        assertEquals(789, p.getIntValue());
-        p.close();
+        assertEquals(JsonToken.VALUE_NUMBER_INT, jp.nextToken());
+        assertEquals(789, jp.getIntValue());
+        jp.close();
 
         // similarly with InputStream
-        p = f.createParser(new ByteArrayInputStream("[ ]".getBytes("UTF-8")));
+        jp = f.createParser(new ByteArrayInputStream("[ ]".getBytes("UTF-8")));
         // should be overridden;
-        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
-        assertEquals(123, p.getIntValue());
-        p.close();
+        assertEquals(JsonToken.VALUE_NUMBER_INT, jp.nextToken());
+        assertEquals(123, jp.getIntValue());
+        jp.close();
 
         // and with raw bytes
-        p = f.createParser("[ ]".getBytes("UTF-8"));
+        jp = f.createParser("[ ]".getBytes("UTF-8"));
         // should be overridden;
-        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
-        assertEquals(456, p.getIntValue());
-        p.close();
+        assertEquals(JsonToken.VALUE_NUMBER_INT, jp.nextToken());
+        assertEquals(456, jp.getIntValue());
+        jp.close();
     }
 
     public void testOutputDecoration() throws IOException
     {
-        JsonFactory f = JsonFactory.builder()
-                .outputDecorator(new SimpleOutputDecorator())
-                .build();
-        JsonGenerator g;
+        JsonFactory f = new JsonFactory();
+        f.setOutputDecorator(new SimpleOutputDecorator());
+        JsonGenerator jg;
 
         StringWriter sw = new StringWriter();
-        g = f.createGenerator(sw);
-        g.close();
+        jg = f.createGenerator(sw);
+        jg.close();
         assertEquals("567", sw.toString());
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        g = f.createGenerator(out, JsonEncoding.UTF8);
-        g.close();
+        jg = f.createGenerator(out, JsonEncoding.UTF8);
+        jg.close();
         assertEquals("123", out.toString("UTF-8"));
     }
 }

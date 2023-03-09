@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import com.fasterxml.jackson.core.*;
-import com.fasterxml.jackson.core.exc.InputCoercionException;
+import com.fasterxml.jackson.core.JsonParser.Feature;
 import com.fasterxml.jackson.core.io.JsonEOFException;
 import com.fasterxml.jackson.core.io.NumberInput;
 import com.fasterxml.jackson.core.util.ByteArrayBuilder;
@@ -130,7 +130,7 @@ public abstract class ParserMinimalBase extends JsonParser
      * @since 2.9
      */
     protected final static int MAX_ERROR_TOKEN_LENGTH = 256;
-
+    
     /*
     /**********************************************************
     /* Minimal generally useful state
@@ -541,56 +541,18 @@ public abstract class ParserMinimalBase extends JsonParser
         _reportError(msg);
     }
 
-    /**
-     * Method called to throw an exception for input token that looks like a number
-     * based on first character(s), but is not valid according to rules of format.
-     * In case of JSON this also includes invalid forms like positive sign and
-     * leading zeroes.
-     */
     protected void reportInvalidNumber(String msg) throws JsonParseException {
         _reportError("Invalid numeric value: "+msg);
     }
 
-    /**
-     * Method called to throw an exception for integral (not floating point) input
-     * token with value outside of Java signed 32-bit range when requested as {@link int}.
-     * Result will be {@link InputCoercionException} being thrown.
-     */
     protected void reportOverflowInt() throws IOException {
-        reportOverflowInt(getText());
-    }
-
-    // @since 2.10
-    protected void reportOverflowInt(String numDesc) throws IOException {
         _reportError(String.format("Numeric value (%s) out of range of int (%d - %s)",
-                _longIntegerDesc(numDesc), Integer.MIN_VALUE, Integer.MAX_VALUE));
+                _longIntegerDesc(getText()), Integer.MIN_VALUE, Integer.MAX_VALUE));
     }
 
-    // @since 2.10
-
-    /**
-     * Method called to throw an exception for integral (not floating point) input
-     * token with value outside of Java signed 64-bit range when requested as {@link long}.
-     * Result will be {@link InputCoercionException} being thrown.
-     */
     protected void reportOverflowLong() throws IOException {
-        reportOverflowLong(getText());
-    }
-
-    // @since 2.10
-    protected void reportOverflowLong(String numDesc) throws IOException {
         _reportError(String.format("Numeric value (%s) out of range of long (%d - %s)",
-                _longIntegerDesc(numDesc), Long.MIN_VALUE, Long.MAX_VALUE));
-    }
-
-    // @since 2.10
-
-    /**
-     * @since 2.10
-     */
-    protected void _reportInputCoercion(String msg, JsonToken inputType, Class<?> targetType)
-            throws InputCoercionException {
-        throw new InputCoercionException(this, msg, inputType, targetType);
+                _longIntegerDesc(getText()), Long.MIN_VALUE, Long.MAX_VALUE));
     }
 
     // @since 2.9.8
@@ -680,6 +642,33 @@ public abstract class ParserMinimalBase extends JsonParser
         char c = (char) i;
         String msg = "Illegal character ("+_getCharDesc(c)+"): only regular white space (\\r, \\n, \\t) is allowed between tokens";
         _reportError(msg);
+    }
+
+    /**
+     * Method called to report a problem with unquoted control character.
+     * Note: starting with version 1.4, it is possible to suppress
+     * exception by enabling {@link Feature#ALLOW_UNQUOTED_CONTROL_CHARS}.
+     */
+    protected void _throwUnquotedSpace(int i, String ctxtDesc) throws JsonParseException {
+        // JACKSON-208; possible to allow unquoted control chars:
+        if (!isEnabled(Feature.ALLOW_UNQUOTED_CONTROL_CHARS) || i > INT_SPACE) {
+            char c = (char) i;
+            String msg = "Illegal unquoted character ("+_getCharDesc(c)+"): has to be escaped using backslash to be included in "+ctxtDesc;
+            _reportError(msg);
+        }
+    }
+
+    protected char _handleUnrecognizedCharacterEscape(char ch) throws JsonProcessingException {
+        // as per [JACKSON-300]
+        if (isEnabled(Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER)) {
+            return ch;
+        }
+        // and [JACKSON-548]
+        if (ch == '\'' && isEnabled(Feature.ALLOW_SINGLE_QUOTES)) {
+            return ch;
+        }
+        _reportError("Unrecognized character escape "+_getCharDesc(ch));
+        return ch;
     }
 
     /*

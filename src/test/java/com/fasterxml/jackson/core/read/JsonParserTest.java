@@ -44,9 +44,8 @@ public class JsonParserTest extends BaseTest
     
     private void _testIntern(boolean useStream, boolean enableIntern, String expName) throws IOException
     {
-        JsonFactory f = JsonFactory.builder()
-                .configure(JsonFactory.Feature.INTERN_FIELD_NAMES, enableIntern)
-                .build();
+        JsonFactory f = new JsonFactory();
+        f.configure(JsonFactory.Feature.INTERN_FIELD_NAMES, enableIntern);
         assertEquals(enableIntern, f.isEnabled(JsonFactory.Feature.INTERN_FIELD_NAMES));
         final String JSON = "{ \""+expName+"\" : 1}";
         JsonParser p = useStream ?

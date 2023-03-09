@@ -142,14 +142,13 @@ public class TestPrettyPrinter
         assertEquals("{ }|{ }|[ ]", _generateRoot(jf, new DefaultPrettyPrinter("|")));
     }
 
-    // Alternative solution for [jackson-core#26]
+    // Alternative solution for [Issue#26]
     public void testCustomRootSeparatorWithFactory() throws Exception
     {
-        JsonFactory f = ((JsonFactoryBuilder)JsonFactory.builder())
-                .rootValueSeparator("##")
-                .build();
+        JsonFactory jf = new JsonFactory();
+        jf.setRootValueSeparator("##");
         StringWriter sw = new StringWriter();
-        JsonGenerator gen = f.createGenerator(sw);
+        JsonGenerator gen = jf.createGenerator(sw);
         gen.writeNumber(13);
         gen.writeBoolean(false);
         gen.writeNull();
@@ -169,7 +168,6 @@ public class TestPrettyPrinter
         _writeTestDocument(gen);
 
         assertEquals("[3|\"abc\"|[true]|{\"f\"=null;\"f2\"=null}]", sw.toString());
-        gen.close();
     }
 
     public void testCustomSeparatorsWithPP() throws Exception
@@ -182,7 +180,6 @@ public class TestPrettyPrinter
                 .withArrayValueSeparator('|')));
 
         _writeTestDocument(gen);
-        gen.close();
 
         assertEquals("[ 3| \"abc\"| [ true ]| {" + DefaultIndenter.SYS_LF +
                 "  \"f\" = null;" + DefaultIndenter.SYS_LF +
@@ -201,7 +198,6 @@ public class TestPrettyPrinter
             .withoutSpacesInObjectEntries());
 
         _writeTestDocument(gen);
-        gen.close();
 
         assertEquals("[ 3| \"abc\"| [ true ]| {" + DefaultIndenter.SYS_LF +
                 "  \"f\"=null;" + DefaultIndenter.SYS_LF +

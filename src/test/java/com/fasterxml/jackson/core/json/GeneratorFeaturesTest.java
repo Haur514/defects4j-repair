@@ -54,14 +54,10 @@ public class GeneratorFeaturesTest
         // by default, quoting should be enabled
         _testFieldNameQuoting(f, true);
         // can disable it
-        f = JsonFactory.builder()
-                .disable(JsonWriteFeature.QUOTE_FIELD_NAMES)
-                .build();
+        f.disable(JsonGenerator.Feature.QUOTE_FIELD_NAMES);
         _testFieldNameQuoting(f, false);
         // and (re)enable:
-        f = JsonFactory.builder()
-                .enable(JsonWriteFeature.QUOTE_FIELD_NAMES)
-                .build();
+        f.enable(JsonGenerator.Feature.QUOTE_FIELD_NAMES);
         _testFieldNameQuoting(f, true);
     }
 
@@ -71,14 +67,10 @@ public class GeneratorFeaturesTest
         // by default, quoting should be enabled
         _testNonNumericQuoting(f, true);
         // can disable it
-        f = JsonFactory.builder()
-                .disable(JsonWriteFeature.WRITE_NAN_AS_STRINGS)
-                .build();
+        f.disable(JsonGenerator.Feature.QUOTE_NON_NUMERIC_NUMBERS);
         _testNonNumericQuoting(f, false);
         // and (re)enable:
-        f = JsonFactory.builder()
-                .enable(JsonWriteFeature.WRITE_NAN_AS_STRINGS)
-                .build();
+        f.enable(JsonGenerator.Feature.QUOTE_NON_NUMERIC_NUMBERS);
         _testNonNumericQuoting(f, true);
     }
 
@@ -229,9 +221,8 @@ public class GeneratorFeaturesTest
 
         // // Then with alternatively configured factory
 
-        JsonFactory f2 = JsonFactory.builder()
-                .disable(JsonWriteFeature.QUOTE_FIELD_NAMES)
-                .build();
+        JsonFactory f2 = new JsonFactory();
+        f2.disable(JsonGenerator.Feature.QUOTE_FIELD_NAMES);
 
         _testFieldNameQuotingEnabled(f2, true, true, "{\"foo\":1}");
         _testFieldNameQuotingEnabled(f2, false, true, "{\"foo\":1}");
@@ -241,7 +232,6 @@ public class GeneratorFeaturesTest
         _testFieldNameQuotingEnabled(f2, false, false, "{foo:1}");
     }
 
-    @SuppressWarnings("deprecation")
     private void _testFieldNameQuotingEnabled(JsonFactory f, boolean useBytes,
             boolean useQuotes, String exp) throws IOException
     {

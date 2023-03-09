@@ -3,7 +3,6 @@ package com.fasterxml.jackson.core.read;
 import java.math.BigInteger;
 
 import com.fasterxml.jackson.core.*;
-import com.fasterxml.jackson.core.exc.InputCoercionException;
 
 public class NumberOverflowTest
     extends com.fasterxml.jackson.core.BaseTest
@@ -40,7 +39,7 @@ public class NumberOverflowTest
             try {
                 long x = p.getLongValue();
                 fail("Expected an exception for underflow (input "+p.getText()+"): instead, got long value: "+x);
-            } catch (InputCoercionException e) {
+            } catch (JsonParseException e) {
                 verifyException(e, "out of range of long");
             }
             p.close();
@@ -50,7 +49,7 @@ public class NumberOverflowTest
             try {
                 long x = p.getLongValue();
                 fail("Expected an exception for underflow (input "+p.getText()+"): instead, got long value: "+x);
-            } catch (InputCoercionException e) {
+            } catch (JsonParseException e) {
                 verifyException(e, "out of range of long");
             }
             p.close();
@@ -71,7 +70,7 @@ public class NumberOverflowTest
                 try {
                     p.getLongValue();
                     fail("Should not pass");
-                } catch (InputCoercionException e) {
+                } catch (JsonParseException e) {
                     verifyException(e, "out of range of long");
                     verifyException(e, "Integer with "+BIG_NUM_LEN+" digits");
                 }
@@ -91,7 +90,7 @@ public class NumberOverflowTest
                 try {
                     p.getIntValue();
                     fail("Should not pass");
-                } catch (InputCoercionException e) {
+                } catch (JsonParseException e) {
                     verifyException(e, "out of range of int");
                     verifyException(e, "Integer with "+BIG_NUM_LEN+" digits");
                 }

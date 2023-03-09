@@ -6,7 +6,6 @@ import java.math.BigInteger;
 import java.util.Arrays;
 
 import com.fasterxml.jackson.core.*;
-import com.fasterxml.jackson.core.JsonParser.Feature;
 import com.fasterxml.jackson.core.io.IOContext;
 import com.fasterxml.jackson.core.io.NumberInput;
 import com.fasterxml.jackson.core.json.DupDetector;
@@ -846,7 +845,7 @@ public abstract class ParserBase extends ParserMinimalBase
             } else {
                 // 16-Oct-2018, tatu: Need to catch "too big" early due to [jackson-core#488]
                 if ((expType == NR_INT) || (expType == NR_LONG)) {
-                    _reportTooLongIntegral(expType, numStr);
+                    _reportTooLongInt(expType, numStr);
                 }
                 if ((expType == NR_DOUBLE) || (expType == NR_FLOAT)) {
                     _numberDouble = NumberInput.parseDouble(numStr);
@@ -864,7 +863,7 @@ public abstract class ParserBase extends ParserMinimalBase
     }
 
     // @since 2.9.8
-    protected void _reportTooLongIntegral(int expType, String rawNum) throws IOException
+    protected void _reportTooLongInt(int expType, String rawNum) throws IOException
     {
         final String numDesc = _longIntegerDesc(rawNum);
         _reportError("Numeric value (%s) out of range of %s", numDesc,
@@ -1014,35 +1013,6 @@ public abstract class ParserBase extends ParserMinimalBase
         _reportError(String.format(
                 "Unexpected close marker '%s': expected '%c' (for %s starting at %s)",
                 (char) actCh, expCh, ctxt.typeDesc(), ctxt.getStartLocation(_getSourceReference())));
-    }
-
-    @SuppressWarnings("deprecation")
-    protected char _handleUnrecognizedCharacterEscape(char ch) throws JsonProcessingException {
-        // as per [JACKSON-300]
-        if (isEnabled(Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER)) {
-            return ch;
-        }
-        // and [JACKSON-548]
-        if (ch == '\'' && isEnabled(Feature.ALLOW_SINGLE_QUOTES)) {
-            return ch;
-        }
-        _reportError("Unrecognized character escape "+_getCharDesc(ch));
-        return ch;
-    }
-
-    /**
-     * Method called to report a problem with unquoted control character.
-     * Note: it is possible to suppress some instances of
-     * exception by enabling {@link Feature#ALLOW_UNQUOTED_CONTROL_CHARS}.
-     */
-    @SuppressWarnings("deprecation")
-    protected void _throwUnquotedSpace(int i, String ctxtDesc) throws JsonParseException {
-        // JACKSON-208; possible to allow unquoted control chars:
-        if (!isEnabled(Feature.ALLOW_UNQUOTED_CONTROL_CHARS) || i > INT_SPACE) {
-            char c = (char) i;
-            String msg = "Illegal unquoted character ("+_getCharDesc(c)+"): has to be escaped using backslash to be included in "+ctxtDesc;
-            _reportError(msg);
-        }
     }
 
     /*

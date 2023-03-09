@@ -28,7 +28,6 @@ public abstract class GeneratorBase extends JsonGenerator
      * 
      * @since 2.5
      */
-    @SuppressWarnings("deprecation")
     protected final static int DERIVED_FEATURES_MASK =
             Feature.WRITE_NUMBERS_AS_STRINGS.getMask()
             | Feature.ESCAPE_NON_ASCII.getMask()
@@ -151,7 +150,6 @@ public abstract class GeneratorBase extends JsonGenerator
 
     //public JsonGenerator configure(Feature f, boolean state) { }
 
-    @SuppressWarnings("deprecation")
     @Override
     public JsonGenerator enable(Feature f) {
         final int mask = f.getMask();
@@ -171,7 +169,6 @@ public abstract class GeneratorBase extends JsonGenerator
         return this;
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public JsonGenerator disable(Feature f) {
         final int mask = f.getMask();
@@ -220,7 +217,6 @@ public abstract class GeneratorBase extends JsonGenerator
      *
      * @since 2.7
      */
-    @SuppressWarnings("deprecation")
     protected void _checkStdFeatureChanges(int newFeatureFlags, int changedFeatures)
     {
         if ((changedFeatures & DERIVED_FEATURES_MASK) == 0) {

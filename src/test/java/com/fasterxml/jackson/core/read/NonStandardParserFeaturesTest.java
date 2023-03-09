@@ -1,36 +1,10 @@
 package com.fasterxml.jackson.core.read;
 
 import com.fasterxml.jackson.core.*;
-import com.fasterxml.jackson.core.json.JsonReadFeature;
 
 public class NonStandardParserFeaturesTest
     extends com.fasterxml.jackson.core.BaseTest
 {
-    @SuppressWarnings("deprecation")
-    public void testDefaults() {
-        JsonFactory f = new JsonFactory();
-        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_NUMERIC_LEADING_ZEROS));
-        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS));
-    }
-
-    public void testSimpleUnquotedBytes() throws Exception {
-        _testSimpleUnquoted(MODE_INPUT_STREAM);
-        _testSimpleUnquoted(MODE_INPUT_STREAM_THROTTLED);
-        _testSimpleUnquoted(MODE_DATA_INPUT);
-    }
-
-    public void testSimpleUnquotedChars() throws Exception {
-        _testSimpleUnquoted(MODE_READER);
-    }
-    
-    public void testLargeUnquoted() throws Exception
-    {
-        _testLargeUnquoted(MODE_INPUT_STREAM);
-        _testLargeUnquoted(MODE_INPUT_STREAM_THROTTLED);
-        _testLargeUnquoted(MODE_DATA_INPUT);
-        _testLargeUnquoted(MODE_READER);
-    }
-
     public void testSingleQuotesDefault() throws Exception
     {
         _testSingleQuotesDefault(MODE_INPUT_STREAM);
@@ -106,89 +80,6 @@ public class NonStandardParserFeaturesTest
     /****************************************************************
      */
 
-    private void _testLargeUnquoted(int mode) throws Exception
-    {
-        StringBuilder sb = new StringBuilder(5000);
-        sb.append("[\n");
-        //final int REPS = 2000;
-        final int REPS = 1050;
-        for (int i = 0; i < REPS; ++i) {
-            if (i > 0) {
-                sb.append(',');
-                if ((i & 7) == 0) {
-                    sb.append('\n');
-                }
-            }
-            sb.append("{");
-            sb.append("abc").append(i&127).append(':');
-            sb.append((i & 1) != 0);
-            sb.append("}\n");
-        }
-        sb.append("]");
-        String JSON = sb.toString();
-        final JsonFactory f = JsonFactory.builder()
-                .enable(JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES)
-                .build();
-        JsonParser p = createParser(f, mode, JSON);
-        assertToken(JsonToken.START_ARRAY, p.nextToken());
-        for (int i = 0; i < REPS; ++i) {
-            assertToken(JsonToken.START_OBJECT, p.nextToken());
-            assertToken(JsonToken.FIELD_NAME, p.nextToken());
-            assertEquals("abc"+(i&127), p.getCurrentName());
-            assertToken(((i&1) != 0) ? JsonToken.VALUE_TRUE : JsonToken.VALUE_FALSE, p.nextToken());
-            assertToken(JsonToken.END_OBJECT, p.nextToken());
-        }
-        assertToken(JsonToken.END_ARRAY, p.nextToken());
-        p.close();
-    }
-
-    
-    private void _testSimpleUnquoted(int mode) throws Exception
-    {
-        final JsonFactory f = JsonFactory.builder()
-                .enable(JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES)
-                .build();
-        String JSON = "{ a : 1, _foo:true, $:\"money!\", \" \":null }";
-        JsonParser p = createParser(f, mode, JSON);
-
-        assertToken(JsonToken.START_OBJECT, p.nextToken());
-        assertToken(JsonToken.FIELD_NAME, p.nextToken());
-        assertEquals("a", p.getCurrentName());
-        assertToken(JsonToken.VALUE_NUMBER_INT, p.nextToken());
-        assertToken(JsonToken.FIELD_NAME, p.nextToken());
-        assertEquals("_foo", p.getCurrentName());
-        assertToken(JsonToken.VALUE_TRUE, p.nextToken());
-        assertToken(JsonToken.FIELD_NAME, p.nextToken());
-        assertEquals("$", p.getCurrentName());
-        assertToken(JsonToken.VALUE_STRING, p.nextToken());
-        assertEquals("money!", p.getText());
-
-        // and then regular quoted one should still work too:
-        assertToken(JsonToken.FIELD_NAME, p.nextToken());
-        assertEquals(" ", p.getCurrentName());
-
-        assertToken(JsonToken.VALUE_NULL, p.nextToken());
-
-        assertToken(JsonToken.END_OBJECT, p.nextToken());
-        p.close();
-
-        // Another thing, as per [Issue#102]: numbers
-
-        JSON = "{ 123:true,4:false }";
-        p = createParser(f, mode, JSON);
-
-        assertToken(JsonToken.START_OBJECT, p.nextToken());
-        assertToken(JsonToken.FIELD_NAME, p.nextToken());
-        assertEquals("123", p.getCurrentName());
-        assertToken(JsonToken.VALUE_TRUE, p.nextToken());
-
-        assertToken(JsonToken.FIELD_NAME, p.nextToken());
-        assertEquals("4", p.getCurrentName());
-        assertToken(JsonToken.VALUE_FALSE, p.nextToken());
-
-        assertToken(JsonToken.END_OBJECT, p.nextToken());
-        p.close();
-    }
 
     /**
      * Test to verify that the default parser settings do not
@@ -231,9 +122,9 @@ public class NonStandardParserFeaturesTest
      */
     private void _testSingleQuotesEnabled(int mode) throws Exception
     {
-        JsonFactory f = JsonFactory.builder()
-                .enable(JsonReadFeature.ALLOW_SINGLE_QUOTES)
-                .build();
+        JsonFactory f = new JsonFactory();
+        f.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+
         String JSON = "{ 'a' : 1, \"foobar\": 'b', '_abcde1234':'d', '\"' : '\"\"', '':'' }";
         JsonParser p = createParser(f, mode, JSON);
 
@@ -308,9 +199,9 @@ public class NonStandardParserFeaturesTest
     // test to verify that we implicitly allow escaping of apostrophe
     private void _testSingleQuotesEscaped(int mode) throws Exception
     {
-        JsonFactory f = JsonFactory.builder()
-                .enable(JsonReadFeature.ALLOW_SINGLE_QUOTES)
-                .build();
+        JsonFactory f = new JsonFactory();
+        f.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+
         String JSON = "[ '16\\'' ]";
         JsonParser p = createParser(f, mode, JSON);
 
@@ -323,9 +214,8 @@ public class NonStandardParserFeaturesTest
     
     private void _testNonStandardNameChars(int mode) throws Exception
     {
-        final JsonFactory f = JsonFactory.builder()
-                .enable(JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES)
-                .build();
+        JsonFactory f = new JsonFactory();
+        f.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
         String JSON = "{ @type : \"mytype\", #color : 123, *error* : true, "
             +" hyphen-ated : \"yes\", me+my : null"
             +"}";
@@ -364,6 +254,7 @@ public class NonStandardParserFeaturesTest
     {
         // first: verify that we get an exception
         JsonFactory f = new JsonFactory();
+        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER));
         final String JSON = quote("\\'");
         JsonParser p = createParser(f, mode, JSON);
         try {      
@@ -376,9 +267,8 @@ public class NonStandardParserFeaturesTest
             p.close();
         }
         // and then verify it's ok...
-        f = f.rebuild()
-                .configure(JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER, true)
-                .build();
+        f.configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER, true);
+        assertTrue(f.isEnabled(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER));
         p = createParser(f, mode, JSON);
         assertToken(JsonToken.VALUE_STRING, p.nextToken());
         assertEquals("'", p.getText());
@@ -389,6 +279,7 @@ public class NonStandardParserFeaturesTest
     {
         // first: verify that we get an exception
         JsonFactory f = new JsonFactory();
+        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_NUMERIC_LEADING_ZEROS));
         String JSON = "00003";
         if (appendSpace) {
             JSON += " ";
@@ -403,11 +294,10 @@ public class NonStandardParserFeaturesTest
         } finally {
             p.close();
         }
-
+        
         // and then verify it's ok when enabled
-        f = JsonFactory.builder()
-                .configure(JsonReadFeature.ALLOW_LEADING_ZEROS_FOR_NUMBERS, true)
-                .build();
+        f.configure(JsonParser.Feature.ALLOW_NUMERIC_LEADING_ZEROS, true);
+        assertTrue(f.isEnabled(JsonParser.Feature.ALLOW_NUMERIC_LEADING_ZEROS));
         p = createParser(f, mode, JSON);
         assertToken(JsonToken.VALUE_NUMBER_INT, p.nextToken());
         assertEquals(3, p.getIntValue());
@@ -432,6 +322,7 @@ public class NonStandardParserFeaturesTest
     {
         final String JSON = "[ NaN]";
         JsonFactory f = new JsonFactory();
+        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS));
 
         // without enabling, should get an exception
         JsonParser p = createParser(f, mode, JSON);
@@ -446,9 +337,7 @@ public class NonStandardParserFeaturesTest
         }
 
         // we can enable it dynamically (impl detail)
-        f = JsonFactory.builder()
-                .configure(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS, true)
-                .build();
+        f.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, true);
         p = createParser(f, mode, JSON);
         assertToken(JsonToken.START_ARRAY, p.nextToken());
         assertToken(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
@@ -469,9 +358,7 @@ public class NonStandardParserFeaturesTest
         p.close();
 
         // finally, should also work with skipping
-        f = JsonFactory.builder()
-                .configure(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS, true)
-                .build();
+        f.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, true);
         p = createParser(f, mode, JSON);
         assertToken(JsonToken.START_ARRAY, p.nextToken());
         assertToken(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
@@ -483,6 +370,7 @@ public class NonStandardParserFeaturesTest
     {
         final String JSON = "[ -INF, +INF, +Infinity, Infinity, -Infinity ]";
         JsonFactory f = new JsonFactory();
+        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS));
 
         // without enabling, should get an exception
         JsonParser p = createParser(f, mode, JSON);
@@ -495,9 +383,7 @@ public class NonStandardParserFeaturesTest
         } finally {
             p.close();
         }
-        f = JsonFactory.builder()
-                .enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS)
-                .build();
+        f.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, true);
         p = createParser(f, mode, JSON);
         assertToken(JsonToken.START_ARRAY, p.nextToken());
 
@@ -535,9 +421,7 @@ public class NonStandardParserFeaturesTest
         p.close();
 
         // finally, should also work with skipping
-        f = JsonFactory.builder()
-                .configure(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS, true)
-                .build();
+        f.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, true);
         p = createParser(f, mode, JSON);
 
         assertToken(JsonToken.START_ARRAY, p.nextToken());

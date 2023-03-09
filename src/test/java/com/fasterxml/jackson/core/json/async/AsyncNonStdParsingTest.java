@@ -4,16 +4,15 @@ import java.io.IOException;
 
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.core.async.AsyncTestBase;
-import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.core.testsupport.AsyncReaderWrapper;
 
 public class AsyncNonStdParsingTest extends AsyncTestBase
 {
     public void testLargeUnquotedNames() throws Exception
     {
-        final JsonFactory f = JsonFactory.builder()
-                .enable(JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES)
-                .build();
+        JsonFactory f = new JsonFactory();
+        f.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+
         StringBuilder sb = new StringBuilder(5000);
         sb.append("[\n");
         final int REPS = 1050;
@@ -60,9 +59,9 @@ public class AsyncNonStdParsingTest extends AsyncTestBase
 
     public void testSimpleUnquotedNames() throws Exception
     {
-        final JsonFactory f = JsonFactory.builder()
-                .enable(JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES)
-                .build();
+        final JsonFactory f = new JsonFactory();
+        f.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+
         _testSimpleUnquoted(f, 0, 99);
         _testSimpleUnquoted(f, 0, 5);
         _testSimpleUnquoted(f, 0, 3);
@@ -171,9 +170,9 @@ public class AsyncNonStdParsingTest extends AsyncTestBase
      */
     public void testAposQuotingEnabled() throws Exception
     {
-        final JsonFactory f = JsonFactory.builder()
-                .enable(JsonReadFeature.ALLOW_SINGLE_QUOTES)
-                .build();
+        JsonFactory f = new JsonFactory();
+        f.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+
         _testAposQuotingEnabled(f, 0, 99);
         _testAposQuotingEnabled(f, 0, 5);
         _testAposQuotingEnabled(f, 0, 3);
@@ -269,9 +268,9 @@ public class AsyncNonStdParsingTest extends AsyncTestBase
     // test to verify that we implicitly allow escaping of apostrophe
     public void testSingleQuotesEscaped() throws Exception
     {
-        final JsonFactory f = JsonFactory.builder()
-                .enable(JsonReadFeature.ALLOW_SINGLE_QUOTES)
-                .build();
+        JsonFactory f = new JsonFactory();
+        f.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+
         _testSingleQuotesEscaped(f, 0, 99);
         _testSingleQuotesEscaped(f, 0, 5);
         _testSingleQuotesEscaped(f, 0, 3);
@@ -296,9 +295,9 @@ public class AsyncNonStdParsingTest extends AsyncTestBase
 
     public void testNonStandardNameChars() throws Exception
     {
-        final JsonFactory f = JsonFactory.builder()
-                .enable(JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES)
-                .build();
+        JsonFactory f = new JsonFactory();
+        f.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+
         _testNonStandardNameChars(f, 0, 99);
         _testNonStandardNameChars(f, 0, 6);
         _testNonStandardNameChars(f, 0, 3);
@@ -361,6 +360,7 @@ public class AsyncNonStdParsingTest extends AsyncTestBase
     {
         // first: verify that we get an exception
         JsonFactory f = new JsonFactory();
+        assertFalse(f.isEnabled(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER));
         final String JSON = quote("\\'");
         AsyncReaderWrapper p = createParser(f, JSON, offset, readSize);
         try {      
@@ -373,9 +373,8 @@ public class AsyncNonStdParsingTest extends AsyncTestBase
             p.close();
         }
         // and then verify it's ok...
-        f = f.rebuild()
-                .enable(JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER)
-                .build();
+        f.configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER, true);
+        assertTrue(f.isEnabled(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER));
         p = createParser(f, JSON, offset, readSize);
         assertToken(JsonToken.VALUE_STRING, p.nextToken());
         assertEquals("'", p.currentText());
