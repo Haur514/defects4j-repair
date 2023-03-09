@@ -10,7 +10,6 @@ import org.junit.Test;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -277,6 +276,14 @@ public class HtmlParserTest {
         assertEquals("http://foo/4", anchors.get(2).absUrl("href"));
     }
 
+    @Test public void handlesProtocolRelativeUrl() {
+        String base = "https://example.com/";
+        String html = "<img src='//example.net/img.jpg'>";
+        Document doc = Jsoup.parse(html, base);
+        Element el = doc.select("img").first();
+        assertEquals("https://example.net/img.jpg", el.absUrl("src"));
+    }
+
     @Test public void handlesCdata() {
         // todo: as this is html namespace, should actually treat as bogus comment, not cdata. keep as cdata for now
         String h = "<div id=1><![CDATA[<html>\n<foo><&amp;]]></div>"; // the &amp; in there should remain literal
@@ -407,7 +414,7 @@ public class HtmlParserTest {
     @Test public void normalisesDocument() {
         String h = "<!doctype html>One<html>Two<head>Three<link></head>Four<body>Five </body>Six </html>Seven ";
         Document doc = Jsoup.parse(h);
-        assertEquals("<!DOCTYPE html><html><head></head><body>OneTwoThree<link>FourFive Six Seven </body></html>",
+        assertEquals("<!doctype html><html><head></head><body>OneTwoThree<link>FourFive Six Seven </body></html>",
                 TextUtil.stripNewlines(doc.html()));
     }
 
@@ -462,7 +469,7 @@ public class HtmlParserTest {
     @Test public void testNoImagesInNoScriptInHead() {
         // jsoup used to allow, but against spec if parsing with noscript
         Document doc = Jsoup.parse("<html><head><noscript><img src='foo'></noscript></head><body><p>Hello</p></body></html>");
-        assertEquals("<html><head><noscript></noscript></head><body><img src=\"foo\"><p>Hello</p></body></html>", TextUtil.stripNewlines(doc.html()));
+        assertEquals("<html><head><noscript>&lt;img src=\"foo\"&gt;</noscript></head><body><p>Hello</p></body></html>", TextUtil.stripNewlines(doc.html()));
     }
 
     @Test public void testAFlowContents() {
@@ -509,7 +516,7 @@ public class HtmlParserTest {
                 "<p></b></b></b></b></b></b>X";
         Document doc = Jsoup.parse(h);
         doc.outputSettings().indentAmount(0);
-        String want = "<!DOCTYPE html>\n" +
+        String want = "<!doctype html>\n" +
                 "<html>\n" +
                 "<head></head>\n" +
                 "<body>\n" +
@@ -811,17 +818,33 @@ public class HtmlParserTest {
         // would previously throw invalid name exception on empty doctype
         Document doc = Jsoup.parse("<!DOCTYPE>");
         assertEquals(
-                "<!DOCTYPE> <html> <head></head> <body></body> </html>",
+                "<!doctype> <html> <head></head> <body></body> </html>",
                 StringUtil.normaliseWhitespace(doc.outerHtml()));
 
         doc = Jsoup.parse("<!DOCTYPE><html><p>Foo</p></html>");
         assertEquals(
-                "<!DOCTYPE> <html> <head></head> <body> <p>Foo</p> </body> </html>",
+                "<!doctype> <html> <head></head> <body> <p>Foo</p> </body> </html>",
                 StringUtil.normaliseWhitespace(doc.outerHtml()));
 
         doc = Jsoup.parse("<!DOCTYPE \u0000>");
         assertEquals(
-                "<!DOCTYPE �> <html> <head></head> <body></body> </html>",
+                "<!doctype �> <html> <head></head> <body></body> </html>",
                 StringUtil.normaliseWhitespace(doc.outerHtml()));
+    }
+    
+    @Test public void handlesManyChildren() {
+        // Arrange
+        StringBuilder longBody = new StringBuilder(500000);
+        for (int i = 0; i < 25000; i++) {
+            longBody.append(i).append("<br>");
+        }
+        
+        // Act
+        long start = System.currentTimeMillis();
+        Document doc = Parser.parseBodyFragment(longBody.toString(), "");
+        
+        // Assert
+        assertEquals(50000, doc.body().childNodeSize());
+        assertTrue(System.currentTimeMillis() - start < 1000);
     }
 }

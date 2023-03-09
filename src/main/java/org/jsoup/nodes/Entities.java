@@ -7,8 +7,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.CharsetEncoder;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * HTML entities, and escape routines.
@@ -65,7 +63,7 @@ public class Entities {
     /**
      * Get the Character value of the named entity
      * @param name named entity (e.g. "lt" or "amp")
-     * @return the Character value of the named entity (e.g. '<' or '&')
+     * @return the Character value of the named entity (e.g. '{@literal <}' or '{@literal &}')
      */
     public static Character getCharacterByName(String name) {
         return full.get(name);
