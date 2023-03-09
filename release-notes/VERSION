@@ -14,7 +14,13 @@ JSON library.
 === Releases ===
 ------------------------------------------------------------------------
 
-2.7.2 (not yet released)
+2.8.0 (not yet released)
+
+#253: Add `JsonGenerator. writeEmbeddedObject()` to allow writes of opaque native types
+ (suggested by Gregoire C)
+#255: Relax ownership checks for buffers not to require increase in size
+
+2.7.2 (26-Feb-2016)
 
 #246: Fix UTF8JsonGenerator to allow QUOTE_FIELD_NAMES to be toggled
  (suggested by philipa@github)
