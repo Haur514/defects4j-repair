@@ -32,7 +32,7 @@ public class Base32OutputStreamTest {
 
     private final static byte[] LF = {(byte) '\n'};
 
-    
+
 
 //    /**
 //     * Test the Base32OutputStream implementation against the special NPE inducing input
@@ -56,11 +56,11 @@ public class Base32OutputStreamTest {
 //            "codec-98 NPE Base32OutputStream", Base32TestData.CODEC_98_NPE_DECODED, decoded
 //        );
 //    }
-    
+
 
     /**
      * Test the Base32OutputStream implementation against empty input.
-     * 
+     *
      * @throws Exception
      *             for some failure scenarios.
      */
@@ -71,7 +71,7 @@ public class Base32OutputStreamTest {
 
     /**
      * Test the Base32OutputStream implementation against empty input.
-     * 
+     *
      * @throws Exception
      *             for some failure scenarios.
      */
@@ -80,16 +80,16 @@ public class Base32OutputStreamTest {
         testBase32EmptyOutputStream(BaseNCodec.PEM_CHUNK_SIZE);
     }
 
-    private void testBase32EmptyOutputStream(int chunkSize) throws Exception {
-        byte[] emptyEncoded = new byte[0];
-        byte[] emptyDecoded = new byte[0];
+    private void testBase32EmptyOutputStream(final int chunkSize) throws Exception {
+        final byte[] emptyEncoded = new byte[0];
+        final byte[] emptyDecoded = new byte[0];
         testByteByByte(emptyEncoded, emptyDecoded, chunkSize, CRLF);
         testByChunk(emptyEncoded, emptyDecoded, chunkSize, CRLF);
     }
 
     /**
      * Test the Base32OutputStream implementation
-     * 
+     *
      * @throws Exception
      *             for some failure scenarios.
      */
@@ -113,9 +113,9 @@ public class Base32OutputStreamTest {
 //        testByChunk(encoded, decoded, 0, LF);
 
         // test random data of sizes 0 thru 150
-        BaseNCodec codec = new Base32();
+        final BaseNCodec codec = new Base32();
         for (int i = 0; i <= 150; i++) {
-            byte[][] randomData = Base32TestData.randomData(codec, i);
+            final byte[][] randomData = Base32TestData.randomData(codec, i);
             encoded = randomData[1];
             decoded = randomData[0];
             testByChunk(encoded, decoded, 0, LF);
@@ -124,7 +124,7 @@ public class Base32OutputStreamTest {
 
     /**
      * Test the Base32OutputStream implementation
-     * 
+     *
      * @throws Exception
      *             for some failure scenarios.
      */
@@ -148,9 +148,9 @@ public class Base32OutputStreamTest {
 //        testByteByByte(encoded, decoded, 0, LF);
 
         // test random data of sizes 0 thru 150
-        BaseNCodec codec = new Base32();
+        final BaseNCodec codec = new Base32();
         for (int i = 0; i <= 150; i++) {
-            byte[][] randomData = Base32TestData.randomData(codec, i);
+            final byte[][] randomData = Base32TestData.randomData(codec, i);
             encoded = randomData[1];
             decoded = randomData[0];
             testByteByByte(encoded, decoded, 0, LF);
@@ -163,23 +163,23 @@ public class Base32OutputStreamTest {
      * <p/>
      * By "[WRAP-WRAP-WRAP-etc...]" we mean situation where the Base32OutputStream wraps itself in encode and decode
      * mode over and over again.
-     * 
+     *
      * @param encoded
      *            Base32 encoded data
      * @param decoded
      *            the data from above, but decoded
      * @param chunkSize
      *            chunk size (line-length) of the Base32 encoded data.
-     * @param seperator
+     * @param separator
      *            Line separator in the Base32 encoded data.
      * @throws Exception
      *             Usually signifies a bug in the Base32 commons-codec implementation.
      */
-    private void testByChunk(byte[] encoded, byte[] decoded, int chunkSize, byte[] seperator) throws Exception {
+    private void testByChunk(final byte[] encoded, final byte[] decoded, final int chunkSize, final byte[] separator) throws Exception {
 
         // Start with encode.
         ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
-        OutputStream out = new Base32OutputStream(byteOut, true, chunkSize, seperator);
+        OutputStream out = new Base32OutputStream(byteOut, true, chunkSize, separator);
         out.write(decoded);
         out.close();
         byte[] output = byteOut.toByteArray();
@@ -198,7 +198,7 @@ public class Base32OutputStreamTest {
         out = byteOut;
         for (int i = 0; i < 10; i++) {
             out = new Base32OutputStream(out, false);
-            out = new Base32OutputStream(out, true, chunkSize, seperator);
+            out = new Base32OutputStream(out, true, chunkSize, separator);
         }
         out.write(decoded);
         out.close();
@@ -213,24 +213,24 @@ public class Base32OutputStreamTest {
      * <p/>
      * By "[WRAP-WRAP-WRAP-etc...]" we mean situation where the Base32OutputStream wraps itself in encode and decode
      * mode over and over again.
-     * 
+     *
      * @param encoded
      *            Base32 encoded data
      * @param decoded
      *            the data from above, but decoded
      * @param chunkSize
      *            chunk size (line-length) of the Base32 encoded data.
-     * @param seperator
+     * @param separator
      *            Line separator in the Base32 encoded data.
      * @throws Exception
      *             Usually signifies a bug in the Base32 commons-codec implementation.
      */
-    private void testByteByByte(byte[] encoded, byte[] decoded, int chunkSize, byte[] seperator) throws Exception {
+    private void testByteByByte(final byte[] encoded, final byte[] decoded, final int chunkSize, final byte[] separator) throws Exception {
 
         // Start with encode.
         ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
-        OutputStream out = new Base32OutputStream(byteOut, true, chunkSize, seperator);
-        for (byte element : decoded) {
+        OutputStream out = new Base32OutputStream(byteOut, true, chunkSize, separator);
+        for (final byte element : decoded) {
             out.write(element);
         }
         out.close();
@@ -240,7 +240,7 @@ public class Base32OutputStreamTest {
         // Now let's try decode.
         byteOut = new ByteArrayOutputStream();
         out = new Base32OutputStream(byteOut, false);
-        for (byte element : encoded) {
+        for (final byte element : encoded) {
             out.write(element);
         }
         out.close();
@@ -250,7 +250,7 @@ public class Base32OutputStreamTest {
         // Now let's try decode with tonnes of flushes.
         byteOut = new ByteArrayOutputStream();
         out = new Base32OutputStream(byteOut, false);
-        for (byte element : encoded) {
+        for (final byte element : encoded) {
             out.write(element);
             out.flush();
         }
@@ -263,9 +263,9 @@ public class Base32OutputStreamTest {
         out = byteOut;
         for (int i = 0; i < 10; i++) {
             out = new Base32OutputStream(out, false);
-            out = new Base32OutputStream(out, true, chunkSize, seperator);
+            out = new Base32OutputStream(out, true, chunkSize, separator);
         }
-        for (byte element : decoded) {
+        for (final byte element : decoded) {
             out.write(element);
         }
         out.close();
@@ -276,61 +276,63 @@ public class Base32OutputStreamTest {
 
     /**
      * Tests Base32OutputStream.write for expected IndexOutOfBoundsException conditions.
-     * 
+     *
      * @throws Exception
      *             for some failure scenarios.
      */
     @Test
     public void testWriteOutOfBounds() throws Exception {
-        byte[] buf = new byte[1024];
-        ByteArrayOutputStream bout = new ByteArrayOutputStream();
-        Base32OutputStream out = new Base32OutputStream(bout);
+        final byte[] buf = new byte[1024];
+        final ByteArrayOutputStream bout = new ByteArrayOutputStream();
+        final Base32OutputStream out = new Base32OutputStream(bout);
 
         try {
             out.write(buf, -1, 1);
             fail("Expected Base32OutputStream.write(buf, -1, 1) to throw a IndexOutOfBoundsException");
-        } catch (IndexOutOfBoundsException ioobe) {
+        } catch (final IndexOutOfBoundsException ioobe) {
             // Expected
         }
 
         try {
             out.write(buf, 1, -1);
             fail("Expected Base32OutputStream.write(buf, 1, -1) to throw a IndexOutOfBoundsException");
-        } catch (IndexOutOfBoundsException ioobe) {
+        } catch (final IndexOutOfBoundsException ioobe) {
             // Expected
         }
 
         try {
             out.write(buf, buf.length + 1, 0);
             fail("Expected Base32OutputStream.write(buf, buf.length + 1, 0) to throw a IndexOutOfBoundsException");
-        } catch (IndexOutOfBoundsException ioobe) {
+        } catch (final IndexOutOfBoundsException ioobe) {
             // Expected
         }
 
         try {
             out.write(buf, buf.length - 1, 2);
             fail("Expected Base32OutputStream.write(buf, buf.length - 1, 2) to throw a IndexOutOfBoundsException");
-        } catch (IndexOutOfBoundsException ioobe) {
+        } catch (final IndexOutOfBoundsException ioobe) {
             // Expected
         }
+        out.close();
     }
 
     /**
      * Tests Base32OutputStream.write(null).
-     * 
+     *
      * @throws Exception
      *             for some failure scenarios.
      */
     @Test
     public void testWriteToNullCoverage() throws Exception {
-        ByteArrayOutputStream bout = new ByteArrayOutputStream();
-        Base32OutputStream out = new Base32OutputStream(bout);
+        final ByteArrayOutputStream bout = new ByteArrayOutputStream();
+        final Base32OutputStream out = new Base32OutputStream(bout);
         try {
             out.write(null, 0, 0);
             fail("Expcted Base32OutputStream.write(null) to throw a NullPointerException");
-        } catch (NullPointerException e) {
+        } catch (final NullPointerException e) {
             // Expected
         }
+        out.close();
     }
 
 }

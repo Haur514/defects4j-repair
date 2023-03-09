@@ -5,9 +5,9 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,20 +18,19 @@
 package org.apache.commons.codec.language;
 
 import org.apache.commons.codec.EncoderException;
-import org.apache.commons.codec.StringEncoder;
 import org.apache.commons.codec.StringEncoderAbstractTest;
 import org.junit.Test;
 
 /**
  * Tests the {@code ColognePhonetic} class.
- * 
+ *
  * <p>Keep this file in UTF-8 encoding for proper Javadoc processing.</p>
- * 
+ *
  */
-public class ColognePhoneticTest extends StringEncoderAbstractTest {
+public class ColognePhoneticTest extends StringEncoderAbstractTest<ColognePhonetic> {
 
     @Override
-    protected StringEncoder createStringEncoder() {
+    protected ColognePhonetic createStringEncoder() {
         return new ColognePhonetic();
     }
 
@@ -44,10 +43,10 @@ public class ColognePhoneticTest extends StringEncoderAbstractTest {
     public void testAaclan() throws EncoderException {
         this.checkEncoding("0856", "Aaclan");
     }
-    
+
     /**
      * Tests [CODEC-122]
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -57,7 +56,7 @@ public class ColognePhoneticTest extends StringEncoderAbstractTest {
 
     @Test
     public void testEdgeCases() throws EncoderException {
-        String[][] data = {
+        final String[][] data = {
             {"a", "0"},
             {"e", "0"},
             {"i", "0"},
@@ -92,7 +91,7 @@ public class ColognePhoneticTest extends StringEncoderAbstractTest {
 
     @Test
     public void testExamples() throws EncoderException {
-        String[][] data = {
+        final String[][] data = {
             {"m\u00DCller", "657"}, // mÜller - why upper case U-umlaut?
             {"schmidt", "862"},
             {"schneider", "8627"},
@@ -106,7 +105,7 @@ public class ColognePhoneticTest extends StringEncoderAbstractTest {
             {"Wikipedia", "3412"},
             {"peter", "127"},
             {"pharma", "376"},
-            {"m\u00f6nchengladbach", "664645214"}, // mönchengladbach 
+            {"m\u00f6nchengladbach", "664645214"}, // mönchengladbach
             {"deutsch", "28"},
             {"deutz", "28"},
             {"hamburg", "06174"},
@@ -126,14 +125,14 @@ public class ColognePhoneticTest extends StringEncoderAbstractTest {
 
     @Test
     public void testHyphen() throws EncoderException {
-        String[][] data = {{"bergisch-gladbach", "174845214"}, 
+        final String[][] data = {{"bergisch-gladbach", "174845214"},
                 {"M\u00fcller-L\u00fcdenscheidt", "65752682"}}; // Müller-Lüdenscheidt
         this.checkEncodings(data);
     }
 
     @Test
     public void testIsEncodeEquals() {
-        String[][] data = {
+        final String[][] data = {
             {"Meyer", "M\u00fcller"}, // Müller
             {"Meyer", "Mayr"},
             {"house", "house"},
@@ -142,20 +141,20 @@ public class ColognePhoneticTest extends StringEncoderAbstractTest {
             {"ganz", "Gans"},
             {"ganz", "G\u00e4nse"}, // Gänse
             {"Miyagi", "Miyako"}};
-        for (String[] element : data) {
-            ((ColognePhonetic) this.getStringEncoder()).isEncodeEqual(element[1], element[0]);
+        for (final String[] element : data) {
+            this.getStringEncoder().isEncodeEqual(element[1], element[0]);
         }
     }
 
     @Test
     public void testVariationsMella() throws EncoderException {
-        String data[] = {"mella", "milah", "moulla", "mellah", "muehle", "mule"};
+        final String data[] = {"mella", "milah", "moulla", "mellah", "muehle", "mule"};
         this.checkEncodingVariations("65", data);
     }
 
     @Test
     public void testVariationsMeyer() throws EncoderException {
-        String data[] = {"Meier", "Maier", "Mair", "Meyer", "Meyr", "Mejer", "Major"};
+        final String data[] = {"Meier", "Maier", "Mair", "Meyer", "Meyr", "Mejer", "Major"};
         this.checkEncodingVariations("67", data);
     }
 }

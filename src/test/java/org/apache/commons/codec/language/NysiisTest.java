@@ -18,72 +18,71 @@
 package org.apache.commons.codec.language;
 
 import org.apache.commons.codec.EncoderException;
-import org.apache.commons.codec.StringEncoder;
 import org.apache.commons.codec.StringEncoderAbstractTest;
 import org.junit.Assert;
 import org.junit.Test;
 
 /**
  * Tests {@link Nysiis}
- * 
+ *
  * @since 1.7
  * @version $Id$
  */
-public class NysiisTest extends StringEncoderAbstractTest {
+public class NysiisTest extends StringEncoderAbstractTest<Nysiis> {
 
     private final Nysiis fullNysiis = new Nysiis(false);
-    
+
     /**
      * Takes an array of String pairs where each pair's first element is the input and the second element the expected
      * encoding.
-     * 
+     *
      * @param testValues
      *            an array of String pairs where each pair's first element is the input and the second element the
      *            expected encoding.
      * @throws EncoderException
      */
-    private void assertEncodings(String[]... testValues) throws EncoderException {
-        for (String[] arr : testValues) {
+    private void assertEncodings(final String[]... testValues) throws EncoderException {
+        for (final String[] arr : testValues) {
             Assert.assertEquals("Problem with " + arr[0], arr[1], this.fullNysiis.encode(arr[0]));
         }
     }
 
     @Override
-    protected StringEncoder createStringEncoder() {
+    protected Nysiis createStringEncoder() {
         return new Nysiis();
     }
 
-    private void encodeAll(String[] strings, String expectedEncoding) throws EncoderException {
-        for (int i = 0; i < strings.length; i++) {
-            Assert.assertEquals("Problem with " + strings[i], expectedEncoding, getStringEncoder().encode(strings[i]));
+    private void encodeAll(final String[] strings, final String expectedEncoding) {
+        for (final String string : strings) {
+            Assert.assertEquals("Problem with " + string, expectedEncoding, getStringEncoder().encode(string));
         }
     }
 
     @Test
-    public void testBran() throws EncoderException {
+    public void testBran() {
         encodeAll(new String[] { "Brian", "Brown", "Brun" }, "BRAN");
     }
 
     @Test
-    public void testCap() throws EncoderException {
+    public void testCap() {
         this.encodeAll(new String[] { "Capp", "Cope", "Copp", "Kipp" }, "CAP");
     }
 
     @Test
-    public void testDad() throws EncoderException {
+    public void testDad() {
         // Data Quality and Record Linkage Techniques P.121 claims this is DAN,
         // but it should be DAD, verified also with dropby.com
         this.encodeAll(new String[] { "Dent" }, "DAD");
     }
 
     @Test
-    public void testDan() throws EncoderException {
+    public void testDan() {
         this.encodeAll(new String[] { "Dane", "Dean", "Dionne" }, "DAN");
     }
 
     /**
      * Tests data gathered from around the internet.
-     * 
+     *
      * @see <a href="http://www.dropby.com/NYSIISTextStrings.html">http://www.dropby.com/NYSIISTextStrings.html</a>
      * @throws EncoderException
      */
@@ -146,13 +145,13 @@ public class NysiisTest extends StringEncoderAbstractTest {
     }
 
     @Test
-    public void testFal() throws EncoderException {
+    public void testFal() {
         this.encodeAll(new String[] { "Phil" }, "FAL");
     }
 
     /**
      * Tests data gathered from around the internets.
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -169,7 +168,7 @@ public class NysiisTest extends StringEncoderAbstractTest {
 
     /**
      * Tests rule 1: Translate first characters of name: MAC → MCC, KN → N, K → C, PH, PF → FF, SCH → SSS
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -185,7 +184,7 @@ public class NysiisTest extends StringEncoderAbstractTest {
 
     /**
      * Tests rule 2: Translate last characters of name: EE → Y, IE → Y, DT, RT, RD, NT, ND → D
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -202,7 +201,7 @@ public class NysiisTest extends StringEncoderAbstractTest {
 
     /**
      * Tests rule 4.1: EV → AF else A, E, I, O, U → A
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -218,7 +217,7 @@ public class NysiisTest extends StringEncoderAbstractTest {
 
     /**
      * Tests rule 4.2: Q → G, Z → S, M → N
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -231,7 +230,7 @@ public class NysiisTest extends StringEncoderAbstractTest {
 
     /**
      * Tests rule 5: If last character is S, remove it.
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -243,7 +242,7 @@ public class NysiisTest extends StringEncoderAbstractTest {
 
     /**
      * Tests rule 6: If last characters are AY, replace with Y.
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -255,7 +254,7 @@ public class NysiisTest extends StringEncoderAbstractTest {
 
     /**
      * Tests rule 7: If last character is A, remove it.
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -265,19 +264,19 @@ public class NysiisTest extends StringEncoderAbstractTest {
                 new String[] { "XAS", "X" }); // Rules 5, 7
     }
     @Test
-    public void testSnad() throws EncoderException {
+    public void testSnad() {
         // Data Quality and Record Linkage Techniques P.121 claims this is SNAT,
         // but it should be SNAD
         this.encodeAll(new String[] { "Schmidt" }, "SNAD");
     }
 
     @Test
-    public void testSnat() throws EncoderException {
+    public void testSnat() {
         this.encodeAll(new String[] { "Smith", "Schmit" }, "SNAT");
     }
 
     @Test
-    public void testSpecialBranches() throws EncoderException {
+    public void testSpecialBranches() {
         this.encodeAll(new String[] { "Kobwick" }, "CABWAC");
         this.encodeAll(new String[] { "Kocher" }, "CACAR");
         this.encodeAll(new String[] { "Fesca" }, "FASC");
@@ -288,15 +287,15 @@ public class NysiisTest extends StringEncoderAbstractTest {
     }
 
     @Test
-    public void testTranan() throws EncoderException {
+    public void testTranan() {
         this.encodeAll(new String[] { "Trueman", "Truman" }, "TRANAN");
     }
 
     @Test
     public void testTrueVariant() {
-        Nysiis encoder = new Nysiis(true);
+        final Nysiis encoder = new Nysiis(true);
 
-        String encoded = encoder.encode("WESTERLUND");
+        final String encoded = encoder.encode("WESTERLUND");
         Assert.assertTrue(encoded.length() <= 6);
         Assert.assertEquals("WASTAR", encoded);
     }

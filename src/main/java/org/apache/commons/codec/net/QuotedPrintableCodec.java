@@ -5,9 +5,9 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,11 +19,14 @@ package org.apache.commons.codec.net;
 
 import java.io.ByteArrayOutputStream;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
+import java.nio.charset.UnsupportedCharsetException;
 import java.util.BitSet;
 
 import org.apache.commons.codec.BinaryDecoder;
 import org.apache.commons.codec.BinaryEncoder;
-import org.apache.commons.codec.CharEncoding;
+import org.apache.commons.codec.Charsets;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.EncoderException;
 import org.apache.commons.codec.StringDecoder;
@@ -31,9 +34,7 @@ import org.apache.commons.codec.StringEncoder;
 import org.apache.commons.codec.binary.StringUtils;
 
 /**
- * <p>
  * Codec for the Quoted-Printable section of <a href="http://www.ietf.org/rfc/rfc1521.txt">RFC 1521</a>.
- * </p>
  * <p>
  * The Quoted-Printable encoding is intended to represent data that largely consists of octets that correspond to
  * printable characters in the ASCII character set. It encodes the data in such a way that the resulting octets are
@@ -41,12 +42,19 @@ import org.apache.commons.codec.binary.StringUtils;
  * data remains largely recognizable by humans. A body which is entirely ASCII may also be encoded in Quoted-Printable
  * to ensure the integrity of the data should the message pass through a character- translating, and/or line-wrapping
  * gateway.
- * </p>
+ * <p>
+ * Note:
+ * <p>
+ * Rules #3, #4, and #5 of the quoted-printable spec are not implemented yet because the complete quoted-printable spec
+ * does not lend itself well into the byte[] oriented codec framework. Complete the codec once the streamable codec
+ * framework is ready. The motivation behind providing the codec in a partial form is that it can already come in handy
+ * for those applications that do not require quoted-printable line formatting (rules #3, #4, #5), for instance Q codec.
+ * <p>
+ * This class is immutable and thread-safe.
  *
  * @see <a href="http://www.ietf.org/rfc/rfc1521.txt"> RFC 1521 MIME (Multipurpose Internet Mail Extensions) Part One:
  *          Mechanisms for Specifying and Describing the Format of Internet Message Bodies </a>
  *
- * @author Apache Software Foundation
  * @since 1.3
  * @version $Id$
  */
@@ -54,7 +62,7 @@ public class QuotedPrintableCodec implements BinaryEncoder, BinaryDecoder, Strin
     /**
      * The default charset used for string decoding and encoding.
      */
-    private final String charset;
+    private final Charset charset;
 
     /**
      * BitSet of printable characters as defined in RFC 1521.
@@ -66,14 +74,6 @@ public class QuotedPrintableCodec implements BinaryEncoder, BinaryDecoder, Strin
     private static final byte TAB = 9;
 
     private static final byte SPACE = 32;
-
-    private static final byte CR = 13;
-
-    private static final byte LF = 10;
-
-    /** Safe line length for quoted printable encoded text. */
-    private static final int SAFE_LENGTH = 73;
-
     // Static initializer for printable chars collection
     static {
         // alpha characters
@@ -88,193 +88,122 @@ public class QuotedPrintableCodec implements BinaryEncoder, BinaryDecoder, Strin
     }
 
     /**
-     * Default constructor.
+     * Default constructor, assumes default charset of {@link Charsets#UTF_8}
      */
     public QuotedPrintableCodec() {
-        this(CharEncoding.UTF_8);
+        this(Charsets.UTF_8);
     }
 
     /**
-     * Constructor which allows for the selection of a default charset
-     * 
+     * Constructor which allows for the selection of a default charset.
+     *
      * @param charset
-     *                  the default string charset to use.
+     *            the default string charset to use.
+     * @since 1.7
      */
-    public QuotedPrintableCodec(String charset) {
-        super();
+    public QuotedPrintableCodec(final Charset charset) {
         this.charset = charset;
     }
 
     /**
+     * Constructor which allows for the selection of a default charset.
+     *
+     * @param charsetName
+     *            the default string charset to use.
+     * @throws UnsupportedCharsetException
+     *             If no support for the named charset is available
+     *             in this instance of the Java virtual machine
+     * @throws IllegalArgumentException
+     *             If the given charsetName is null
+     * @throws IllegalCharsetNameException
+     *             If the given charset name is illegal
+     *
+     * @since 1.7 throws UnsupportedCharsetException if the named charset is unavailable
+     */
+    public QuotedPrintableCodec(final String charsetName)
+            throws IllegalCharsetNameException, IllegalArgumentException, UnsupportedCharsetException {
+        this(Charset.forName(charsetName));
+    }
+
+    /**
      * Encodes byte into its quoted-printable representation.
-     * 
+     *
      * @param b
      *            byte to encode
      * @param buffer
      *            the buffer to write to
-     * @return The number of bytes written to the <code>buffer</code>
      */
-    private static final int encodeQuotedPrintable(int b, ByteArrayOutputStream buffer) {
+    private static final void encodeQuotedPrintable(final int b, final ByteArrayOutputStream buffer) {
         buffer.write(ESCAPE_CHAR);
-        char hex1 = Character.toUpperCase(Character.forDigit((b >> 4) & 0xF, 16));
-        char hex2 = Character.toUpperCase(Character.forDigit(b & 0xF, 16));
+        final char hex1 = Character.toUpperCase(Character.forDigit((b >> 4) & 0xF, 16));
+        final char hex2 = Character.toUpperCase(Character.forDigit(b & 0xF, 16));
         buffer.write(hex1);
         buffer.write(hex2);
-        return 3;
-    }
-
-    /**
-     * Return the byte at position <code>index</code> of the byte array and
-     * make sure it is unsigned.
-     *
-     * @param index
-     *                  position in the array
-     * @param bytes
-     *                  the byte array
-     * @return the unsigned octet at position <code>index</code> from the array
-     */
-    private static int getUnsignedOctet(final int index, final byte[] bytes) {
-        int b = bytes[index];
-        if (b < 0) {
-            b = 256 + b;
-        }
-        return b;
-    }
-
-    /**
-     * Write a byte to the buffer.
-     *
-     * @param b
-     *                  byte to write
-     * @param encode
-     *                  indicates whether the octet shall be encoded
-     * @param buffer
-     *                  the buffer to write to
-     * @return the number of bytes that have been written to the buffer
-     */
-    private static int encodeByte(final int b, final boolean encode,
-                                  final ByteArrayOutputStream buffer) {
-        if (encode) {
-            return encodeQuotedPrintable(b, buffer);
-        } else {
-            buffer.write(b);
-            return 1;
-        }
-    }
-
-    /**
-     * Checks whether the given byte is whitespace.
-     *
-     * @param b
-     *                  byte to be checked
-     * @return <code>true</code> if the byte is either a space or tab character
-     */
-    private static boolean isWhitespace(final int b) {
-        return b == SPACE || b == TAB;
     }
 
     /**
      * Encodes an array of bytes into an array of quoted-printable 7-bit characters. Unsafe characters are escaped.
-     *
      * <p>
-     * This function fully implements the quoted-printable encoding specification (rule #1 through rule #5)
-     * as defined in RFC 1521 and is suitable for encoding binary data and unformatted text.
-     * </p>
+     * This function implements a subset of quoted-printable encoding specification (rule #1 and rule #2) as defined in
+     * RFC 1521 and is suitable for encoding binary data and unformatted text.
      *
      * @param printable
-     *                  bitset of characters deemed quoted-printable
+     *            bitset of characters deemed quoted-printable
      * @param bytes
-     *                  array of bytes to be encoded
+     *            array of bytes to be encoded
      * @return array of bytes containing quoted-printable data
      */
-    public static final byte[] encodeQuotedPrintable(BitSet printable, byte[] bytes) {
+    public static final byte[] encodeQuotedPrintable(BitSet printable, final byte[] bytes) {
         if (bytes == null) {
             return null;
         }
         if (printable == null) {
             printable = PRINTABLE_CHARS;
         }
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        int pos = 1;
-        // encode up to buffer.length - 3, the last three octets will be treated
-        // separately for simplification of note #3
-        for (int i = 0; i < bytes.length - 3; i++) {
-            int b = getUnsignedOctet(i, bytes);
-            if (pos < SAFE_LENGTH) {
-                // up to this length it is safe to add any byte, encoded or not
-                pos += encodeByte(b, !printable.get(b), buffer);
+        final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        for (final byte c : bytes) {
+            int b = c;
+            if (b < 0) {
+                b = 256 + b;
+            }
+            if (printable.get(b)) {
+                buffer.write(b);
             } else {
-                // rule #3: whitespace at the end of a line *must* be encoded
-                encodeByte(b, !printable.get(b) || isWhitespace(b), buffer);
-
-                // rule #5: soft line break
-                buffer.write(ESCAPE_CHAR);
-                buffer.write(CR);
-                buffer.write(LF);
-                pos = 1;
+                encodeQuotedPrintable(b, buffer);
             }
         }
-
-        // rule #3: whitespace at the end of a line *must* be encoded
-        // if we would do a soft break line after this octet, encode whitespace
-        int b = getUnsignedOctet(bytes.length - 3, bytes);
-        boolean encode = !printable.get(b) || (isWhitespace(b) && pos > SAFE_LENGTH - 5);
-        pos += encodeByte(b, encode, buffer);
-
-        // note #3: '=' *must not* be the ultimate or penultimate character
-        // simplification: if < 6 bytes left, do a soft line break as we may need
-        //                 exactly 6 bytes space for the last 2 bytes
-        if (pos > SAFE_LENGTH - 2) {
-            buffer.write(ESCAPE_CHAR);
-            buffer.write(CR);
-            buffer.write(LF);
-        }
-        for (int i = bytes.length - 2; i < bytes.length; i++) {
-            b = getUnsignedOctet(i, bytes);
-            // rule #3: trailing whitespace shall be encoded
-            encode = !printable.get(b) || (i > bytes.length - 2 && isWhitespace(b));
-            encodeByte(b, encode, buffer);
-        }
-
         return buffer.toByteArray();
     }
 
     /**
-     * Decodes an array quoted-printable characters into an array of original bytes. Escaped characters are
-     * converted back to their original representation.
-     *
+     * Decodes an array quoted-printable characters into an array of original bytes. Escaped characters are converted
+     * back to their original representation.
      * <p>
-     * This function fully implements the quoted-printable encoding specification (rule #1 through rule #5) as
-     * defined in RFC 1521.
-     * </p>
+     * This function implements a subset of quoted-printable encoding specification (rule #1 and rule #2) as defined in
+     * RFC 1521.
      *
      * @param bytes
-     *                  array of quoted-printable characters
+     *            array of quoted-printable characters
      * @return array of original bytes
      * @throws DecoderException
-     *                  Thrown if quoted-printable decoding is unsuccessful
+     *             Thrown if quoted-printable decoding is unsuccessful
      */
-    public static final byte[] decodeQuotedPrintable(byte[] bytes) throws DecoderException {
+    public static final byte[] decodeQuotedPrintable(final byte[] bytes) throws DecoderException {
         if (bytes == null) {
             return null;
         }
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         for (int i = 0; i < bytes.length; i++) {
             final int b = bytes[i];
             if (b == ESCAPE_CHAR) {
                 try {
-                    // if the next octet is a CR we have found a soft line break
-                    if (bytes[++i] == CR) {
-                        continue;
-                    }
-                    int u = Utils.digit16(bytes[i]);
-                    int l = Utils.digit16(bytes[++i]);
+                    final int u = Utils.digit16(bytes[++i]);
+                    final int l = Utils.digit16(bytes[++i]);
                     buffer.write((char) ((u << 4) + l));
-                } catch (ArrayIndexOutOfBoundsException e) {
+                } catch (final ArrayIndexOutOfBoundsException e) {
                     throw new DecoderException("Invalid quoted-printable encoding", e);
                 }
-            } else if (b != CR && b != LF) {
-                // every other octet is appended except for CR & LF
+            } else {
                 buffer.write(b);
             }
         }
@@ -283,131 +212,134 @@ public class QuotedPrintableCodec implements BinaryEncoder, BinaryDecoder, Strin
 
     /**
      * Encodes an array of bytes into an array of quoted-printable 7-bit characters. Unsafe characters are escaped.
-     * 
      * <p>
-     * This function fully implements the quoted-printable encoding specification (rule #1 through rule #5)
-     * as defined in RFC 1521 and is suitable for encoding binary data and unformatted text.
-     * </p>
-     * 
+     * This function implements a subset of quoted-printable encoding specification (rule #1 and rule #2) as defined in
+     * RFC 1521 and is suitable for encoding binary data and unformatted text.
+     *
      * @param bytes
-     *                  array of bytes to be encoded
+     *            array of bytes to be encoded
      * @return array of bytes containing quoted-printable data
      */
-    public byte[] encode(byte[] bytes) {
+    @Override
+    public byte[] encode(final byte[] bytes) {
         return encodeQuotedPrintable(PRINTABLE_CHARS, bytes);
     }
 
     /**
      * Decodes an array of quoted-printable characters into an array of original bytes. Escaped characters are converted
      * back to their original representation.
-     * 
      * <p>
-     * This function fully implements the quoted-printable encoding specification (rule #1 through rule #2)
-     * as defined in RFC 1521.
-     * </p>
-     * 
+     * This function implements a subset of quoted-printable encoding specification (rule #1 and rule #2) as defined in
+     * RFC 1521.
+     *
      * @param bytes
-     *                  array of quoted-printable characters
+     *            array of quoted-printable characters
      * @return array of original bytes
      * @throws DecoderException
-     *                  Thrown if quoted-printable decoding is unsuccessful
+     *             Thrown if quoted-printable decoding is unsuccessful
      */
-    public byte[] decode(byte[] bytes) throws DecoderException {
+    @Override
+    public byte[] decode(final byte[] bytes) throws DecoderException {
         return decodeQuotedPrintable(bytes);
     }
 
     /**
      * Encodes a string into its quoted-printable form using the default string charset. Unsafe characters are escaped.
-     * 
      * <p>
-     * This function fully implements the quoted-printable encoding specification (rule #1 through rule #2)
-     * as defined in RFC 1521 and is suitable for encoding binary data.
-     * </p>
-     * 
-     * @param pString
-     *                  string to convert to quoted-printable form
+     * This function implements a subset of quoted-printable encoding specification (rule #1 and rule #2) as defined in
+     * RFC 1521 and is suitable for encoding binary data.
+     *
+     * @param str
+     *            string to convert to quoted-printable form
      * @return quoted-printable string
-     * 
      * @throws EncoderException
-     *                  Thrown if quoted-printable encoding is unsuccessful
-     * 
-     * @see #getDefaultCharset()
+     *             Thrown if quoted-printable encoding is unsuccessful
+     *
+     * @see #getCharset()
      */
-    public String encode(String pString) throws EncoderException {
-        if (pString == null) {
-            return null;
-        }
-        try {
-            return encode(pString, getDefaultCharset());
-        } catch (UnsupportedEncodingException e) {
-            throw new EncoderException(e.getMessage(), e);
-        }
+    @Override
+    public String encode(final String str) throws EncoderException {
+        return this.encode(str, getCharset());
     }
 
     /**
      * Decodes a quoted-printable string into its original form using the specified string charset. Escaped characters
      * are converted back to their original representation.
-     * 
-     * @param pString
-     *                  quoted-printable string to convert into its original form
+     *
+     * @param str
+     *            quoted-printable string to convert into its original form
      * @param charset
-     *                  the original string charset
+     *            the original string charset
      * @return original string
      * @throws DecoderException
-     *                  Thrown if quoted-printable decoding is unsuccessful
-     * @throws UnsupportedEncodingException
-     *                  Thrown if charset is not supported
+     *             Thrown if quoted-printable decoding is unsuccessful
+     * @since 1.7
      */
-    public String decode(String pString, String charset) throws DecoderException, UnsupportedEncodingException {
-        if (pString == null) {
+    public String decode(final String str, final Charset charset) throws DecoderException {
+        if (str == null) {
             return null;
         }
-        return new String(decode(StringUtils.getBytesUsAscii(pString)), charset);
+        return new String(this.decode(StringUtils.getBytesUsAscii(str)), charset);
+    }
+
+    /**
+     * Decodes a quoted-printable string into its original form using the specified string charset. Escaped characters
+     * are converted back to their original representation.
+     *
+     * @param str
+     *            quoted-printable string to convert into its original form
+     * @param charset
+     *            the original string charset
+     * @return original string
+     * @throws DecoderException
+     *             Thrown if quoted-printable decoding is unsuccessful
+     * @throws UnsupportedEncodingException
+     *             Thrown if charset is not supported
+     */
+    public String decode(final String str, final String charset) throws DecoderException, UnsupportedEncodingException {
+        if (str == null) {
+            return null;
+        }
+        return new String(decode(StringUtils.getBytesUsAscii(str)), charset);
     }
 
     /**
      * Decodes a quoted-printable string into its original form using the default string charset. Escaped characters are
      * converted back to their original representation.
-     * 
-     * @param pString
-     *                  quoted-printable string to convert into its original form
+     *
+     * @param str
+     *            quoted-printable string to convert into its original form
      * @return original string
      * @throws DecoderException
-     *                  Thrown if quoted-printable decoding is unsuccessful.
-     *                  Thrown if charset is not supported.
-     * @see #getDefaultCharset()
+     *             Thrown if quoted-printable decoding is unsuccessful. Thrown if charset is not supported.
+     * @see #getCharset()
      */
-    public String decode(String pString) throws DecoderException {
-        if (pString == null) {
-            return null;
-        }
-        try {
-            return decode(pString, getDefaultCharset());
-        } catch (UnsupportedEncodingException e) {
-            throw new DecoderException(e.getMessage(), e);
-        }
+    @Override
+    public String decode(final String str) throws DecoderException {
+        return this.decode(str, this.getCharset());
     }
 
     /**
      * Encodes an object into its quoted-printable safe form. Unsafe characters are escaped.
-     * 
-     * @param pObject
-     *                  string to convert to a quoted-printable form
+     *
+     * @param obj
+     *            string to convert to a quoted-printable form
      * @return quoted-printable object
      * @throws EncoderException
-     *                  Thrown if quoted-printable encoding is not applicable to objects of this type or if encoding is
-     *                  unsuccessful
+     *             Thrown if quoted-printable encoding is not applicable to objects of this type or if encoding is
+     *             unsuccessful
      */
-    public Object encode(Object pObject) throws EncoderException {
-        if (pObject == null) {
+    @Override
+    public Object encode(final Object obj) throws EncoderException {
+        if (obj == null) {
             return null;
-        } else if (pObject instanceof byte[]) {
-            return encode((byte[]) pObject);
-        } else if (pObject instanceof String) {
-            return encode((String) pObject);
+        } else if (obj instanceof byte[]) {
+            return encode((byte[]) obj);
+        } else if (obj instanceof String) {
+            return encode((String) obj);
         } else {
-            throw new EncoderException("Objects of type " + 
-                  pObject.getClass().getName() + 
+            throw new EncoderException("Objects of type " +
+                  obj.getClass().getName() +
                   " cannot be quoted-printable encoded");
         }
     }
@@ -415,58 +347,86 @@ public class QuotedPrintableCodec implements BinaryEncoder, BinaryDecoder, Strin
     /**
      * Decodes a quoted-printable object into its original form. Escaped characters are converted back to their original
      * representation.
-     * 
-     * @param pObject
-     *                  quoted-printable object to convert into its original form
+     *
+     * @param obj
+     *            quoted-printable object to convert into its original form
      * @return original object
      * @throws DecoderException
-     *                  Thrown if the argument is not a <code>String</code> or <code>byte[]</code>. Thrown if a failure condition is
-     *                  encountered during the decode process.
+     *             Thrown if the argument is not a <code>String</code> or <code>byte[]</code>. Thrown if a failure
+     *             condition is encountered during the decode process.
      */
-    public Object decode(Object pObject) throws DecoderException {
-        if (pObject == null) {
+    @Override
+    public Object decode(final Object obj) throws DecoderException {
+        if (obj == null) {
             return null;
-        } else if (pObject instanceof byte[]) {
-            return decode((byte[]) pObject);
-        } else if (pObject instanceof String) {
-            return decode((String) pObject);
+        } else if (obj instanceof byte[]) {
+            return decode((byte[]) obj);
+        } else if (obj instanceof String) {
+            return decode((String) obj);
         } else {
-            throw new DecoderException("Objects of type " + 
-                  pObject.getClass().getName() + 
+            throw new DecoderException("Objects of type " +
+                  obj.getClass().getName() +
                   " cannot be quoted-printable decoded");
         }
     }
 
     /**
-     * Returns the default charset used for string decoding and encoding.
-     * 
-     * @return the default string charset.
+     * Gets the default charset name used for string decoding and encoding.
+     *
+     * @return the default charset name
+     * @since 1.7
      */
-    public String getDefaultCharset() {
+    public Charset getCharset() {
         return this.charset;
     }
 
     /**
-     * Encodes a string into its quoted-printable form using the specified charset. Unsafe characters are escaped.
-     * 
-     * <p>
-     * This function fully implements the quoted-printable encoding specification (rule #1 through rule #2)
-     * as defined in RFC 1521 and is suitable for encoding binary data and unformatted text.
-     * </p>
-     * 
-     * @param pString
-     *                  string to convert to quoted-printable form
-     * @param charset
-     *                  the charset for pString
-     * @return quoted-printable string
-     * 
-     * @throws UnsupportedEncodingException
-     *                  Thrown if the charset is not supported
+     * Gets the default charset name used for string decoding and encoding.
+     *
+     * @return the default charset name
      */
-    public String encode(String pString, String charset) throws UnsupportedEncodingException {
-        if (pString == null) {
+    public String getDefaultCharset() {
+        return this.charset.name();
+    }
+
+    /**
+     * Encodes a string into its quoted-printable form using the specified charset. Unsafe characters are escaped.
+     * <p>
+     * This function implements a subset of quoted-printable encoding specification (rule #1 and rule #2) as defined in
+     * RFC 1521 and is suitable for encoding binary data and unformatted text.
+     *
+     * @param str
+     *            string to convert to quoted-printable form
+     * @param charset
+     *            the charset for str
+     * @return quoted-printable string
+     * @since 1.7
+     */
+    public String encode(final String str, final Charset charset) {
+        if (str == null) {
             return null;
         }
-        return StringUtils.newStringUsAscii(encode(pString.getBytes(charset)));
+        return StringUtils.newStringUsAscii(this.encode(str.getBytes(charset)));
+    }
+
+    /**
+     * Encodes a string into its quoted-printable form using the specified charset. Unsafe characters are escaped.
+     * <p>
+     * This function implements a subset of quoted-printable encoding specification (rule #1 and rule #2) as defined in
+     * RFC 1521 and is suitable for encoding binary data and unformatted text.
+     *
+     * @param str
+     *            string to convert to quoted-printable form
+     * @param charset
+     *            the charset for str
+     * @return quoted-printable string
+     * @throws UnsupportedEncodingException
+     *             Thrown if the charset is not supported
+     */
+    public String encode(final String str, final String charset) throws UnsupportedEncodingException {
+        if (str == null) {
+            return null;
+        }
+        return StringUtils.newStringUsAscii(encode(str.getBytes(charset)));
     }
 }

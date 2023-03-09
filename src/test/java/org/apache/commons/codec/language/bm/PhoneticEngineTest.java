@@ -29,27 +29,29 @@ import org.junit.runners.Parameterized;
 
 /**
  * Tests PhoneticEngine.
- * 
+ *
  * @since 1.6
  */
 @RunWith(Parameterized.class)
 public class PhoneticEngineTest {
 
+    private static final Integer TEN = Integer.valueOf(10);
+
     @Parameterized.Parameters
     public static List<Object[]> data() {
         return Arrays
-                .asList(new Object[] { "Renault", "rinD|rinDlt|rina|rinalt|rino|rinolt|rinu|rinult", NameType.GENERIC, RuleType.APPROX, true, 10 },
-                        new Object[] { "Renault", "rYnDlt|rYnalt|rYnult|rinDlt|rinalt|rinult", NameType.ASHKENAZI, RuleType.APPROX, true, 10 },
-                        new Object[] { "Renault", "rYnDlt", NameType.ASHKENAZI, RuleType.APPROX, true, 1 },
-                        new Object[] { "Renault", "rinDlt", NameType.SEPHARDIC, RuleType.APPROX, true, 10 },
-                        new Object[] { "SntJohn-Smith", "sntjonsmit", NameType.GENERIC, RuleType.EXACT, true, 10 },
-                        new Object[] { "d'ortley", "(ortlaj|ortlej)-(dortlaj|dortlej)", NameType.GENERIC, RuleType.EXACT, true, 10 },
+                .asList(new Object[] { "Renault", "rinD|rinDlt|rina|rinalt|rino|rinolt|rinu|rinult", NameType.GENERIC, RuleType.APPROX, Boolean.TRUE, TEN },
+                        new Object[] { "Renault", "rYnDlt|rYnalt|rYnult|rinDlt|rinalt|rinult", NameType.ASHKENAZI, RuleType.APPROX, Boolean.TRUE, TEN },
+                        new Object[] { "Renault", "rYnDlt", NameType.ASHKENAZI, RuleType.APPROX, Boolean.TRUE, Integer.valueOf(1) },
+                        new Object[] { "Renault", "rinDlt", NameType.SEPHARDIC, RuleType.APPROX, Boolean.TRUE, TEN },
+                        new Object[] { "SntJohn-Smith", "sntjonsmit", NameType.GENERIC, RuleType.EXACT, Boolean.TRUE, TEN },
+                        new Object[] { "d'ortley", "(ortlaj|ortlej)-(dortlaj|dortlej)", NameType.GENERIC, RuleType.EXACT, Boolean.TRUE, TEN },
                         new Object[] {
                                 "van helsing",
                                 "(elSink|elsink|helSink|helsink|helzink|xelsink)-(banhelsink|fanhelsink|fanhelzink|vanhelsink|vanhelzink|vanjelsink)",
                                 NameType.GENERIC,
                                 RuleType.EXACT,
-                                false, 10 });
+                                Boolean.FALSE, TEN });
     }
 
     private final boolean concat;
@@ -59,8 +61,8 @@ public class PhoneticEngineTest {
     private final RuleType ruleType;
     private final int maxPhonemes;
 
-    public PhoneticEngineTest(String name, String phoneticExpected, NameType nameType,
-                              RuleType ruleType, boolean concat, int maxPhonemes) {
+    public PhoneticEngineTest(final String name, final String phoneticExpected, final NameType nameType,
+                              final RuleType ruleType, final boolean concat, final int maxPhonemes) {
         this.name = name;
         this.phoneticExpected = phoneticExpected;
         this.nameType = nameType;
@@ -71,21 +73,21 @@ public class PhoneticEngineTest {
 
     @Test(timeout = 10000L)
     public void testEncode() {
-        PhoneticEngine engine = new PhoneticEngine(this.nameType, this.ruleType, this.concat, this.maxPhonemes);
+        final PhoneticEngine engine = new PhoneticEngine(this.nameType, this.ruleType, this.concat, this.maxPhonemes);
 
-        String phoneticActual = engine.encode(this.name);
+        final String phoneticActual = engine.encode(this.name);
 
         //System.err.println("expecting: " + this.phoneticExpected);
         //System.err.println("actual:    " + phoneticActual);
         assertEquals("phoneme incorrect", this.phoneticExpected, phoneticActual);
 
         if (this.concat) {
-            String[] split = phoneticActual.split("\\|");
+            final String[] split = phoneticActual.split("\\|");
             assertTrue(split.length <= this.maxPhonemes);
         } else {
-            String[] words = phoneticActual.split("-");
-            for (String word : words) {
-                String[] split = word.split("\\|");
+            final String[] words = phoneticActual.split("-");
+            for (final String word : words) {
+                final String[] split = word.split("\\|");
                 assertTrue(split.length <= this.maxPhonemes);
             }
         }

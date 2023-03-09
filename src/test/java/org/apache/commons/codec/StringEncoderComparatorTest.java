@@ -5,9 +5,9 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -30,33 +30,33 @@ import org.junit.Test;
 
 /**
  * Test cases for the StingEncoderComparator.
- * 
+ *
  * @version $Id$
  */
 public class StringEncoderComparatorTest {
 
     @Test
     public void testComparatorWithSoundex() throws Exception {
-        StringEncoderComparator sCompare = 
+        final StringEncoderComparator sCompare =
             new StringEncoderComparator( new Soundex() );
 
         assertTrue( "O'Brien and O'Brian didn't come out with " +
                     "the same Soundex, something must be wrong here",
                     0 == sCompare.compare( "O'Brien", "O'Brian" ) );
     }
-    
+
     @Test
     public void testComparatorWithDoubleMetaphone() throws Exception {
-        StringEncoderComparator sCompare = new StringEncoderComparator(new DoubleMetaphone());
+        final StringEncoderComparator sCompare = new StringEncoderComparator(new DoubleMetaphone());
 
-        String[] testArray = { "Jordan", "Sosa", "Prior", "Pryor" };
-        List<String> testList = Arrays.asList(testArray);
+        final String[] testArray = { "Jordan", "Sosa", "Prior", "Pryor" };
+        final List<String> testList = Arrays.asList(testArray);
 
-        String[] controlArray = { "Jordan", "Prior", "Pryor", "Sosa" };
+        final String[] controlArray = { "Jordan", "Prior", "Pryor", "Sosa" };
 
         Collections.sort(testList, sCompare);
 
-        String[] resultArray = testList.toArray(new String[0]);
+        final String[] resultArray = testList.toArray(new String[0]);
 
         for (int i = 0; i < resultArray.length; i++) {
             assertEquals("Result Array not Equal to Control Array at index: " + i, controlArray[i], resultArray[i]);
@@ -65,11 +65,11 @@ public class StringEncoderComparatorTest {
 
     @Test
     public void testComparatorWithDoubleMetaphoneAndInvalidInput() throws Exception {
-        StringEncoderComparator sCompare =
+        final StringEncoderComparator sCompare =
             new StringEncoderComparator( new DoubleMetaphone() );
-           
-        int compare = sCompare.compare(new Double(3.0), Long.valueOf(3));
+
+        final int compare = sCompare.compare(new Double(3.0), Long.valueOf(3));
         assertEquals( "Trying to compare objects that make no sense to the underlying encoder should return a zero compare code",
-                                0, compare);        
+                                0, compare);
     }
 }

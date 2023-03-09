@@ -5,9 +5,9 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -25,41 +25,41 @@ import org.apache.commons.codec.StringEncoder;
 /**
  * Encodes a string into a NYSIIS value. NYSIIS is an encoding used to relate similar names, but can also be used as a
  * general purpose scheme to find word with similar phonemes.
- *
  * <p>
  * NYSIIS features an accuracy increase of 2.7% over the traditional Soundex algorithm.
- * </p>
- *
- * <p>Algorithm description:
+ * <p>
+ * Algorithm description:
  * <pre>
  * 1. Transcode first characters of name
- *   1a. MAC ->   MCC
- *   1b. KN  ->   NN
- *   1c. K   ->   C
- *   1d. PH  ->   FF
- *   1e. PF  ->   FF
- *   1f. SCH ->   SSS
+ *   1a. MAC -&gt;   MCC
+ *   1b. KN  -&gt;   NN
+ *   1c. K   -&gt;   C
+ *   1d. PH  -&gt;   FF
+ *   1e. PF  -&gt;   FF
+ *   1f. SCH -&gt;   SSS
  * 2. Transcode last characters of name
- *   2a. EE, IE          ->   Y
- *   2b. DT,RT,RD,NT,ND  ->   D
+ *   2a. EE, IE          -&gt;   Y
+ *   2b. DT,RT,RD,NT,ND  -&gt;   D
  * 3. First character of key = first character of name
  * 4. Transcode remaining characters by following these rules, incrementing by one character each time
- *   4a. EV  ->   AF  else A,E,I,O,U -> A
- *   4b. Q   ->   G
- *   4c. Z   ->   S
- *   4d. M   ->   N
- *   4e. KN  ->   N   else K -> C
- *   4f. SCH ->   SSS
- *   4g. PH  ->   FF
- *   4h. H   ->   If previous or next is nonvowel, previous
- *   4i. W   ->   If previous is vowel, previous
+ *   4a. EV  -&gt;   AF  else A,E,I,O,U -&gt; A
+ *   4b. Q   -&gt;   G
+ *   4c. Z   -&gt;   S
+ *   4d. M   -&gt;   N
+ *   4e. KN  -&gt;   N   else K -&gt; C
+ *   4f. SCH -&gt;   SSS
+ *   4g. PH  -&gt;   FF
+ *   4h. H   -&gt;   If previous or next is nonvowel, previous
+ *   4i. W   -&gt;   If previous is vowel, previous
  *   4j. Add current to key if current != last key character
  * 5. If last character is S, remove it
  * 6. If last characters are AY, replace with Y
  * 7. If last character is A, remove it
  * 8. Collapse all strings of repeated characters
  * 9. Add original first character of name as first character of key
- * </pre></p>
+ * </pre>
+ * <p>
+ * This class is immutable and thread-safe.
  *
  * @see <a href="http://en.wikipedia.org/wiki/NYSIIS">NYSIIS on Wikipedia</a>
  * @see <a href="http://www.dropby.com/NYSIIS.html">NYSIIS on dropby.com</a>
@@ -92,10 +92,10 @@ public class Nysiis implements StringEncoder {
 
     /**
      * Tests if the given character is a vowel.
-     * 
+     *
      * @param c
      *            the character to test
-     * @return <code>true</code> if the character is a vowel, <code>false</code> otherwise
+     * @return {@code true} if the character is a vowel, {@code false} otherwise
      */
     private static boolean isVowel(final char c) {
         return c == 'A' || c == 'E' || c == 'I' || c == 'O' || c == 'U';
@@ -104,7 +104,7 @@ public class Nysiis implements StringEncoder {
     /**
      * Transcodes the remaining parts of the String. The method operates on a sliding window, looking at 4 characters at
      * a time: [i-1, i, i+1, i+2].
-     * 
+     *
      * @param prev
      *            the previous character
      * @param curr
@@ -182,8 +182,8 @@ public class Nysiis implements StringEncoder {
      * Create an instance of the {@link Nysiis} encoder with the specified strict mode:
      *
      * <ul>
-     *  <li><code>true</code>: encoded strings have a maximum length of 6</li>
-     *  <li><code>false</code>: encoded strings may have arbitrary length</li>
+     *  <li>{@code true}: encoded strings have a maximum length of 6</li>
+     *  <li>{@code false}: encoded strings may have arbitrary length</li>
      * </ul>
      *
      * @param strict
@@ -198,7 +198,7 @@ public class Nysiis implements StringEncoder {
      * Encoder interface, and will throw an {@link EncoderException} if the supplied object is not of type
      * {@link String}.
      *
-     * @param pObject
+     * @param obj
      *            Object to encode
      * @return An object (or a {@link String}) containing the NYSIIS code which corresponds to the given String.
      * @throws EncoderException
@@ -206,30 +206,32 @@ public class Nysiis implements StringEncoder {
      * @throws IllegalArgumentException
      *            if a character is not mapped
      */
-    public Object encode(Object pObject) throws EncoderException {
-        if (!(pObject instanceof String)) {
+    @Override
+    public Object encode(final Object obj) throws EncoderException {
+        if (!(obj instanceof String)) {
             throw new EncoderException("Parameter supplied to Nysiis encode is not of type java.lang.String");
         }
-        return this.nysiis((String) pObject);
+        return this.nysiis((String) obj);
     }
 
     /**
      * Encodes a String using the NYSIIS algorithm.
      *
-     * @param pString
+     * @param str
      *            A String object to encode
      * @return A Nysiis code corresponding to the String supplied
      * @throws IllegalArgumentException
      *            if a character is not mapped
      */
-    public String encode(String pString) {
-        return this.nysiis(pString);
+    @Override
+    public String encode(final String str) {
+        return this.nysiis(str);
     }
 
     /**
      * Indicates the strict mode for this {@link Nysiis} encoder.
      *
-     * @return <code>true</code> if the encoder is configured for strict mode, <code>false</code> otherwise
+     * @return {@code true} if the encoder is configured for strict mode, {@code false} otherwise
      */
     public boolean isStrict() {
         return this.strict;
@@ -268,7 +270,7 @@ public class Nysiis implements StringEncoder {
         str = PAT_DT_ETC.matcher(str).replaceFirst("D");
 
         // First character of key = first character of name.
-        StringBuffer key = new StringBuffer(str.length());
+        final StringBuilder key = new StringBuilder(str.length());
         key.append(str.charAt(0));
 
         // Transcode remaining characters, incrementing by one character each time

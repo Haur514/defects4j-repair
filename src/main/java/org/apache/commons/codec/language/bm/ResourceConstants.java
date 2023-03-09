@@ -5,9 +5,9 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,16 +17,20 @@
 
 package org.apache.commons.codec.language.bm;
 
+import org.apache.commons.codec.CharEncoding;
+
 /**
  * Constants used to process resource files.
- * 
- * @author Apache Software Foundation
+ *
+ * <p>This class is immutable and thread-safe.</p>
+ *
  * @since 1.6
+ * @version $Id$
  */
 class ResourceConstants {
 
     static final String CMT = "//";
-    static final String ENCODING = "UTF-8";
+    static final String ENCODING = CharEncoding.UTF_8;
     static final String EXT_CMT_END = "*/";
     static final String EXT_CMT_START = "/*";
 

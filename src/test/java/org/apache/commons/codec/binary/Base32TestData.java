@@ -24,7 +24,7 @@ import java.util.Random;
 /**
  * This random data was encoded by OpenSSL. Java had nothing to do with it. This data helps us test interop between
  * Commons-Codec and OpenSSL. Notice that OpenSSL creates 64 character lines instead of the 76 of Commons-Codec.
- * 
+ *
  * @see <a href="http://www.ietf.org/rfc/rfc2045.txt">RFC 2045</a>
  * @version $Id $
  * @since 1.4
@@ -58,7 +58,7 @@ public class Base32TestData {
                 lastRead = status[LAST_READ_KEY];
             }
             if (buf.length != size) {
-                byte[] smallerBuf = new byte[size];
+                final byte[] smallerBuf = new byte[size];
                 System.arraycopy(buf, 0, smallerBuf, 0, size);
                 buf = smallerBuf;
             }
@@ -86,7 +86,7 @@ public class Base32TestData {
     }
 
     private static byte[] resizeArray(final byte[] bytes) {
-        byte[] biggerBytes = new byte[bytes.length * 2];
+        final byte[] biggerBytes = new byte[bytes.length * 2];
         System.arraycopy(bytes, 0, biggerBytes, 0, bytes.length);
         return biggerBytes;
     }
@@ -94,16 +94,16 @@ public class Base32TestData {
 
     /**
      * Returns an encoded and decoded copy of the same random data.
-     * 
+     *
      * @param codec the codec to use
      * @param size amount of random data to generate and encode
-     * @return two byte[] arrays:  [0] = decoded, [1] = encoded 
+     * @return two byte[] arrays:  [0] = decoded, [1] = encoded
      */
-    static byte[][] randomData(BaseNCodec codec, int size) {
-        Random r = new Random();
-        byte[] decoded = new byte[size];
+    static byte[][] randomData(final BaseNCodec codec, final int size) {
+        final Random r = new Random();
+        final byte[] decoded = new byte[size];
         r.nextBytes(decoded);
-        byte[] encoded = codec.encode(decoded);
+        final byte[] encoded = codec.encode(decoded);
         return new byte[][] {decoded, encoded};
     }
 
@@ -114,8 +114,8 @@ public class Base32TestData {
      * @param c byte to look for
      * @return true if bytes contains c, false otherwise
      */
-    static boolean bytesContain(byte[] bytes, byte c) {
-        for (byte b : bytes) {
+    static boolean bytesContain(final byte[] bytes, final byte c) {
+        for (final byte b : bytes) {
             if (b == c) { return true; }
         }
         return false;

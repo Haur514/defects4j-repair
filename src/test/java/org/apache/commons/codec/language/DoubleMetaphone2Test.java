@@ -5,9 +5,9 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,7 +19,6 @@ package org.apache.commons.codec.language;
 
 import static org.junit.Assert.assertEquals;
 
-import org.apache.commons.codec.StringEncoder;
 import org.apache.commons.codec.StringEncoderAbstractTest;
 import org.junit.Test;
 
@@ -28,11 +27,11 @@ import org.junit.Test;
  * <p>
  * The test data was extracted from Stephen Woodbridge's <a
  * href="http://swoodbridge.com/DoubleMetaPhone/surnames.txt">PHP test program</a>.
- * 
+ *
  * @see <a href="http://swoodbridge.com/DoubleMetaPhone/surnames.txt">PHP test program</a>
  * @version $Id$
  */
-public class DoubleMetaphone2Test extends StringEncoderAbstractTest {
+public class DoubleMetaphone2Test extends StringEncoderAbstractTest<DoubleMetaphone> {
 
     private static final int ALTERNATE_INDEX = 2;
 
@@ -1262,23 +1261,16 @@ public class DoubleMetaphone2Test extends StringEncoderAbstractTest {
         {"weikersheim", "AKRS", "FKRS"},
         {"zhao", "J", "J"}};
 
-    private void checkDoubleMetaphone(int typeIndex, boolean alternate) {
+    private void checkDoubleMetaphone(final int typeIndex, final boolean alternate) {
         for (int i = 0; i < TEST_DATA.length; i++) {
-            String value = TEST_DATA[i][0];
-            assertEquals("Test [" + i + "]=" + value, TEST_DATA[i][typeIndex], this.getDoubleMetaphone().doubleMetaphone(value, alternate));
+            final String value = TEST_DATA[i][0];
+            assertEquals("Test [" + i + "]=" + value, TEST_DATA[i][typeIndex], this.getStringEncoder().doubleMetaphone(value, alternate));
         }
     }
 
     @Override
-    protected StringEncoder createStringEncoder() {
+    protected DoubleMetaphone createStringEncoder() {
         return new DoubleMetaphone();
-    }
-
-    /**
-     * @return Returns the metaphone.
-     */
-    private DoubleMetaphone getDoubleMetaphone() {
-        return (DoubleMetaphone) this.getStringEncoder();
     }
 
     /**

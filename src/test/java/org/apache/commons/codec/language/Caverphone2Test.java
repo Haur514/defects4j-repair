@@ -5,9 +5,9 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,31 +17,29 @@
 
 package org.apache.commons.codec.language;
 
-import junit.framework.Assert;
-
 import org.apache.commons.codec.EncoderException;
-import org.apache.commons.codec.StringEncoder;
 import org.apache.commons.codec.StringEncoderAbstractTest;
+import org.junit.Assert;
 import org.junit.Test;
 
 /**
  * Tests Caverphone2.
- * 
+ *
  * @version $Id$
  * @since 1.5
  */
-public class Caverphone2Test extends StringEncoderAbstractTest {
+public class Caverphone2Test extends StringEncoderAbstractTest<Caverphone2> {
 
     @Override
-    protected StringEncoder createStringEncoder() {
+    protected Caverphone2 createStringEncoder() {
         return new Caverphone2();
     }
 
     /**
      * See http://caversham.otago.ac.nz/files/working/ctp150804.pdf
-     * 
+     *
      * AT11111111 words: add, aid, at, art, eat, earth, head, hit, hot, hold, hard, heart, it, out, old
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -66,18 +64,18 @@ public class Caverphone2Test extends StringEncoderAbstractTest {
 
     /**
      * See http://caversham.otago.ac.nz/files/working/ctp150804.pdf
-     * 
+     *
      * @throws EncoderException
      */
     @Test
     public void testCaverphoneRevisitedExamples() throws EncoderException {
-        String[][] data = {{"Stevenson", "STFNSN1111"}, {"Peter", "PTA1111111"}};
+        final String[][] data = {{"Stevenson", "STFNSN1111"}, {"Peter", "PTA1111111"}};
         this.checkEncodings(data);
     }
 
     /**
      * See http://caversham.otago.ac.nz/files/working/ctp150804.pdf
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -169,7 +167,7 @@ public class Caverphone2Test extends StringEncoderAbstractTest {
 
     /**
      * See http://caversham.otago.ac.nz/files/working/ctp150804.pdf
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -248,7 +246,7 @@ public class Caverphone2Test extends StringEncoderAbstractTest {
 
     /**
      * See http://caversham.otago.ac.nz/files/working/ctp150804.pdf
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -326,7 +324,7 @@ public class Caverphone2Test extends StringEncoderAbstractTest {
 
     /**
      * See http://caversham.otago.ac.nz/files/working/ctp150804.pdf
-     * 
+     *
      * @throws EncoderException
      */
     @Test
@@ -338,21 +336,21 @@ public class Caverphone2Test extends StringEncoderAbstractTest {
 
     @Test
     public void testEndMb() throws EncoderException {
-        String[][] data = {{"mb", "M111111111"}, {"mbmb", "MPM1111111"}};
+        final String[][] data = {{"mb", "M111111111"}, {"mbmb", "MPM1111111"}};
         this.checkEncodings(data);
     }
 
     // Caverphone Revisited
     @Test
     public void testIsCaverphoneEquals() throws EncoderException {
-        Caverphone2 caverphone = new Caverphone2();
+        final Caverphone2 caverphone = new Caverphone2();
         Assert.assertFalse("Caverphone encodings should not be equal", caverphone.isEncodeEqual("Peter", "Stevenson"));
         Assert.assertTrue("Caverphone encodings should be equal", caverphone.isEncodeEqual("Peter", "Peady"));
     }
 
     @Test
     public void testSpecificationExamples() throws EncoderException {
-        String[][] data = {
+        final String[][] data = {
             {"Peter", "PTA1111111"},
             {"ready", "RTA1111111"},
             {"social", "SSA1111111"},

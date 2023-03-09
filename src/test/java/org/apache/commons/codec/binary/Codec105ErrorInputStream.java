@@ -22,9 +22,9 @@ import java.io.InputStream;
 
 /**
  * Emits three line-feeds '\n' in a row, one at a time, and then EOF.
- * 
+ *
  * Recreates the bug described in CODEC-105.
- * 
+ *
  * @version $Id $
  * @since 1.5
  */
@@ -43,7 +43,7 @@ public class Codec105ErrorInputStream extends InputStream {
     }
 
     @Override
-    public int read(byte b[], int pos, int len) throws IOException {
+    public int read(final byte b[], final int pos, final int len) throws IOException {
         if (this.countdown-- > 0) {
             b[pos] = '\n';
             return 1;

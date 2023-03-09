@@ -5,9 +5,9 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,7 +24,7 @@ import org.junit.Test;
 
 /**
  * Tests {@link EncoderException}.
- * 
+ *
  * @version $Id$
  */
 public class EncoderExceptionTest {
@@ -35,28 +35,28 @@ public class EncoderExceptionTest {
 
     @Test
     public void testConstructor0() {
-        EncoderException e = new EncoderException();
+        final EncoderException e = new EncoderException();
         assertNull(e.getMessage());
         assertNull(e.getCause());
     }
 
     @Test
     public void testConstructorString() {
-        EncoderException e = new EncoderException(MSG);
+        final EncoderException e = new EncoderException(MSG);
         assertEquals(MSG, e.getMessage());
         assertNull(e.getCause());
     }
 
     @Test
     public void testConstructorStringThrowable() {
-        EncoderException e = new EncoderException(MSG, t);
+        final EncoderException e = new EncoderException(MSG, t);
         assertEquals(MSG, e.getMessage());
         assertEquals(t, e.getCause());
     }
 
     @Test
     public void testConstructorThrowable() {
-        EncoderException e = new EncoderException(t);
+        final EncoderException e = new EncoderException(t);
         assertEquals(t.getClass().getName(), e.getMessage());
         assertEquals(t, e.getCause());
     }
