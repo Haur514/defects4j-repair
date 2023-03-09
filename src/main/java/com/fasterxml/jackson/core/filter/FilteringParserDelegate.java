@@ -221,6 +221,12 @@ public class FilteringParserDelegate extends JsonParserDelegate
     @Override
     public JsonToken nextToken() throws IOException
     {
+    	//Check for _allowMultipleMatches - false and atleast there is one token - which is _currToken
+    	// check for no buffered context _exposedContext - null
+    	//If all the conditions matches then check for scalar / non-scalar property
+    		//if not scalar and ended successfully, then return null
+    		//else if scalar, and scalar not present in obj/array and !includePath and INCLUDE_ALL matched once
+    		// then return null 
         // Anything buffered?
         TokenFilterContext ctxt = _exposedContext;
 
@@ -877,4 +883,5 @@ public class FilteringParserDelegate extends JsonParserDelegate
         }
         return _headContext;
     }
+  
 }

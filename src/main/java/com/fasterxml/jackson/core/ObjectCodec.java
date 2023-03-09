@@ -26,9 +26,9 @@ public abstract class ObjectCodec
 {
     protected ObjectCodec() { }
 
-    // Since 2.3
+    // Since 2.3: need baseline implementation to avoid backwards compatibility
     @Override
-    public abstract Version version();
+    public Version version() { return Version.unknownVersion(); }
     
     /*
     /**********************************************************
@@ -46,8 +46,8 @@ public abstract class ObjectCodec
      * The reason is that due to type erasure, key and value types
      * can not be introspected when using this method.
      */
-    public abstract <T> T readValue(JsonParser p, Class<T> valueType)
-        throws IOException;
+    public abstract <T> T readValue(JsonParser jp, Class<T> valueType)
+        throws IOException, JsonProcessingException;
 
     /**
      * Method to deserialize JSON content into a Java type, reference
@@ -56,8 +56,8 @@ public abstract class ObjectCodec
      * and specifically needs to be used if the root type is a 
      * parameterized (generic) container type.
      */
-    public abstract <T> T readValue(JsonParser p, TypeReference<?> valueTypeRef)
-        throws IOException;
+    public abstract <T> T readValue(JsonParser jp, TypeReference<?> valueTypeRef)
+        throws IOException, JsonProcessingException;
 
     /**
      * Method to deserialize JSON content into a POJO, type specified
@@ -65,30 +65,30 @@ public abstract class ObjectCodec
      * including containers like {@link java.util.Collection} and
      * {@link java.util.Map}).
      */
-    public abstract <T> T readValue(JsonParser p, ResolvedType valueType)
-        throws IOException;
+    public abstract <T> T readValue(JsonParser jp, ResolvedType valueType)
+        throws IOException, JsonProcessingException;
 
     /**
      * Method for reading sequence of Objects from parser stream,
      * all with same specified value type.
      */
-    public abstract <T> Iterator<T> readValues(JsonParser p, Class<T> valueType)
-        throws IOException;
+    public abstract <T> Iterator<T> readValues(JsonParser jp, Class<T> valueType)
+        throws IOException, JsonProcessingException;
 
     /**
      * Method for reading sequence of Objects from parser stream,
      * all with same specified value type.
      */
-    public abstract <T> Iterator<T> readValues(JsonParser p, TypeReference<?> valueTypeRef)
-        throws IOException;
+    public abstract <T> Iterator<T> readValues(JsonParser jp, TypeReference<?> valueTypeRef)
+        throws IOException, JsonProcessingException;
     
     /**
      * Method for reading sequence of Objects from parser stream,
      * all with same specified value type.
      */
-    public abstract <T> Iterator<T> readValues(JsonParser p, ResolvedType valueType)
-        throws IOException;
-
+    public abstract <T> Iterator<T> readValues(JsonParser jp, ResolvedType valueType)
+        throws IOException, JsonProcessingException;
+    
     /*
     /**********************************************************
     /* API for serialization (Object-to-JSON)
@@ -99,7 +99,8 @@ public abstract class ObjectCodec
      * Method to serialize given Java Object, using generator
      * provided.
      */
-    public abstract void writeValue(JsonGenerator gen, Object value) throws IOException;
+    public abstract void writeValue(JsonGenerator jgen, Object value)
+        throws IOException, JsonProcessingException;
 
     /*
     /**********************************************************
@@ -115,13 +116,15 @@ public abstract class ObjectCodec
      * value event, not container). Empty or whitespace
      * documents return null.
      *
-     * @return next tree from p, or null if empty.
+     * @return next tree from jp, or null if empty.
      */
     @Override
-    public abstract <T extends TreeNode> T readTree(JsonParser p) throws IOException;
+    public abstract <T extends TreeNode> T readTree(JsonParser jp)
+        throws IOException, JsonProcessingException;
     
     @Override
-    public abstract void writeTree(JsonGenerator gen, TreeNode tree) throws IOException;
+    public abstract void writeTree(JsonGenerator jg, TreeNode tree)
+        throws IOException, JsonProcessingException;
     
     /**
      * Method for construct root level Object nodes
