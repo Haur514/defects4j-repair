@@ -40,6 +40,7 @@ public class Cleaner {
         Validate.notNull(dirtyDocument);
 
         Document clean = Document.createShell(dirtyDocument.baseUri());
+        if (dirtyDocument.body() != null) // frameset documents won't have a body. the clean doc will have empty body.
             copySafeNodes(dirtyDocument.body(), clean.body());
 
         return clean;
@@ -65,36 +66,35 @@ public class Cleaner {
 
     /**
      Iterates the input and copies trusted nodes (tags, attributes, text) into the destination.
-     @param source source of HTML
-     @param dest destination element to copy into
-     @return number of discarded elements (that were considered unsafe)
      */
-    private int copySafeNodes(Element source, Element dest) {
-        List<Node> sourceChildren = source.childNodes();
+    private int copySafeNodes(Element root, Element destination) {
+        List<Node> sourceChildren = root.childNodes();
         int numDiscarded = 0;
 
-        for (Node sourceChild : sourceChildren) {
-            if (sourceChild instanceof Element) {
-                Element sourceEl = (Element) sourceChild;
+        for (Node source : sourceChildren) {
+            if (source instanceof Element) {
+                Element sourceEl = (Element) source;
 
                 if (whitelist.isSafeTag(sourceEl.tagName())) { // safe, clone and copy safe attrs
                     ElementMeta meta = createSafeElement(sourceEl);
                     Element destChild = meta.el;
-                    dest.appendChild(destChild);
+                    destination.appendChild(destChild);
 
                     numDiscarded += meta.numAttribsDiscarded;
-                    numDiscarded += copySafeNodes(sourceEl, destChild); // recurs
-                } else { // not a safe tag, but it may have children (els or text) that are, so recurse
+                    numDiscarded += copySafeNodes(sourceEl, destChild);
+                } else {
                     numDiscarded++;
-                    numDiscarded += copySafeNodes(sourceEl, dest);
+                    numDiscarded += copySafeNodes(sourceEl, destination);
                 }
-            } else if (sourceChild instanceof TextNode) {
-                TextNode sourceText = (TextNode) sourceChild;
-                TextNode destText = new TextNode(sourceText.getWholeText(), sourceChild.baseUri());
-                dest.appendChild(destText);
-            } // else, we don't care about comments, xml proc instructions, etc
+            } else if (source instanceof TextNode) {
+                TextNode sourceText = (TextNode) source;
+                TextNode destText = new TextNode(sourceText.getWholeText(), source.baseUri());
+                destination.appendChild(destText);
+            }
         }
         return numDiscarded;
+
+
     }
 
     private ElementMeta createSafeElement(Element sourceEl) {
