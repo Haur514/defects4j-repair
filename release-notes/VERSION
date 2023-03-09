@@ -17,6 +17,9 @@ JSON library.
 2.6.0 (not yet released)
 
 #177: Add a check so `JsonGenerator.writeString()` won't work if `writeFieldName()` expected.
+#182: Inconsistent TextBuffer#getTextBuffer behavior
+ (contributed by Masaru H)
+#188: `JsonParser.getValueAsString()` should return field name for `JsonToken.FIELD_NAME`, not `null`
 - Minor improvement to construction of "default PrettyPrinter": now overridable by data format
   modules
 - Implement a new yet more optimized symbol table for byte-backed parsers
@@ -26,6 +29,9 @@ JSON library.
 
 #181: Failure parsing -Infinity on buffer boundary
  (reported by brharrington@github)
+#187: Longest collision chain in symbol table exceeds maximum length routinely
+  in non-malicious code
+ (reported by mazzaferri@github)
 
 2.5.1 (06-Feb-2015)
 
@@ -52,6 +58,11 @@ JSON library.
 - Added `JsonParser.hasExpectedStartObjectToken()` convenience method
 - Added `JsonParser.hasTokenId(id)` convenience method
 - Added `JsonParser.nextFieldName()` (no args)
+
+2.4.6 (not released yet)
+
+#184: WRITE_NUMBERS_AS_STRINGS disables WRITE_BIGDECIMAL_AS_PLAIN
+ (reported by Derek C)
 
 2.4.5 (13-Jan-2015)
 

@@ -849,7 +849,7 @@ public class UTF8JsonGenerator
         if (value == null) {
             _writeNull();
         } else if (_cfgNumbersAsStrings) {
-            _writeQuotedRaw(value);
+            _writeQuotedRaw(value.toString());
         } else {
             writeRaw(value.toString());
         }
@@ -897,7 +897,8 @@ public class UTF8JsonGenerator
         if (value == null) {
             _writeNull();
         } else if (_cfgNumbersAsStrings) {
-            _writeQuotedRaw(value);
+            String raw = isEnabled(Feature.WRITE_BIGDECIMAL_AS_PLAIN) ? value.toPlainString() : value.toString();
+            _writeQuotedRaw(raw);
         } else if (isEnabled(Feature.WRITE_BIGDECIMAL_AS_PLAIN)) {
             writeRaw(value.toPlainString());
         } else {
@@ -917,13 +918,13 @@ public class UTF8JsonGenerator
         }
     }
 
-    private final void _writeQuotedRaw(Object value) throws IOException
+    private final void _writeQuotedRaw(String value) throws IOException
     {
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }
         _outputBuffer[_outputTail++] = BYTE_QUOTE;
-        writeRaw(value.toString());
+        writeRaw(value);
         if (_outputTail >= _outputEnd) {
             _flushBuffer();
         }

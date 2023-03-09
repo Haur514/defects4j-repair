@@ -488,25 +488,25 @@ public final class ByteQuadsCanonicalizer
         // first: primary match?
         final int[] hashArea = _hashArea;
 
-        int q1b = hashArea[offset];
         int len = hashArea[offset+3];
 
-        if ((q1b == q1) && (len == 1)) {
-            return _names[offset >> 2];
-        }
-        if (len == 0) { // empty slot; unlikely but avoid further lookups if so
+        if (len == 1) {
+            if (hashArea[offset] == q1) {
+                return _names[offset >> 2];
+            }
+        } else if (len == 0) { // empty slot; unlikely but avoid further lookups if so
             return null;
         }
         // secondary? single slot shared by N/2 primaries
         int offset2 = _secondaryStart + ((offset >> 3) << 2);
 
-        q1b = hashArea[offset2];
         len = hashArea[offset2+3];
 
-        if ((q1b == q1) && (len == 1)) {
-            return _names[offset2 >> 2];
-        }
-        if (len == 0) { // empty slot; unlikely but avoid further lookups if so
+        if (len == 1) {
+            if (hashArea[offset2] == q1) {
+                return _names[offset2 >> 2];
+            }
+        } else if (len == 0) { // empty slot; unlikely but avoid further lookups if so
             return null;
         }
 
@@ -520,25 +520,25 @@ public final class ByteQuadsCanonicalizer
 
         final int[] hashArea = _hashArea;
 
-        int q1b = hashArea[offset];
         int len = hashArea[offset+3];
-        
-        if ((q1 == q1b) && (hashArea[offset+1] == q2) && (len == 2)) {
-            return _names[offset >> 2];
-        }
-        if (len == 0) { // empty slot; unlikely but avoid further lookups if so
+
+        if (len == 2) {
+            if ((q1 == hashArea[offset]) && (q2 == hashArea[offset+1])) {
+                return _names[offset >> 2];
+            }
+        } else if (len == 0) { // empty slot; unlikely but avoid further lookups if so
             return null;
         }
         // secondary?
         int offset2 = _secondaryStart + ((offset >> 3) << 2);
 
-        q1b = hashArea[offset2];
         len = hashArea[offset2+3];
 
-        if ((q1 == q1b) && (hashArea[offset2+1] == q2) && (len == 2)) {
-            return _names[offset2 >> 2];
-        }
-        if (len == 0) { // empty slot? Short-circuit if no more spillovers
+        if (len == 2) {
+            if ((q1 == hashArea[offset2]) && (q2 == hashArea[offset2+1])) {
+                return _names[offset2 >> 2];
+            }
+        } else if (len == 0) { // empty slot? Short-circuit if no more spillovers
             return null;
         }
         return _findSecondary(offset, q1, q2);
@@ -548,26 +548,25 @@ public final class ByteQuadsCanonicalizer
     {
         int offset = _calcOffset(calcHash(q1, q2, q3));
         final int[] hashArea = _hashArea;
-
-        int q1b = hashArea[offset];
         int len = hashArea[offset+3];
 
-        if ((q1 == q1b) && (hashArea[offset+1] == q2) && (hashArea[offset+2] == q3) && (len == 3)) {
-            return _names[offset >> 2];
-        }
-        if (len == 0) { // empty slot; unlikely but avoid further lookups if so
+        if (len == 3) {
+            if ((q1 == hashArea[offset]) && (hashArea[offset+1] == q2) && (hashArea[offset+2] == q3)) {
+                return _names[offset >> 2];
+            }
+        } else if (len == 0) { // empty slot; unlikely but avoid further lookups if so
             return null;
         }
         // secondary?
         int offset2 = _secondaryStart + ((offset >> 3) << 2);
 
-        q1b = hashArea[offset2];
         len = hashArea[offset2+3];
 
-        if ((q1 == q1b) && (hashArea[offset2+1] == q2) && (hashArea[offset2+2] == q3) && (len == 3)) {
-            return _names[offset2 >> 2];
-        }
-        if (len == 0) { // empty slot? Short-circuit if no more spillovers
+        if (len == 3) {
+            if ((q1 == hashArea[offset2]) && (hashArea[offset2+1] == q2) && (hashArea[offset2+2] == q3)) {
+                return _names[offset2 >> 2];
+            }
+        } else if (len == 0) { // empty slot? Short-circuit if no more spillovers
             return null;
         }
         return _findSecondary(offset, q1, q2, q3);
@@ -741,8 +740,32 @@ public final class ByteQuadsCanonicalizer
         final int[] hashArea = _hashArea;
         // spillOffset assumed to be physical index right into quad string
         int ix = 0;
+
+        switch (qlen) {
+        default:
+            return _verifyLongName2(q, qlen, spillOffset);
+        case 8:
+            if (q[ix++] != hashArea[spillOffset++]) return false;
+        case 7:
+            if (q[ix++] != hashArea[spillOffset++]) return false;
+        case 6:
+            if (q[ix++] != hashArea[spillOffset++]) return false;
+        case 5:
+            if (q[ix++] != hashArea[spillOffset++]) return false;
+        case 4: // always at least 4
+            if (q[ix++] != hashArea[spillOffset++]) return false;
+            if (q[ix++] != hashArea[spillOffset++]) return false;
+            if (q[ix++] != hashArea[spillOffset++]) return false;
+            if (q[ix++] != hashArea[spillOffset++]) return false;
+        }
+        return true;
+    }
+
+    private boolean _verifyLongName2(int[] q, int qlen, int spillOffset)
+    {
+        int ix = 0;
         do {
-            if (q[ix++] != hashArea[spillOffset++]) {
+            if (q[ix++] != _hashArea[spillOffset++]) {
                 return false;
             }
         } while (ix < qlen);
@@ -911,7 +934,7 @@ public final class ByteQuadsCanonicalizer
         // (NOTE: approximate for now; we could verify details if that becomes necessary)
         if (_spilloverEnd >= hashArea.length) {
             if (_failOnDoS) {
-                reportTooManyCollisions();
+                _reportTooManyCollisions();
             }
             // and if we didn't fail, we'll simply force rehash for next add
             // (which, in turn, may double up or nuke contents, depending on size etc)
@@ -962,8 +985,13 @@ public final class ByteQuadsCanonicalizer
     public int calcHash(int q1)
     {
         int hash = q1 ^ _seed;
-        hash += (hash >>> 15); // to xor hi- and low- 16-bits
-        hash ^= (hash >>> 9); // as well as lowest 2 bytes
+        /* 29-Mar-2015, tatu: Earlier used 15 + 9 right shifts, which worked ok
+         *    except for one specific problem case: numbers. So needed to make sure
+         *    that all 4 least-significant bits participate in hash. Couple of ways
+         *    to work it out, but this is the simplest, fast and seems to do ok.
+         */
+        hash += (hash >>> 16); // to xor hi- and low- 16-bits
+        hash ^= (hash >>> 12); // as well as lowest 2 bytes
         return hash;
     }
 
@@ -977,8 +1005,9 @@ public final class ByteQuadsCanonicalizer
         hash ^= (hash >>> 9); // as well as lowest 2 bytes
         hash += (q2 * MULT); // then add second quad
         hash ^= _seed;
-        hash += (hash >>> 7); // and shuffle some more
-        hash ^= (hash >>> 19);
+        hash += (hash >>> 16); // and shuffle some more
+        hash ^= (hash >>> 4);
+        hash += (hash << 3);
         
         return hash;
     }
@@ -987,12 +1016,13 @@ public final class ByteQuadsCanonicalizer
     { // use same algorithm as multi-byte, tested to work well
         int hash = q1 ^ _seed;
         hash += (hash >>> 9);
-        hash *= MULT;
+        hash *= MULT3;
         hash += q2;
-        hash *= MULT2;
+        hash *= MULT;
         hash += (hash >>> 15);
         hash ^= q3;
-        hash += (hash >>> 17);
+        // 26-Mar-2015, tatu: As per two-quad case, a short shift seems to help more here
+        hash += (hash >>> 4);
 
         hash += (hash >>> 15);
         hash ^= (hash << 9);
@@ -1012,22 +1042,22 @@ public final class ByteQuadsCanonicalizer
          */
         int hash = q[0] ^ _seed;
         hash += (hash >>> 9);
-        hash *= MULT;
         hash += q[1];
-        hash *= MULT2;
         hash += (hash >>> 15);
+        hash *= MULT;
         hash ^= q[2];
-        hash += (hash >>> 17);
+        hash += (hash >>> 4);
 
         for (int i = 3; i < qlen; ++i) {
-            hash = (hash * MULT3) ^ q[i];
-            // for longer entries, mess a bit in-between too
-            hash += (hash >>> 3);
-            hash ^= (hash << 7);
+            int next = q[i];
+            next = next ^ (next >> 21);
+            hash += next;
         }
+        hash *= MULT2;
+        
         // and finally shuffle some more once done
-        hash += (hash >>> 15); // to get high-order bits to mix more
-        hash ^= (hash << 9); // as well as lowest 2 bytes
+        hash += (hash >>> 19);
+        hash ^= (hash << 5);
         return hash;
     }
 
@@ -1151,15 +1181,16 @@ public final class ByteQuadsCanonicalizer
         return (offset << 3) - offset;
     }
 
-    protected void reportTooManyCollisions()
+    protected void _reportTooManyCollisions()
     {
-        // First: do not fuzz about small symbol tables
-        if (_hashSize <= 512) { // would have spill-over area of 64 entries
+        // First: do not fuzz about small symbol tables; may get balanced by doubling up
+        if (_hashSize <= 1024) { // would have spill-over area of 128 entries
             return;
         }
         throw new IllegalStateException("Spill-over slots in symbol table with "+_count
                 +" entries, hash area of "+_hashSize+" slots is now full (all "
-                +(_hashSize >> 3)+" slots -- suspect a DoS attack based on hash collisions");
+                +(_hashSize >> 3)+" slots -- suspect a DoS attack based on hash collisions."
+                +" You can disable the check via `JsonFactory.Feature.FAIL_ON_SYMBOL_HASH_OVERFLOW`");
     }
 
     static int _calcTertiaryShift(int primarySlots)
@@ -1174,7 +1205,7 @@ public final class ByteQuadsCanonicalizer
         if (tertSlots <= 256) { // buckets of 8 slots (up to 256 == 32 x 8)
             return 5;
         }
-        if (tertSlots <= 2048) { // buckets of 16 slots (up to 1024 == 64 x 16)
+        if (tertSlots <= 1024) { // buckets of 16 slots (up to 1024 == 64 x 16)
             return 6;
         }
         // and biggest buckets have 32 slots
