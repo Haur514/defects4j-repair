@@ -148,7 +148,8 @@ public final class DataUtil {
             if (charsetName == null)
                 charsetName = defaultCharset;
             BufferedReader reader = new BufferedReader(new InputStreamReader(input, charsetName), bufferSize);
-            doc = parser.parseInput(reader, baseUri);
+                doc = parser.parseInput(reader, baseUri);
+                // io exception when parsing (not seen before because reading the stream as we go)
             doc.outputSettings().charset(charsetName);
         }
         input.close();
