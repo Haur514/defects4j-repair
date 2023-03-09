@@ -62,7 +62,7 @@ public abstract class ParserMinimalBase extends JsonParser
      * effect when {@link #clearCurrentToken} was called.
      */
     protected JsonToken _lastClearedToken;
-    
+
     /*
     /**********************************************************
     /* Life-cycle
@@ -74,7 +74,7 @@ public abstract class ParserMinimalBase extends JsonParser
 
     // NOTE: had base impl in 2.3 and before; but shouldn't
     // public abstract Version version();
-    
+
     /*
     /**********************************************************
     /* Configuration overrides if any
@@ -111,6 +111,10 @@ public abstract class ParserMinimalBase extends JsonParser
         return t.id() == id;
     }
 
+    @Override public final boolean hasToken(JsonToken t) {
+        return (_currToken == t);
+    }
+    
     @Override public boolean isExpectedStartArrayToken() { return _currToken == JsonToken.START_ARRAY; }
     @Override public boolean isExpectedStartObjectToken() { return _currToken == JsonToken.START_OBJECT; }
     
