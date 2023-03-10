@@ -35,11 +35,18 @@ jsoup changelog
 
   * Updated Element.text() and the :contains(text) selector to consider &nbsp; character as spaces.
 
+  * Updated Jsoup.connect().timeout() to implement a total connect + combined read timeout. Previously it specified
+    connect and buffer read times only, so to implement a combined total timeout, you had to have another thread send
+    an interupt.
+
   * Improved performance of Node.addChildren (was quadratic)
     <https://github.com/jhy/jsoup/pull/930>
 
   * Added missing support for template tags in tables
     <https://github.com/jhy/jsoup/pull/901>
+
+   * In Jsoup.connect file uploads, added the ability to set the uploaded files' mimetype.
+     <https://github.com/jhy/jsoup/issues/936>
 
   * Improved Node traversal, including less object creation, and partial and filtering traversor support.
     <https://github.com/jhy/jsoup/pull/849>
@@ -66,6 +73,9 @@ jsoup changelog
 
   * Bugfix: fixed an issue where Element.getElementsByIndexLessThan(index) would incorrectly provide the root element
     <https://github.com/jhy/jsoup/pull/918>
+
+  * Improved parse time for pages with exceptionally deeply nested tags.
+    <https://github.com/jhy/jsoup/issues/955>
 
 *** Release 1.10.3 [2017-Jun-11]
   * Added Elements.eachText() and Elements.eachAttr(name), which return a list of Element's text or attribute values,
